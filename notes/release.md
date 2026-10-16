@@ -40,12 +40,14 @@ Developer ID Certification Authority (G2) and valid until 2027-11-15, next to th
 (observed, `security find-identity -v -p codesigning` and `openssl x509 -dates`). A throwaway binary signed
 with it, hardened runtime and secure timestamp, passes `codesign --verify --strict` and carries the chain
 Developer ID Application > Developer ID Certification Authority > Apple Root CA (observed). No notarytool
-profile is stored yet, so nothing has been notarized.
+profile is stored yet, so nothing has been notarized. Software signed while the certificate is valid keeps
+running after it expires, but new releases need a new certificate (the Developer ID page cited below; it
+says so for apps without a Developer ID provisioning profile, and the bundle has none).
 
 One-time setup, done by the account holder by hand (no script here touches the private key or the passwords):
 
 1. Create a "Developer ID Application" certificate. Required role: Account Holder; a team can have up to five
-   (observed, https://developer.apple.com/help/account/create-certificates/create-developer-id-certificates/).
+   (observed, https://developer.apple.com/help/account/certificates/create-developer-id-certificates/, read 2026-10-16).
    Xcode can do the same from Settings > Accounts > Manage Certificates (unverified on Xcode for macOS 27).
    By hand on macOS 27 (observed 2026-10-16 unless marked otherwise):
    - Make the signing request in Keychain Access. `open -a "Keychain Access"` opens the Passwords app
@@ -59,10 +61,10 @@ One-time setup, done by the account holder by hand (no script here touches the p
      email and a name, leave CA Email Address empty, choose Saved to disk. Do not open the saved
      `.certSigningRequest`: double-clicking it starts Certificate Assistant's flow for issuing a certificate
      as your own CA.
-   - Web: Certificates, Identifiers & Profiles > Certificates > + > Developer ID Application, G2 Sub-CA,
-     Choose File with the request, Continue, Download. Developer ID Installer sits next to it and only signs
-     `.pkg` installers; the download's name tells them apart: `developerID_application.cer` is the right one,
-     `developerID_installer.cer` is not.
+   - Web: Certificates, Identifiers & Profiles > Certificates > + > Developer ID > Developer ID Application,
+     G2 Sub-CA, Choose File with the request, Continue, Download. Developer ID Installer sits next to it and
+     signs Mac installer packages instead (Apple's page above); the download's name tells them apart:
+     `developerID_application.cer` is the right one, `developerID_installer.cer` is not.
    - One request per certificate: the portal refuses a request that "has already been used to generate
      another certificate" and asks for a new one.
    - Double-click the `.cer` and choose the login keychain, not iCloud or System.
