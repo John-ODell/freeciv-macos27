@@ -1,20 +1,20 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
--- civ45 one-unit-per-tile rules test. Load it into a civ45 server before the game starts with the command
---   lua file scripts/civ45-rules-test.lua
--- (scripts/civ45-rules-test.sh does that; an autogame reads no console input once it runs). It runs once,
+-- civ54 one-unit-per-tile rules test. Load it into a civ54 server before the game starts with the command
+--   lua file scripts/civ54-rules-test.lua
+-- (scripts/civ54-rules-test.sh does that; an autogame reads no console input once it runs). It runs once,
 -- at the first turn start from turn 12 on, and
--- prints "CIV45TEST PASS|FAIL <case>" lines to the server log and a final "CIV45TEST DONE <n>/<total>".
+-- prints "CIV54TEST PASS|FAIL <case>" lines to the server log and a final "CIV54TEST DONE <n>/<total>".
 -- Uses a coastal city: moves through the real "Unit Move" enablers via Unit:perform_action, and calls
--- the global sweep callback from data/civ45/script.lua directly. One case needs a human-controlled
+-- the global sweep callback from data/civ54/script.lua directly. One case needs a human-controlled
 -- player (the runner creates "Tester" and toggles it to human in pregame): only human owners get the
 -- relocation message, and autogames have none.
 
-function civ45_rules_test_run()
+function civ54_rules_test_run()
   local passed, total = 0, 0
   local function check(name, ok)
     total = total + 1
     if ok then passed = passed + 1 end
-    log.normal("CIV45TEST %s %s", ok and "PASS" or "FAIL", name)
+    log.normal("CIV54TEST %s %s", ok and "PASS" or "FAIL", name)
   end
 
   local move = find.action("Unit Move")
@@ -39,12 +39,12 @@ function civ45_rules_test_run()
     if human_unit ~= nil then break end
   end
   if human_unit == nil then
-    log.normal("CIV45TEST SKIP no human-controlled player with a unit on its own tile")
+    log.normal("CIV54TEST SKIP no human-controlled player with a unit on its own tile")
   else
     local htile = human_unit.tile
     edit.create_unit(human_unit.owner, htile, find.unit_type("Warriors"), 0, nil, -1)
-    local ok, err = pcall(civ45_turn_begin_callback, game.turn(), 0)
-    if not ok then log.normal("CIV45TEST error: %s", tostring(err)) end
+    local ok, err = pcall(civ54_turn_begin_callback, game.turn(), 0)
+    if not ok then log.normal("CIV54TEST error: %s", tostring(err)) end
     check("sweep relocates a human player's unit and sends the message", ok and htile:num_units() == 1)
   end
 
@@ -72,7 +72,7 @@ function civ45_rules_test_run()
   end
 
   if city == nil then
-    log.normal("CIV45TEST SKIP no coastal city with free land and sea neighbours yet")
+    log.normal("CIV54TEST SKIP no coastal city with free land and sea neighbours yet")
   else
     local owner = city.owner
     local function make(type_name, tile)
@@ -82,7 +82,7 @@ function civ45_rules_test_run()
     if count_on(city.tile, function(u) return u:transporter() == nil end) == 0 then
       make("Phalanx", city.tile)
     end
-    log.normal("CIV45TEST city %s (%s), land %d, sea %d/%d", city.name, owner.name, land.id, sea1.id, sea2.id)
+    log.normal("CIV54TEST city %s (%s), land %d, sea %d/%d", city.name, owner.name, land.id, sea1.id, sea2.id)
 
     local walker = make("Phalanx", land)
     check("land unit cannot move into an occupied city",
@@ -103,8 +103,8 @@ function civ45_rules_test_run()
 
     -- sweep: garrison + fighter + ship in the city must stay put; an extra land unit must leave
     local extra = make("Musketeers", city.tile)
-    local ok, err = pcall(civ45_turn_begin_callback, game.turn(), 0)
-    if not ok then log.normal("CIV45TEST error: %s", tostring(err)) end
+    local ok, err = pcall(civ54_turn_begin_callback, game.turn(), 0)
+    if not ok then log.normal("CIV54TEST error: %s", tostring(err)) end
     check("sweep runs without a Lua error", ok)
     local land_left = count_on(city.tile, function(u)
       return u:transporter() == nil and not u.utype:has_flag("StacksAnywhere") and not u.utype:has_flag("StacksInPort")
@@ -122,15 +122,15 @@ function civ45_rules_test_run()
             return true
           end)())
   end
-  log.normal("CIV45TEST DONE %d/%d", passed, total)
+  log.normal("CIV54TEST DONE %d/%d", passed, total)
 end
 
-function civ45_rules_test_turn(turn, year)
-  if turn >= 12 and civ45_rules_test_ran == nil then
-    civ45_rules_test_ran = true
-    civ45_rules_test_run()
+function civ54_rules_test_turn(turn, year)
+  if turn >= 12 and civ54_rules_test_ran == nil then
+    civ54_rules_test_ran = true
+    civ54_rules_test_run()
   end
   return false
 end
-signal.connect("turn_begin", "civ45_rules_test_turn")
-log.normal("CIV45TEST loaded at turn %d", game.turn())
+signal.connect("turn_begin", "civ54_rules_test_turn")
+log.normal("CIV54TEST loaded at turn %d", game.turn())
