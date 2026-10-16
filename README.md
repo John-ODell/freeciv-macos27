@@ -33,6 +33,8 @@ Install prefixes and bundles live outside `~/Desktop`, `~/Documents` and `~/Down
 protection stalls Finder-launched apps whose libraries sit in those folders (notes/reproduction.md, Failure 2).
 Without an Apple Developer ID the app is ad-hoc signed; Gatekeeper rejects a downloaded copy until the user chooses
 Open Anyway (`dmg.sh --sign ... --notarize-profile ...` does the real thing when credentials exist).
+The bundle's minimum system version is computed from its libraries; with today's Homebrew bottles that is
+macOS 27.0, because `arm64_golden_gate` bottles are built for 27. A build on macOS 26 would produce a 26.x bundle.
 
 ## Plan
 
