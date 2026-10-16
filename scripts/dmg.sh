@@ -7,8 +7,8 @@
 #                                 [--notarize-profile PROFILE] [--volname NAME]
 #
 #   default: ad-hoc signed app (as bundle.sh leaves it), unsigned DMG, sha256 sidecar written next to it.
-#   --sign              sign the DMG with the identity, and the app too (scripts/sign-app.sh: inside-out, hardened
-#                       runtime, secure timestamp) unless bundle.sh --sign already signed it with that identity
+#   --sign              sign the DMG with the identity (name or SHA-1 hash), and the app too (scripts/sign-app.sh:
+#                       inside-out, hardened runtime, secure timestamp) unless it already carries that identity
 #   --notarize-profile  `xcrun notarytool submit --wait` with a keychain profile made by
 #                       `xcrun notarytool store-credentials PROFILE`, then `xcrun stapler staple` on the DMG.
 #                       Needs a paid Apple Developer account; nothing here is done automatically without it.
@@ -29,10 +29,21 @@ DMG="$OUT/$NAME-$VER-$ARCH.dmg"
 mkdir -p "$OUT"
 
 if [ -n "$SIGN" ]; then
-  # Re-sign the app unless bundle.sh --sign already signed it with this identity and hardened runtime.
+  # Re-sign the app unless bundle.sh --sign already signed it with this identity and hardened runtime. A 40-hex
+  # --sign is a certificate SHA-1 (as `security find-identity` prints it); codesign -dv shows only names, so compare
+  # it with the SHA-1 of the app's leaf certificate instead.
   INFO="$(codesign -dv --verbose=2 "$APP" 2>&1 || true)"
-  if grep -q "^Signature=adhoc" <<<"$INFO" || ! grep -q "flags=.*runtime" <<<"$INFO" \
-     || { ! [[ "$SIGN" =~ ^[0-9A-Fa-f]{40}$ ]] && ! grep -qF "Authority=$SIGN" <<<"$INFO"; }; then
+  SAME=0
+  if [[ "$SIGN" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+    CERTS="$(mktemp -d)"
+    if (cd "$CERTS" && codesign -d --extract-certificates "$APP" 2>/dev/null) && [ -f "$CERTS/codesign0" ]; then
+      [ "$(shasum -a 1 "$CERTS/codesign0" | cut -d' ' -f1)" = "$(tr 'A-F' 'a-f' <<<"$SIGN")" ] && SAME=1
+    fi
+    rm -rf "$CERTS"
+  elif grep -qF "Authority=$SIGN" <<<"$INFO"; then
+    SAME=1
+  fi
+  if grep -q "^Signature=adhoc" <<<"$INFO" || ! grep -q "flags=.*runtime" <<<"$INFO" || [ "$SAME" = 0 ]; then
     echo "== signing the app with: $SIGN"
     "$(dirname "$0")/sign-app.sh" "$APP" "$SIGN"
   else
