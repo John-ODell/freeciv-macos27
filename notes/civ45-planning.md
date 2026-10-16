@@ -1,0 +1,99 @@
+# Civ4/5 direction: what rulesets can already do vs what needs engine work
+
+Date: 2026-10-16. Source tree: `refs/freeciv-S3_2` (3.2.6+, commit 44e6898c).
+Labels per the brief: **observed** (read in the cited file), **derived**
+(follows from observed facts), **inferred** (plausible, not checked),
+**unknown**.
+
+Freeciv's design splits into three layers, and the menu below is grouped by
+the lowest layer a Civ4/5 feature needs:
+
+- **Tier A, ruleset only.** `.ruleset` files under `data/<ruleset>/`
+  (`game`, `units`, `buildings`, `techs`, `governments`, `effects`,
+  `actions`, `terrain`, `cities`, `nations`). 133 effect types
+  (`doc/README.effects`) attached to requirement vectors whose types are
+  listed at `doc/README.effects:58-119`. Everything here ships as data; the
+  stock `sandbox` and `civ2civ3` rulesets are the reference examples.
+- **Tier B, ruleset + Lua.** Server-side Lua 5.4 (`script.lua` per ruleset)
+  reacting to signals created in `server/scripting/script_server.c:424-574`
+  and acting through the `edit.*` API
+  (`server/scripting/api_server_edit.h`). Good for events, one-off rules and
+  anything "when X happens, do Y"; bad for per-turn economy math and for
+  anything the AI must understand.
+- **Tier C, engine.** C changes in `common/`, `server/` and all four
+  clients, plus AI (`ai/default`). Needed when the feature is a new game
+  concept the data model has no slot for.
+
+## Tier A: already expressible in a ruleset
+
+| Civ4/5 feature | Freeciv mechanism | Citation | Label |
+|---|---|---|---|
+| Hex map | `topology` server setting includes `HEX`; civ2civ3 ships `ISO|HEX`; hex tilesets exist (`hexemplio`, `hex2t`, `isophex`, `toonhex`) | `server/settings.c:1557`, `data/civ2civ3/game.ruleset:804`, `data/hexemplio.tilespec:36-38` | observed |
+| Culture (Civ4 city culture, Civ5 culture yield) | `History`, `National_History`, `Performance`, `National_Performance` effects; `[culture]` section with victory threshold, interest, migration weight | `doc/README.effects:406,516,520,590`, `data/civ2civ3/game.ruleset:380-393` | observed |
+| Cultural victory | `culture` victory condition in `victories` bitwise setting plus `[culture] victory_min_points` | `server/settings.c:2648`, `common/fc_types.h:1275`, `data/civ2civ3/game.ruleset:380-385` | observed |
+| Borders that grow with culture | `borders` setting, `Border_Strength_Pct`, `Border_Vision` | `server/settings.c:2458`, `doc/README.effects:221-228` | observed |
+| Larger / tech-dependent city radius (Civ4 fat cross, Civ5 3-ring) | `init_city_radius_sq` plus `City_Radius_Sq` effect with Tech or Building reqs | `data/civ2civ3/game.ruleset:108`, `doc/README.effects:304` | observed |
+| Social policies / civics sliders (Civ4 civics, Civ5 policies) | Governments (`governments.ruleset`, 9 in civ2civ3) plus **multipliers**: player-adjustable policy values that scale any effect via `multiplier = "..."` on the effect | `data/goldkeep/governments.ruleset:246-260`, `data/goldkeep/effects.ruleset:441-452` | observed |
+| Unique units and buildings per civ | `Nation` / `NationGroup` requirement at Player range on unit, building or effect reqs | `doc/README.effects:79-80`, `data/alien/nation_effects.ruleset:19-28` | observed |
+| Strategic and luxury resources | Extras with `Extra` requirement at `City` range on unit/building build reqs (Civ4 "needs Iron") | `doc/README.effects:70` | derived |
+| Trade goods / trade routes with resource types | `[goods_*]` sections, `Establish Trade Route` and `Enter Marketplace` actions, `Max_Trade_Routes`, `Traderoute_Pct` | `data/sandbox/game.ruleset:664-698`, `doc/README.effects:488,712` | observed |
+| Unit promotions (linear) | `[veteran_system]`: named levels, raise chances, power and move bonuses | `data/civ2civ3/units.ruleset:70-75` | observed |
+| Ranged / bombard attacks | `Bombard` action, `bombard_rate`, `bombard_max_range` (shipped value 1), `Combat_Rounds` effect | `data/sandbox/actions.ruleset:164,1202-1232`, `data/sandbox/units.ruleset:448,1752`, `doc/README.effects:324` | observed |
+| One unit per tile (Civ5 1UPT) | `Unit Move` is an enabler-controlled action; add a target req `MaxUnitsOnTile 0 Tile` (sandbox already uses it on Conquer City). Server-side rule only; the AI does not plan around it | `data/sandbox/actions.ruleset:2818-2823,1675`, `doc/README.effects:106,903-910` | derived; AI impact inferred |
+| Empire size unhappiness / expansion cost | `Empire_Size_Base`, `Empire_Size_Step`, `Unit_Slots`, `Upkeep_*` | `doc/README.effects:339-345,760` | observed |
+| Health (Civ4) | `Health_Pct` effect plus `[civstyle] illness_*` settings | `doc/README.effects:403`, `data/civ2civ3/game.ruleset:209-215` | observed |
+| Achievements (Civ5 style) | `[achievement_*]` sections (8 in civ2civ3/sandbox) with culture rewards | `data/civ2civ3/game.ruleset:507-580` | observed |
+| Natural disasters, barbarians, animals, huts | `[disaster_*]`, barbarian nations, `Animal Kingdom` nation, hut actions | `data/civ2civ3/game.ruleset:446-482`, `data/nation/animals.ruleset:28` | observed |
+| Espionage | ~20 `Spy *` / `Steal *` / `Sabotage *` actions with escape variants | `data/sandbox/actions.ruleset` (enabler list) | observed |
+| Tech tree, tech cost styles, leakage, upkeep | `techs.ruleset` (87 advances in civ2civ3), `tech_cost_style`, `tech_leakage`, `tech_upkeep_style` | `data/civ2civ3/game.ruleset:339-378` | observed |
+| Casus belli / diplomatic incidents | `Casus_Belli_Success`, `Casus_Belli_Caught`, `Casus_Belli_Complete` | `doc/README.effects:252,272,281` | observed |
+| Counters (Civ4 "turns since X" rules) | `[counter_*]` with `Owned`, `Celebration`, `Disorder` types usable as City-range reqs | `data/sandbox/game.ruleset:823-850`, `doc/README.effects:62` | observed |
+
+## Tier B: ruleset plus Lua
+
+| Civ4/5 feature | Approach | Citation | Label |
+|---|---|---|---|
+| Great People (Civ4) | No engine concept. Emulate: counters or `Performance` thresholds trigger `edit.create_unit` of a "Great Engineer" unit type whose only enablers are `Help Wonder` / `Join City` / a `User Action`; `building_built`, `turn_begin` signals | `server/scripting/script_server.c:424-458`, `api_server_edit.h` (create_unit, perform_action_*) | derived |
+| Golden ages | Celebration (`rapture`) already exists; Lua on `turn_begin` can grant `Output_Bonus` via a temporary building and remove it later | `doc/README.effects:609` (Rapture_Grow), `edit.create_building/remove_building` | derived |
+| Culture flipping (Civ4) | `Migration_Pct` (`doc/README.effects:495`) plus Lua `edit.transfer_city` when a city's `MinForeignPct` / culture test fires on `turn_begin` | `doc/README.effects:103-104`, `api_server_edit.h` (transfer_city) | derived |
+| Scripted events, quests, tutorial, Civ5-style "notifications" | Signals plus `notify.event`, `tile_set_label` | `script_server.c`, `api_server_edit.h` | observed |
+| City-states (Civ5), partial | Nations with an AI trait and Lua that blocks their expansion (`unit_cant_be_built`, `city_built` → `remove_city`) and hands out gifts on `turn_begin`. The diplomacy and influence mechanic has no slot | `data/nation/*.ruleset` traits, `script_server.c:444-466` | inferred |
+| Promotion choice on level-up | Lua on `unit_lost`/`action_finished_*` can `unit_transform` to a chosen variant type; a UI to choose does not exist | `api_server_edit.h` (unit_transform) | derived; UI unknown |
+
+## Tier C: needs engine (C) changes
+
+| Civ4/5 feature | Why the engine is in the way | Citation | Label |
+|---|---|---|---|
+| Religion (Civ4 founding/spread, Civ5 beliefs) | No religion type, no per-city religion state, no spread rules; closest slots are goods (one per trade route) and extras (per tile). New common struct, netcode, savegame, client dialogs, AI | `common/` has no religion; `data/` and `doc/` have no match for "religion" (grep) | observed absence |
+| Great People as a real system (points per city, named greats, specialist-driven) | Needs per-city accumulators per GP type and a player-wide pool; counters are per-city scalar only | `data/sandbox/game.ruleset:823-850` | derived |
+| Civ5 global happiness and single-pool luxury | Freeciv happiness is per city (`Make_Content`, `Martial_Law_*`, `Unhappy_Factor`); a nation-wide pool changes `server/cityturn.c` and every city dialog | `doc/README.effects:453-466,724` | observed |
+| Promotion trees (branching perks per unit) | `[veteran_system]` is one linear ladder per unit type | `data/civ2civ3/units.ruleset:70-75` | observed |
+| True ranged combat at distance > 1 with AI support | `bombard_max_range` exists, so range is data, but the AI only knows bombard as an adjacent attack; Civ5-style siege needs `ai/default/daimilitary.c` changes | `data/sandbox/actions.ruleset:164` | derived; AI inferred |
+| 1UPT the AI can actually play | Rule is Tier A, but the default AI's path and stack logic assumes stacking; without AI work 1UPT games are human-only | `ai/default/` | inferred |
+| City-state diplomacy, influence, quests | No minor-civ player kind, no influence score, no diplomacy UI for it | `common/player.h`, client diplomacy dialogs | derived |
+| Civ5 one-building-per-tile wonders / tile improvements with yield adjacency | Extras have adjacency reqs, so partial in Tier A; wonders occupying map tiles need engine | `doc/README.effects:70-72` | derived |
+| Hex-first UI (Civ5 feel: zoom, unit cycling, 1UPT movement arrows) | Client work in `client/gui-qt`; the hex rendering exists, the interaction model does not | `client/gui-qt/` | inferred |
+| Vassals / Civ4 corporations | No slot at all | grep of `doc/` and `common/` | observed absence |
+
+## Recommendation
+
+1. **Start in Tier A as a new ruleset** (`data/civ45/` in `port/freeciv`, copied
+   from `sandbox` because it already enables actions, goods, counters and
+   achievements): hex topology, 3-ring culture-driven city radius,
+   multiplier-based policies, unique units/buildings, strategic resources,
+   bombard with range 2, culture victory. This is playable and testable
+   with the existing autogame script and needs no C.
+2. **Add Tier B Lua** for Great People, golden ages and culture flipping once
+   the ruleset plays. Each is one signal handler.
+3. **Pick one Tier C item** only after that, with religion or global happiness
+   as the candidate, because both are self-contained server mechanics with a
+   small client surface compared with 1UPT-aware AI.
+
+## Not checked
+
+- Whether `MaxUnitsOnTile` on `Unit Move` also blocks the AI from moving
+  (expected yes, since enablers are evaluated server-side) and how badly
+  the AI then stalls: unverified.
+- Multiplier UI in the Qt client (sliders exist in 3.2 per the
+  `goldkeep` ruleset shipping them): unverified on our build.
+- Lua performance with per-turn handlers over all cities: unverified.
