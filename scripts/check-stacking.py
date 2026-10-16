@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Count units per tile in Freeciv savegames (one-unit-per-tile check).
 
-Usage: scripts/check-stacking.py [--ruleset DIR] SAVE[.gz]...
+Usage: scripts/check-stacking.py [--ruleset DIR] [--report] SAVE[.gz]...
 
 With --ruleset (e.g. port/freeciv/data/civ54) the civ54 exemptions are applied: unit types flagged
 StacksAnywhere are never counted and types flagged StacksInPort are not counted on city tiles.
@@ -10,7 +10,8 @@ Prints, per save: players, cities, units, units not inside a transport, tiles ho
 such unit, and the worst tiles. Transported units sit on their carrier's tile by design and are skipped.
 Stacks inside cities are reported separately and do not fail the check: most rulesets build units there by
 necessity (civ54 resolves them by script, so a civ54 save should show none). Exit 1 if any save has a stack
-outside a city.
+outside a city. With --report it only reports and exits 0, for rulesets where stacks are the rule (civ45,
+Freeciv45).
 """
 import csv, gzip, io, os, sys
 from collections import Counter, defaultdict
@@ -49,7 +50,7 @@ def ruleset_flags(rsdir):
         if key: flags[key] = set(re.findall(r'"([^"]+)"', fl.group(1))) if fl else set()
     return flags
 
-def main(paths, uflags=None):
+def main(paths, uflags=None, report=False):
     uflags = uflags or {}
     bad = 0
     for p in paths:
@@ -76,17 +77,20 @@ def main(paths, uflags=None):
         in_city = {t: n for t, n in stacked.items() if t in city_tiles}
         field = {t: n for t, n in stacked.items() if t not in city_tiles}
         print(f"{p}: players={players} cities={cities} units={total} on_map={onmap} "
-              f"stacked_tiles={len(stacked)} (in_city={len(in_city)} field={len(field)})")
+              f"stacked_tiles={len(stacked)} (in_city={len(in_city)} field={len(field)}) "
+              f"largest={max(per_tile.values(), default=0)}")
         for t, n in sorted(field.items(), key=lambda kv: -kv[1])[:12]:
             print(f"  FIELD tile {t}: {n} units: {', '.join(owner[t])}")
         for t, n in sorted(in_city.items(), key=lambda kv: -kv[1])[:4]:
             print(f"  city  tile {t} {city_tiles[t]}: {n} units: {', '.join(owner[t])}")
         bad += bool(field)
-    return 1 if bad else 0
+    return 1 if bad and not report else 0
 
 if __name__ == "__main__":
-    args = sys.argv[1:]; uflags = None
-    if args[:1] == ["--ruleset"] and len(args) >= 2:
-        uflags = ruleset_flags(args[1]); args = args[2:]
+    args = sys.argv[1:]; uflags = None; report = False
+    while args[:1] in (["--ruleset"], ["--report"]):
+        if args[0] == "--report": report = True; args = args[1:]
+        elif len(args) >= 2: uflags = ruleset_flags(args[1]); args = args[2:]
+        else: break
     if not args: print(__doc__); sys.exit(2)
-    sys.exit(main(args, uflags))
+    sys.exit(main(args, uflags, report))

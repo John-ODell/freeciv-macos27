@@ -46,12 +46,17 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 ```
 
 `build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
-`test.sh ... --ruleset civ45` runs the autogame on the civ45 ruleset (patches 0003 and 0004: sandbox plus Civ4/5-style
-rules, see `port/freeciv/data/civ45/README.civ45` after applying the patches). `--ruleset civ54` does the same for
-civ54, the copy of civ45's one-unit-per-tile hex rules kept for the later Civ5-style game (patch 0005,
-`data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz` counts units per tile in the saves an autogame leaves
-behind (add `--ruleset port/freeciv/data/civ54` to apply civ54's exemptions for aircraft and ships in port).
-`scripts/civ54-rules-test.sh ~/freeciv-builds/qt` checks those rules
+`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003 to 0006: sandbox
+plus stacks of units on a square map, see `port/freeciv/data/civ45/README.civ45` after applying the patches);
+`test.sh` reads the installed data, so put `FREECIV_DATA_PATH=port/freeciv/data` in front of it to test the source
+tree. `--ruleset civ54` does the same for civ54, the copy of civ45's earlier one-unit-per-tile hex rules kept for the
+later Civ5-style game (patch 0005, `data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz` counts units per
+tile in the saves an autogame leaves behind (add `--ruleset port/freeciv/data/civ54` to apply civ54's exemptions for
+aircraft and ships in port, or `--report` for civ45, where stacks are the rule).
+`scripts/civ45-rules-test.sh ~/freeciv-builds/qt` checks Freeciv45's rules in a game with one human-controlled
+player: the map and stack settings, moving onto a friendly unit and into an occupied city, a three-unit stack that
+keeps two units when its defender loses, and a stack still together a turn later. `--extra "set killstack enabled"`
+is the control run, which must fail. `scripts/civ54-rules-test.sh ~/freeciv-builds/qt` checks civ54's rules
 directly: it loads `scripts/civ54-rules-test.lua` into a civ54 game with one human-controlled player, moves a land
 unit, a fighter and destroyers at a coastal city at turn 12, runs the turn-start sweep, and exits 0 only if every case
 passes and the server log holds no Lua error.
