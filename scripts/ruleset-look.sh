@@ -8,7 +8,7 @@
 #                                [-- client args...]
 #   <client>   the bundle's launcher (~/freeciv-builds/apps/Freeciv.app/Contents/MacOS/Freeciv) or a client
 #              binary (~/freeciv-builds/qt/bin/freeciv-qt); the freeciv-server next to it is used
-#   --ruleset  ruleset directory to play (default civ45)
+#   --ruleset  ruleset directory to play (default civ45); --port N: server port (default 5710)
 #   --data     FREECIV_DATA_PATH for the server only (default port/freeciv/data); the client keeps its own data
 #   --options  client options file to start from, copied first; without it the client starts from its defaults
 #   after --   client arguments, e.g. -- -t trident to force a tileset
@@ -24,10 +24,10 @@ while [ $# -gt 0 ]; do case "$1" in
   --options) OPTIONS="$2"; shift;; --) shift; break;; *) echo "unknown option $1"; exit 2;; esac; shift; done
 [ -x "$ROOT/scripts/windows-of-pid" ] || swiftc -O "$ROOT/scripts/windows-of-pid.swift" -o "$ROOT/scripts/windows-of-pid"
 SERVER="$(dirname "$CLIENT")/freeciv-server"
-[ -x "$SERVER" ] || { echo "no freeciv-server next to $CLIENT"; exit 1; }
+[ -x "$CLIENT" ] && [ -x "$SERVER" ] || { echo "no client at $CLIENT or no freeciv-server next to it"; exit 1; }
 mkdir -p "$OUT"; OUT="$(cd "$OUT" && pwd)"   # absolute: the server prefixes relative save paths with --saves
 rm -f "$OUT"/*.png "$OUT"/fifo "$OUT"/client.rc
-[ -z "$OPTIONS" ] || cp "$OPTIONS" "$OUT/client.rc"
+[ -z "$OPTIONS" ] || cp "$OPTIONS" "$OUT/client.rc" || exit 1
 cat > "$OUT/game.serv" <<EOS
 rulesetdir $RULESET
 set aifill 4
