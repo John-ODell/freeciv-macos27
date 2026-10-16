@@ -14,7 +14,7 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 | `port/` | Working fork of Freeciv where fixes are made and built. Its own git repo. | No |
 | `patches/` | Patches exported from `port/` with `git format-patch`, one per concern, upstreamable. | Yes |
 | `scripts/` | `build.sh` (configure+build+install), `test.sh` (autogame + save/load probe), `bundle.sh` + `fix-dylibs.py` (self-contained .app), `dmg.sh` (DMG, optional Developer ID signing/notarization), and the probe helpers used for the evidence. | Yes |
-| `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log. | Yes |
+| `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log, Civ4/5 planning menu (`civ45-planning.md`). | Yes |
 | `downloads/` | Prebuilt macOS apps and tarballs used for diagnosis. | No |
 
 ## Quick start (macOS 27, Apple Silicon, Homebrew)
