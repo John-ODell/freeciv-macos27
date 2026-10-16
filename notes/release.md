@@ -46,7 +46,8 @@ One-time setup, done by the account holder by hand (no script here touches the p
    upload a certificate signing request made in Keychain Access, download the `.cer`, double-click it.
    Xcode can do the same from Settings > Accounts > Manage Certificates (unverified on Xcode for macOS 27).
 2. Check: `security find-identity -v -p codesigning` lists `Developer ID Application: <Name> (<TEAMID>)`.
-3. Make an app-specific password for the Apple ID at https://account.apple.com (Sign-In and Security).
+3. Make an app-specific password for the Apple ID: account.apple.com > Sign-In and Security > App-Specific
+   Passwords (observed, https://support.apple.com/en-us/102654, read 2026-10-16).
 4. Store it for notarytool, which prompts for the password when `--password` is left out (observed,
    `xcrun notarytool store-credentials --help`, notarytool 1.1.3):
 
@@ -61,7 +62,8 @@ Each notarized release, after steps 1 and 2 of the checklist above:
     spctl -a -t open --context context:primary-signature -vv ~/freeciv-builds/apps/Freeciv-<ver>-arm64.dmg
 
 `dmg.sh` uploads the DMG to Apple, waits for the verdict and staples the ticket. If Apple rejects it,
-`xcrun notarytool log <submission-id> --keychain-profile freeciv-notary` shows why. The expected `spctl`
+`xcrun notarytool log <submission-id> --keychain-profile freeciv-notary` prints Apple's log as JSON
+(observed, `xcrun notarytool log --help`, notarytool 1.1.3). The expected `spctl`
 verdict is "accepted" with source "Notarized Developer ID" (inferred from Gatekeeper's usual output, to be
 confirmed on the first run). Do not put the Apple ID, team ID or password in this repository: it is public.
 
