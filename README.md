@@ -17,6 +17,23 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 | `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log, Civ4/5 planning menu (`civ45-planning.md`). | Yes |
 | `downloads/` | Prebuilt macOS apps and tarballs used for diagnosis. | No |
 
+## Download (macOS 27, Apple Silicon)
+
+Releases: https://github.com/John-ODell/freeciv-macos27/releases. Each release has `Freeciv-<version>-arm64.dmg`,
+its `.sha256`, and `freeciv-<version>-src.tar.gz`, the exact source the DMG was built from (upstream S3_2 plus
+`patches/`). The app is ad-hoc signed, not notarized, so the first launch of a downloaded copy is refused by
+Gatekeeper. Either open System Settings > Privacy & Security and choose Open Anyway after the refusal, or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Freeciv.app
+```
+
+Check the download first:
+
+```bash
+shasum -a 256 -c Freeciv-3.2.6-arm64.dmg.sha256
+```
+
 ## Quick start (macOS 27, Apple Silicon, Homebrew)
 
 ```bash
