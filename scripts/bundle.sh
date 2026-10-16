@@ -1,25 +1,27 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Assemble a self-contained, ad-hoc signed macOS .app from a Freeciv install made by scripts/build.sh.
+# Assemble a self-contained, signed (ad-hoc by default, or Developer ID) macOS .app from a Freeciv install
+# made by scripts/build.sh.
 #
 # Usage: scripts/bundle.sh <qt|gtk4|gtk3.22|sdl2> [--prefix DIR] [--out DIR] [--name NAME] [--sign IDENTITY]
 #
 #   --prefix  install prefix to bundle              (default: ~/freeciv-builds/<qt|gtk|sdl2>)
 #   --out     directory to write the .app into      (default: ~/freeciv-builds/apps)
 #   --name    app name                              (default: Freeciv for qt, Freeciv-<CLIENT> otherwise; no spaces)
-#   --sign    codesign identity                     (default: "-" = ad-hoc; see scripts/dmg.sh for notarization)
+#   --sign    codesign identity                     (default: "-" = ad-hoc; scripts/sign-app.sh, dmg.sh notarizes)
 #
-# Layout:  <Name>.app/Contents/MacOS/<Name>        launcher: sets FREECIV_DATA_PATH / FREECIV_LOCALE_PATH, cd's
-#                                                   next to the binaries (so the client's spawned ./freeciv-server
-#                                                   is the bundled one), exec's the client
+# Layout:  <Name>.app/Contents/MacOS/<Name>        launcher compiled from scripts/launcher.c: sets FREECIV_DATA_PATH /
+#                                                   FREECIV_LOCALE_PATH, cd's next to the binaries (so the client's
+#                                                   spawned ./freeciv-server is the bundled one), exec's the client
 #          Contents/MacOS/freeciv-<client>, freeciv-server, freeciv-mp-<x>, freeciv-ruledit (qt)
 #          Contents/Frameworks/                     every non-system dylib and Qt framework, install names @rpath
 #          Contents/PlugIns/                        Qt plugins (macdeployqt)
 #          Contents/Resources/share/freeciv, share/locale, freeciv-client.icns
+#          Contents/Resources/COPYING, SOURCE.txt, licenses/ (third-party texts, THIRD-PARTY-NOTICES.txt)
 # The bundle depends on nothing outside itself and /System; Homebrew is not needed at run time.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-[ $# -ge 1 ] || { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+[ $# -ge 1 ] || { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 CLIENT="$1"; shift
 case "$CLIENT" in qt) SUB=qt;; gtk4|gtk3.22) SUB=gtk;; sdl2) SUB=sdl2;; *) echo "client must be qt, gtk4, gtk3.22 or sdl2"; exit 1;; esac
 PREFIX="$HOME/freeciv-builds/$SUB"; OUT="$HOME/freeciv-builds/apps"; NAME=""; SIGN="-"
@@ -75,26 +77,12 @@ LAUNCHER="$NAME"
 for b in "$C"/MacOS/*; do
   if [ "$(printf %s "$(basename "$b")" | tr '[:upper:]' '[:lower:]')" = "$(printf %s "$NAME" | tr '[:upper:]' '[:lower:]')" ]; then LAUNCHER="${NAME}-launcher"; fi
 done
-cat > "$C/MacOS/$LAUNCHER" <<'EOL'
-#!/bin/bash
-# Freeciv.app launcher: make the bundle relocatable, then exec the client.
-DIR="$(cd "$(dirname "$0")" && pwd)"
-RES="$(cd "$DIR/../Resources" && pwd)"
-export FREECIV_DATA_PATH="${FREECIV_DATA_PATH:-$RES/share/freeciv:$HOME/.freeciv/@DATASUBDIR@}"
-export FREECIV_SCENARIO_PATH="${FREECIV_SCENARIO_PATH:-$RES/share/freeciv/scenarios:$HOME/.freeciv/@DATASUBDIR@/scenarios:$HOME/.freeciv/scenarios}"
-export FREECIV_LOCALE_PATH="${FREECIV_LOCALE_PATH:-$RES/share/locale}"
-if [ -d "$RES/share/glib-2.0/schemas" ]; then   # GTK clients: settings schemas, icon lookup, fontconfig, no pixbuf loader cache
-  export GSETTINGS_SCHEMA_DIR="$RES/share/glib-2.0/schemas"
-  export XDG_DATA_DIRS="$RES/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
-  export GDK_PIXBUF_MODULE_FILE="$RES/etc/gdk-pixbuf-loaders.cache"
-  [ -d "$RES/etc/fonts" ] && export FONTCONFIG_PATH="$RES/etc/fonts"
-fi
-export PATH="$DIR:$PATH"
-cd "$DIR"   # the client starts a local game with ./freeciv-server (client/connectdlg_common.c)
-exec "$DIR/@CLIENTBIN@" "$@"
-EOL
-sed -i '' -e "s|@DATASUBDIR@|$DATASUBDIR|g" -e "s|@CLIENTBIN@|freeciv-$CLIENT|g" "$C/MacOS/$LAUNCHER"
-chmod +x "$C/MacOS/$LAUNCHER"
+# Compiled (Mach-O) so hardened runtime and notarization apply to the main executable as well;
+# scripts/launcher.c sets the bundle's data/locale paths and the GTK variables, then execs the client.
+# Header padding: fix-dylibs.py adds rpaths to every executable in Contents/MacOS, this one included.
+clang -O2 -Wall -Wextra -Werror -mmacosx-version-min=11.0 -Wl,-headerpad_max_install_names \
+  -DCLIENT_BIN="\"freeciv-$CLIENT\"" -DDATASUBDIR="\"$DATASUBDIR\"" \
+  -o "$C/MacOS/$LAUNCHER" "$ROOT/scripts/launcher.c"
 
 # Info.plist
 cat > "$C/Info.plist" <<EOP
@@ -162,6 +150,9 @@ EXTRA=()
 SDL3="$(brew --prefix sdl3 2>/dev/null)/lib/libSDL3.0.dylib"
 if otool -L "$BIN" | grep -q libSDL2 && [ -f "$SDL3" ]; then EXTRA=(--extra "$SDL3"); fi   # sdl2-compat dlopens @loader_path/libSDL3.dylib
 python3 "$ROOT/scripts/fix-dylibs.py" "$APP" "${EXTRA[@]}"
+
+# third-party licence texts and source locations for everything bundled (Contents/Resources/licenses)
+python3 "$ROOT/scripts/collect-licenses.py" "$APP" --freeciv-src "$SRC"
 [ -f "$C/Frameworks/libSDL3.0.dylib" ] && ln -sf libSDL3.0.dylib "$C/Frameworks/libSDL3.dylib"
 
 # LSMinimumSystemVersion = highest minos of anything in the bundle
@@ -174,13 +165,8 @@ plutil -lint "$C/Info.plist" >/dev/null
 # no dangling symlinks (codesign --deep fails on them with an unhelpful "No such file or directory")
 BROKEN=$(find "$APP" -type l ! -exec test -e {} \; -print); [ -z "$BROKEN" ] || { echo "dangling symlinks in bundle:"; echo "$BROKEN"; exit 1; }
 
-# sign inside-out: libraries and plugins, then helper executables, then the bundle
-find "$C/Frameworks" "$C/PlugIns" -type f \( -name "*.dylib" -o -name "*.so" -o -perm +111 \) | while read -r f; do
-  file -b "$f" | grep -q Mach-O && codesign --force --sign "$SIGN" --timestamp=none "$f" 2>/dev/null; done
-find "$C/Frameworks" -maxdepth 1 -name "*.framework" -exec codesign --force --sign "$SIGN" --timestamp=none {} \;
-for f in "$C"/MacOS/freeciv-*; do codesign --force --sign "$SIGN" --timestamp=none "$f"; done
-codesign --force --sign "$SIGN" --timestamp=none "$APP"
-codesign --verify --strict --deep "$APP" && echo "codesign verify: ok ($SIGN)"
+# sign inside-out (ad-hoc by default; a Developer ID gets hardened runtime and a secure timestamp)
+"$ROOT/scripts/sign-app.sh" "$APP" "$SIGN"
 
 echo "== $APP"; du -sh "$APP" | cut -f1 | sed 's/^/size: /'
 echo "minos: ${MINOS:-?}   signed: $(codesign -dv "$APP" 2>&1 | grep -E '^Signature|^Authority' | head -1)"
