@@ -90,3 +90,7 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - `~/freeciv-builds/apps/Freeciv.app` (159 MB, self-contained, ad-hoc signed) from `scripts/bundle.sh qt`;
   `~/freeciv-builds/apps/Freeciv-3.2.6-arm64.dmg` (85 MB) + `.sha256` from `scripts/dmg.sh`. Both git-ignored, safe to delete and regenerate.
 - `~/.freeciv/freeciv-client-rc-3.2` etc. written by the clients during probes.
+- `~/freeciv-builds/gtk` and `~/freeciv-builds/sdl2` reconfigured to release by `scripts/build.sh gtk|sdl2` (no new formulae);
+  `~/freeciv-builds/apps/{Freeciv-GTK4,Freeciv-GTK3,Freeciv-SDL2}.app` from `scripts/bundle.sh`; the stale
+  `FreecivGTK4.app`/`FreecivQt.app` test wrappers from last night were deleted. `~/Desktop/freeciv-port/builds/` (last
+  night's debug installs) is now unused and can be deleted.

@@ -7,7 +7,8 @@ CLIENT="$1"; OUT="$2"; PORT="$3"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 [ -x "$ROOT/scripts/windows-of-pid" ] || swiftc -O "$ROOT/scripts/windows-of-pid.swift" -o "$ROOT/scripts/windows-of-pid"
 SERVER="$(dirname "$CLIENT")/freeciv-server"
-mkdir -p "$OUT"; rm -f "$OUT"/*.png "$OUT"/*.sav* "$OUT"/fifo
+mkdir -p "$OUT"; OUT="$(cd "$OUT" && pwd)"   # absolute: the server prefixes relative 'save' paths with --saves
+rm -f "$OUT"/*.png "$OUT"/*.sav* "$OUT"/fifo
 cat > "$OUT/game.serv" <<EOS
 set aifill 4
 set timeout 0
