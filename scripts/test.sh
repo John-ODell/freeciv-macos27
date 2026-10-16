@@ -3,20 +3,39 @@
 # Smoke-test a Freeciv install: server autogame, then (for each client binary present) the FIFO-driven
 # save/load/restart probe from scripts/game-probe.sh with per-window screenshots and crash-report diff.
 #
-# Usage: scripts/test.sh <prefix-or-bin-dir> [--turns N] [--no-client] [--port P] [--ruleset NAME]
+# Usage: scripts/test.sh <prefix-or-bin-dir> [--turns N] [--no-client] [--port P] [--ruleset NAME] [--data DIR]
 #   e.g. scripts/test.sh ~/freeciv-builds/qt
-# Output: <repo>/logs/test-<name>-<timestamp>/ ; exit status non-zero on any failure.
+#   --data DIR  data path for the autogame server only, e.g. port/freeciv/data for the source tree's rulesets;
+#               without it the server reads FREECIV_DATA_PATH or its installed data. The client probes keep theirs.
+# Output: <repo>/logs/test-<name>-<timestamp>/ ; exit status non-zero on any failure. The result line names the
+# directory the autogame's ruleset was read from.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-[ $# -ge 1 ] || { sed -n '2,8p' "$0"; exit 1; }
+[ $# -ge 1 ] || { sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 P="$1"; shift
 BIN="$P"; [ -d "$P/bin" ] && BIN="$P/bin"
-TURNS=100; CLIENTS=1; PORT=5590; RULESET=""
-while [ $# -gt 0 ]; do case "$1" in --turns) TURNS="$2"; shift;; --no-client) CLIENTS=0;; --port) PORT="$2"; shift;; --ruleset) RULESET="$2"; shift;; *) echo "unknown $1"; exit 1;; esac; shift; done
+TURNS=100; CLIENTS=1; PORT=5590; RULESET=""; DATA=""
+while [ $# -gt 0 ]; do case "$1" in --turns) TURNS="$2"; shift;; --no-client) CLIENTS=0;; --port) PORT="$2"; shift;; --ruleset) RULESET="$2"; shift;; --data) DATA="$2"; shift;; *) echo "unknown $1"; exit 1;; esac; shift; done
 NAME="$(basename "$(cd "$BIN/.." && pwd)")"
-OUT="$ROOT/logs/test-$NAME-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$OUT"
+OUT="$ROOT/logs/test-$NAME-$(date +%Y%m%d-%H%M%S)"; [ -e "$OUT" ] && OUT="$OUT-$$"; mkdir -p "$OUT"   # two runs in one second
 FAIL=0
 echo "== test $NAME -> $OUT"
+
+# The server reads <ruleset>/game.ruleset from the first directory on its data path that has one. The path is
+# --data, else FREECIV_DATA_PATH, else the build's default ".:data:~/.freeciv/<x.y>:<prefix>/share/freeciv"
+# (port/freeciv/meson.build:214), where "." and "data" are relative to the directory this script runs in.
+DPATH="${DATA:-${FREECIV_DATA_PATH:-}}"
+if [ -z "$DPATH" ]; then
+  VER="$("$BIN/freeciv-server" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+  DPATH=".:data:$HOME/.freeciv/$VER:$(cd "$BIN/.." && pwd)/share/freeciv"
+fi
+RS="${RULESET:-civ2civ3}"; RSDIR=""   # civ2civ3: the server's default (common/game.h:676)
+IFS=: read -ra DIRS <<<"$DPATH"
+for d in "${DIRS[@]}"; do d="${d/#\~/$HOME}"; [ -f "$d/$RS/game.ruleset" ] && { RSDIR="$(cd "$d" && pwd)"; break; }; done
+# A missing ruleset is an error the server shrugs off: it keeps its default and the autogame still passes.
+[ -n "$RSDIR" ] || { echo "ruleset: FAILED, no $RS/game.ruleset on $DPATH"; echo "== result: FAIL ($OUT)"; exit 1; }
+echo "ruleset: $RS from $RSDIR"
+SENV=(); [ -z "$DATA" ] || SENV=("FREECIV_DATA_PATH=$DATA")
 
 # 1. server autogame (timeout -1 = autogame; 'end' after TURNS turns; fixed seeds for reproducibility)
 cat > "$OUT/autogame.serv" <<EOS
@@ -32,7 +51,7 @@ START=$(date +%s)
 # 'start' must arrive on the console (stdin) after the rulesets are loaded, and stdin must stay open
 # (on EOF the server stops reading it), so drive it through a FIFO held open until the server exits.
 rm -f "$OUT/fifo"; mkfifo "$OUT/fifo"
-"$BIN/freeciv-server" -p "$((PORT+1))" --Announce none --read "$OUT/autogame.serv" --saves "$OUT" -e < "$OUT/fifo" > "$OUT/autogame.log" 2>&1 &
+env ${SENV[@]+"${SENV[@]}"} "$BIN/freeciv-server" -p "$((PORT+1))" --Announce none --read "$OUT/autogame.serv" --saves "$OUT" -e < "$OUT/fifo" > "$OUT/autogame.log" 2>&1 &
 SPID=$!
 exec 3>"$OUT/fifo"
 sleep 4; echo start >&3
@@ -66,5 +85,5 @@ if [ $CLIENTS = 1 ]; then
     if [ $ok = 1 ]; then echo "probe $c: ok (save/load/restart, no crash reports, $(ls "$OUT/$c"/*.png 2>/dev/null | wc -l | tr -d ' ') screenshots)"; else echo "probe $c: FAILED (see $OUT/$c/run.txt and $OUT/$c.probe.log)"; grep -E "crash|exit=|still" "$R"; FAIL=1; fi
   done
 fi
-echo "== result: $([ $FAIL = 0 ] && echo PASS || echo FAIL) ($OUT)"
+echo "== result: $([ $FAIL = 0 ] && echo PASS || echo FAIL) ($RS from $RSDIR; $OUT)"
 exit $FAIL
