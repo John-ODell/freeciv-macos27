@@ -1,0 +1,46 @@
+# Upstream reference clones (shallow clones of github.com/freeciv/*, never modified)
+refs/
+
+# Working fork(s) of freeciv: separate git repositories, patches are exported to patches/
+port/
+
+# Downloaded prebuilt apps, tarballs, DMGs, extracted bundles
+downloads/
+*.dmg
+*.tar.gz
+*.tar.xz
+*.zip
+*.pkg
+
+# Build output
+build/
+builds/
+dist/
+*.o
+*.a
+*.dylib
+*.so
+*.app/
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors and tools
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs and crash reports captured during diagnosis (kept in notes/ only as excerpts)
+logs/
+*.crash
+*.ips
+
+# Secrets
+*.p12
+*.cer
+*.provisionprofile
+.env
