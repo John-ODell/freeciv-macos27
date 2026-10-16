@@ -16,6 +16,7 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 | `scripts/` | `build.sh` (configure+build+install), `test.sh` (autogame + save/load probe), `bundle.sh` + `fix-dylibs.py` (self-contained .app with a compiled `launcher.c` and the `collect-licenses.py` notices), `sign-app.sh` (ad-hoc or Developer ID, hardened runtime), `dmg.sh` (DMG, optional notarization), and the probe helpers used for the evidence. | Yes |
 | `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log, Civ4/5 planning menu (`civ45-planning.md`), the proposal for the port, civ45 and civ54 as two or three games (`game-directions.md`), and the Freeciv45 build plan (`freeciv45-plan.md`, research in `freeciv45/`). | Yes |
 | `downloads/` | Prebuilt macOS apps and tarballs used for diagnosis. | No |
+| `inbox/` | Notes between this desk and other Claude desks (rules in `inbox/README.md`). Local only. | No |
 
 ## Download (macOS 27, Apple Silicon)
 
