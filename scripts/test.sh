@@ -2,7 +2,7 @@
 # Smoke-test a Freeciv install: server autogame, then (for each client binary present) the FIFO-driven
 # save/load/restart probe from scripts/game-probe.sh with per-window screenshots and crash-report diff.
 #
-# Usage: scripts/test.sh <prefix-or-bin-dir> [--turns N] [--no-client] [--port P]
+# Usage: scripts/test.sh <prefix-or-bin-dir> [--turns N] [--no-client] [--port P] [--ruleset NAME]
 #   e.g. scripts/test.sh ~/freeciv-builds/qt
 # Output: <repo>/logs/test-<name>-<timestamp>/ ; exit status non-zero on any failure.
 set -uo pipefail
@@ -10,8 +10,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 [ $# -ge 1 ] || { sed -n '2,8p' "$0"; exit 1; }
 P="$1"; shift
 BIN="$P"; [ -d "$P/bin" ] && BIN="$P/bin"
-TURNS=100; CLIENTS=1; PORT=5590
-while [ $# -gt 0 ]; do case "$1" in --turns) TURNS="$2"; shift;; --no-client) CLIENTS=0;; --port) PORT="$2"; shift;; *) echo "unknown $1"; exit 1;; esac; shift; done
+TURNS=100; CLIENTS=1; PORT=5590; RULESET=""
+while [ $# -gt 0 ]; do case "$1" in --turns) TURNS="$2"; shift;; --no-client) CLIENTS=0;; --port) PORT="$2"; shift;; --ruleset) RULESET="$2"; shift;; *) echo "unknown $1"; exit 1;; esac; shift; done
 NAME="$(basename "$(cd "$BIN/.." && pwd)")"
 OUT="$ROOT/logs/test-$NAME-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$OUT"
 FAIL=0
@@ -19,6 +19,7 @@ echo "== test $NAME -> $OUT"
 
 # 1. server autogame (timeout -1 = autogame; 'end' after TURNS turns; fixed seeds for reproducibility)
 cat > "$OUT/autogame.serv" <<EOS
+${RULESET:+rulesetdir $RULESET}
 set aifill 10
 set minplayers 0
 set endturn $TURNS
