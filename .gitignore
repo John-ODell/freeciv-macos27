@@ -44,3 +44,6 @@ logs/
 *.cer
 *.provisionprofile
 .env
+
+# compiled helpers (rebuild with: swiftc -O scripts/windows-of-pid.swift -o scripts/windows-of-pid)
+scripts/windows-of-pid

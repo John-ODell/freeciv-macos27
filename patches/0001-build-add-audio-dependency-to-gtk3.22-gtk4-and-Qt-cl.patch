@@ -1,0 +1,51 @@
+From e57d3edd50c3c793c1e0ef07c14fee2b620b64ef Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Thu, 15 Oct 2026 22:27:36 -0500
+Subject: [PATCH] build: add audio dependency to gtk3.22, gtk4 and Qt client
+ targets
+
+The gui_main.c / gui_main.cpp of the gtk3.22, gtk4 and Qt clients include
+<SDL2/SDL.h> (or <SDL3/SDL.h>) when audio is built with SDL, but the
+executable targets in meson.build only listed the toolkit, network and
+gettext dependencies. On systems where SDL lives outside the compiler's
+default include path (macOS with Homebrew: /opt/homebrew/include) the
+build fails with 'SDL2/SDL.h' file not found. The sdl2, sdl3 and stub
+clients already list audio_dep; do the same for the three others.
+---
+ meson.build | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index 93326f5..ccdc21c 100644
+--- a/meson.build
++++ b/meson.build
+@@ -3351,7 +3351,7 @@ executable('freeciv-gtk3.22',
+             '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_50'],
+   sources: [verhdr],
+   include_directories: client_inc,
+-  dependencies: [gtk322_dep, net_dep, gettext_dep, mw_extra_dep],
++  dependencies: [gtk322_dep, audio_dep, net_dep, gettext_dep, mw_extra_dep],
+   link_with: client_common,
+   install: true,
+   win_subsystem: 'windows'
+@@ -3444,7 +3444,7 @@ executable('freeciv-gtk4',
+             '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_66'],
+   sources: [verhdr],
+   include_directories: client_inc,
+-  dependencies: [gtk4_dep, net_dep, gettext_dep, mw_extra_dep],
++  dependencies: [gtk4_dep, audio_dep, net_dep, gettext_dep, mw_extra_dep],
+   link_with: client_common,
+   install: true,
+   win_subsystem: 'windows'
+@@ -3571,7 +3571,7 @@ executable('freeciv-qt',
+   mocced_client, clienticon,
+   sources: [verhdr],
+   include_directories: [client_inc, include_directories('client/gui-qt')],
+-  dependencies: [qt_dep, net_dep, gettext_dep, mw_extra_dep],
++  dependencies: [qt_dep, audio_dep, net_dep, gettext_dep, mw_extra_dep],
+   override_options: qt_opts,
+   link_with: client_common,
+   install: true,
+-- 
+2.56.0
+
