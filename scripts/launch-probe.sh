@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Launch a Freeciv client binary for N seconds, capture stderr, a screenshot, a stack sample
 # and any new crash report. Usage: launch-probe.sh <binary> <outdir> [seconds] [extra args...]
 set -u

@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Start a local server + autoconnecting client and bring it in-game, then leave both running.
 # Usage: game-hold.sh <client-binary> <outdir> <port>   (server stdin stays open on <outdir>/fifo)
 set -u

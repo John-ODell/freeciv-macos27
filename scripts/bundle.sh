@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Assemble a self-contained, ad-hoc signed macOS .app from a Freeciv install made by scripts/build.sh.
 #
 # Usage: scripts/bundle.sh <qt|gtk4|gtk3.22|sdl2> [--prefix DIR] [--out DIR] [--name NAME] [--sign IDENTITY]

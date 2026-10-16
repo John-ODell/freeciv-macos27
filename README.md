@@ -74,6 +74,9 @@ credentials are committed. Upstream clones and installed apps are never modified
 
 ## License
 
-Scripts and notes here are MIT unless stated otherwise. Patches under `patches/` modify
-GPL-2.0-or-later code from Freeciv and are themselves GPL-2.0-or-later, with upstream
-license headers kept intact.
+Everything in this repository (scripts, patches, notes) is free software under the GNU General Public
+License, version 2 or (at your option) any later version: the same terms as Freeciv. The full text is in
+`LICENSE`, and each script starts with an `SPDX-License-Identifier: GPL-2.0-or-later` line. Patches under
+`patches/` modify Freeciv's GPL-2.0-or-later code and keep the upstream licence headers intact.
+Until 2026-10-16 this section said scripts and notes were MIT; copies taken before then may still be used
+under MIT.

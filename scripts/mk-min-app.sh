@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Make a minimal .app wrapper around an installed freeciv client binary (for testing only:
 # no dylib bundling, data path is the compiled-in install prefix). Usage: mk-min-app.sh <binary> <AppName> <bundle-id>
 set -eu

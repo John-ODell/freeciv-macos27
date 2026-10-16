@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Package an .app made by scripts/bundle.sh as a compressed DMG with an /Applications drop link, optionally
 # Developer-ID signed and notarized.
 #

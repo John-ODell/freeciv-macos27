@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # One-command Freeciv build for macOS (Apple Silicon, Homebrew).
 #
 # Usage: scripts/build.sh <qt|gtk|sdl2|all> [--debug] [--audio sdl2|sdl3] [--jobs N] [--no-install-deps]
