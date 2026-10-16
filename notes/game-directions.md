@@ -15,7 +15,7 @@ He left the choice between a two-game and a three-game direction open.
 | What it is | Stock Freeciv 3.2 rules, our two build patches | Ruleset + Lua on top of stock Freeciv 3.2 (`port/freeciv/data/civ45`, patches 0003+) | A fork of the Freeciv engine (C in `common/`, `server/`, `ai/`, `client/gui-qt`) with its own ruleset and art |
 | Status | Released as v3.2.6-mac1 (observed) | Slices 1 and 2 merged (PRs 24 and 29), in no release yet (observed, see Next steps) | Not started |
 | Runs on | Our macOS build | Any Freeciv 3.2 build: our DMG, upstream Windows and Linux installers, other people's servers (derived: it is data only) | Only builds of the fork |
-| Multiplayer with stock Freeciv | Yes | Yes, server and clients only need the ruleset files | No: the fork must change its network capability string and savegame format (inferred) |
+| Multiplayer with stock Freeciv | Yes | Yes: only the server needs the civ45 files, it sends the rules to each client as it connects (observed, `server/connecthand.c:191`, `client/packhand.c:3607`) | No: the fork must change its network capability string and savegame format (inferred) |
 | AI | Stock | Stock AI, steered through the ruleset | Needs AI work for every new mechanic |
 | Art | Freeciv's GPL tilesets | Same (hex: `hexemplio`, `isophex`, `hex2t`, observed in `data/`) | New original hex art, GPL-compatible |
 
@@ -48,7 +48,7 @@ The port, civ45 frozen at "ruleset and Lua only", and civ54 as the engine fork t
 copy of civ45's ruleset.
 
 - For: civ45 ships now on every platform and keeps working on future Freeciv releases (the ruleset
-  can be migrated with `freeciv-ruleup`). civ54 can break compatibility freely. Engine features that are
+  can be migrated with `freeciv-ruleup`, which our build installs; observed in `~/freeciv-builds/qt/bin`). civ54 can break compatibility freely. Engine features that are
   general, such as a unit-class-aware tile limit, can be offered upstream; if Freeciv adopts them,
   civ45 can use them later.
 - Against: two rulesets diverge and both need balancing; civ54 needs its own Windows build.
