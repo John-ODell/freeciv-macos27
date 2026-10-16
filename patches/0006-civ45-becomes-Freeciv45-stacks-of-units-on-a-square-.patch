@@ -1,0 +1,785 @@
+From 6ec77446eb1d42f5b73ae2f162faf8975e439320 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Fri, 16 Oct 2026 17:58:29 -0500
+Subject: [PATCH] civ45 becomes Freeciv45: stacks of units on a square map,
+ only the defender dies
+
+The one-unit-per-tile rules move out (they live on in civ54): sandbox's
+Unit Move and Transport Disembark enablers come back, the StacksAnywhere
+and StacksInPort flags and the relocation Lua go. New games default to
+an overhead square map (topology "") that wraps east to west, with
+killstack disabled, so a stack that loses its defender loses only that
+unit. The culture steps on the city radius go too: on a square map
+radius_sq 5 is the 21-tile fat cross. The ruleset is named "Freeciv45",
+suggests the trident tileset (the only overhead square one shipped) and
+its Makefile.am names civ45 instead of sandbox.
+---
+ data/civ45/Makefile.am     |   4 +-
+ data/civ45/README.civ45    |  49 ++++-----
+ data/civ45/actions.ruleset |  78 --------------
+ data/civ45/effects.ruleset |  19 ----
+ data/civ45/game.ruleset    |  29 ++---
+ data/civ45/script.lua      | 212 -------------------------------------
+ data/civ45/units.ruleset   |  48 ++++-----
+ 7 files changed, 65 insertions(+), 374 deletions(-)
+
+diff --git a/data/civ45/Makefile.am b/data/civ45/Makefile.am
+index a1b6a55..e83fb84 100644
+--- a/data/civ45/Makefile.am
++++ b/data/civ45/Makefile.am
+@@ -1,7 +1,7 @@
+ ## Process this file with automake to produce Makefile.in
+ 
+ ## Override automake so that "make install" puts these in proper place:
+-pkgdatadir = $(datadir)/$(PACKAGE)/sandbox
++pkgdatadir = $(datadir)/$(PACKAGE)/civ45
+ 
+ pkgdata_DATA =          \
+ 	actions.ruleset	\
+@@ -18,6 +18,6 @@ pkgdata_DATA =          \
+ 	techs.ruleset	\
+ 	terrain.ruleset	\
+ 	units.ruleset	\
+-	README.sandbox
++	README.civ45
+ 
+ EXTRA_DIST = $(pkgdata_DATA)
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index e2bb068..01fe760 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -1,35 +1,32 @@
+-=============
+-Civ45 Ruleset
+-=============
++=================
++Freeciv45 Ruleset
++=================
+ 
+-civ45 is the sandbox ruleset plus a first slice of Civilization IV/V
+-style rules. It is part of the freeciv-macos27 project
++civ45 is the ruleset of Freeciv45, an empire game where units travel in
++stacks on a square map. It is the sandbox ruleset plus the rules below.
++It is part of the freeciv-macos27 project
+ (https://github.com/John-ODell/freeciv-macos27) and is experimental:
+-balance is untuned and the default AI was not written for one unit per
+-tile.
++balance is untuned.
++
++The one-unit-per-tile hex rules this ruleset had in its first two slices
++live on unchanged as the civ54 ruleset.
+ 
+ Differences from sandbox
+ ------------------------
+ 
+-- Hex map (topology ISO|HEX) by default.
+-- One unit per tile, cities included:
+-  * A regular move or a landing from a transport is only legal into an
+-    empty tile (MaxUnitsOnTile 0 on the "Unit Move" and "Transport
+-    Disembark" enablers).
+-  * A unit built in a city that already holds a unit is sorted out at
+-    once by script.lua: the better defender stays in the city, the other
+-    unit moves to the nearest free tile in its owner's territory.
+-  * Every turn starts with a sweep that does the same for any other way
+-    two units ended up together (start units, huts, barbarians, captures,
+-    airlifts, paradrops, unloading in port).
+-  * Exempt: units inside a transport; aircraft, helicopters and missiles
+-    (unit flag "StacksAnywhere"), which may share any tile; ships (unit
+-    flag "StacksInPort"), which may enter and share a city tile.
+-  * Known limit: the move rule counts every unit, so a ship or aircraft
+-    parked in a city stops a land unit from moving in. Units built there
+-    still appear inside.
+-- City work radius grows with the city's culture: +4 radius_sq at 300
+-  culture points, another +4 at 1500.
++- Stacks: any number of units can share a tile, as in sandbox. When a
++  stack is attacked its best defender fights, and if it loses, only that
++  unit dies (server setting killstack disabled; sandbox kills the whole
++  stack outside cities and fortresses).
++- Square map seen from above (topology "", overhead tilesets such as
++  trident) that wraps east to west only (wrap WRAPX), instead of
++  sandbox's isometric map wrapping both ways.
++- Each city works 21 tiles: radius_sq 5 on a square map, the "fat cross"
++  shape. Earlier slices grew the radius with culture; that is gone (on a
++  square map it would reach 29 and then 45 tiles). Sandbox's Space
++  Elevator and Space Elevator Tether still enlarge their own city's radius.
++- The ruleset suggests the trident tileset, the only overhead square
++  tileset Freeciv ships, until a Freeciv45 tileset exists.
+ - Cultural victory is enabled alongside spacerace and allied victory.
+ - Bombard range is 2 instead of 1.
+ - Strategic resources: Legion needs Iron and Armor needs Oil somewhere in
+diff --git a/data/civ45/actions.ruleset b/data/civ45/actions.ruleset
+index 049fa62..f2155c9 100644
+--- a/data/civ45/actions.ruleset
++++ b/data/civ45/actions.ruleset
+@@ -2760,7 +2760,6 @@ target_reqs    =
+       "UnitState", "Transported", "Local", TRUE
+     }
+ 
+-; civ45: one unit per tile also applies when landing from a transport.
+ [actionenabler_disembark_from_native_tile]
+ action        = "Transport Disembark"
+ actor_reqs    =
+@@ -2769,22 +2768,7 @@ actor_reqs    =
+       "MinMoveFrags", "1",            "Local"
+       "UnitState",    "OnNativeTile", "Local"
+     }
+-target_reqs   =
+-    { "type",           "name", "range", "present"
+-      "MaxUnitsOnTile", "0",    "Tile",  TRUE
+-    }
+ 
+-[actionenabler_disembark_from_native_tile_stacks_anywhere]
+-action        = "Transport Disembark"
+-actor_reqs    =
+-    { "type",         "name",         "range"
+-      "UnitState",    "Transported",  "Local"
+-      "MinMoveFrags", "1",            "Local"
+-      "UnitState",    "OnNativeTile", "Local"
+-      "UnitFlag",     "StacksAnywhere", "Local"
+-    }
+-
+-; civ45: one unit per tile also applies when landing from a transport.
+ [actionenabler_disembark_from_native_city]
+ action        = "Transport Disembark"
+ actor_reqs    =
+@@ -2793,22 +2777,7 @@ actor_reqs    =
+       "MinMoveFrags", "1",           "Local"
+       "CityTile",     "Center",      "Tile"
+     }
+-target_reqs   =
+-    { "type",           "name", "range", "present"
+-      "MaxUnitsOnTile", "0",    "Tile",  TRUE
+-    }
+-
+-[actionenabler_disembark_from_native_city_stacks_anywhere]
+-action        = "Transport Disembark"
+-actor_reqs    =
+-    { "type",         "name",        "range"
+-      "UnitState",    "Transported", "Local"
+-      "MinMoveFrags", "1",           "Local"
+-      "CityTile",     "Center",      "Tile"
+-      "UnitFlag",     "StacksAnywhere", "Local"
+-    }
+ 
+-; civ45: one unit per tile also applies when landing from a transport.
+ [actionenabler_disembark_from_non_native]
+ action        = "Transport Disembark 2"
+ actor_reqs    =
+@@ -2818,21 +2787,6 @@ actor_reqs    =
+       "UnitState",      "OnNativeTile", "Local", FALSE
+       "CityTile",       "Center",       "Tile",  FALSE
+     }
+-target_reqs   =
+-    { "type",           "name", "range", "present"
+-      "MaxUnitsOnTile", "0",    "Tile",  TRUE
+-    }
+-
+-[actionenabler_disembark_from_non_native_stacks_anywhere]
+-action        = "Transport Disembark 2"
+-actor_reqs    =
+-    { "type",           "name",         "range", "present"
+-      "UnitState",      "Transported",  "Local", TRUE
+-      "MinMoveFrags",   "1",            "Local", TRUE
+-      "UnitState",      "OnNativeTile", "Local", FALSE
+-      "CityTile",       "Center",       "Tile",  FALSE
+-      "UnitFlag",     "StacksAnywhere", "Local", TRUE
+-    }
+ 
+ [actionenabler_embark]
+ action        = "Transport Embark"
+@@ -2860,9 +2814,6 @@ actor_reqs    =
+       "DiplRel",      "Never met",   "Local", FALSE
+     }
+ 
+-; civ45: one unit per tile. A regular move is only legal into a tile that
+-; holds no unit at all (own, allied or foreign). Embarking, conquering and
+-; hut entry are separate actions and keep their own enablers.
+ [actionenabler_regular_move]
+ action     = "Unit Move"
+ actor_reqs =
+@@ -2870,35 +2821,6 @@ actor_reqs =
+       "MinMoveFrags", "1",           "Local", TRUE
+       "UnitState",    "Transported", "Local", FALSE
+     }
+-target_reqs =
+-    { "type",           "name", "range", "present"
+-      "MaxUnitsOnTile", "0",    "Tile",  TRUE
+-    }
+-
+-; civ45: aircraft, helicopters and missiles are not limited by one unit per
+-; tile, so they can land in occupied cities and fly over friendly units.
+-[actionenabler_regular_move_stacks_anywhere]
+-action     = "Unit Move"
+-actor_reqs =
+-    { "type",         "name",           "range", "present"
+-      "MinMoveFrags", "1",              "Local", TRUE
+-      "UnitState",    "Transported",    "Local", FALSE
+-      "UnitFlag",     "StacksAnywhere", "Local", TRUE
+-    }
+-
+-; civ45: ships may enter a city tile (a port) even when it holds units.
+-[actionenabler_regular_move_into_port]
+-action     = "Unit Move"
+-actor_reqs =
+-    { "type",         "name",         "range", "present"
+-      "MinMoveFrags", "1",            "Local", TRUE
+-      "UnitState",    "Transported",  "Local", FALSE
+-      "UnitFlag",     "StacksInPort", "Local", TRUE
+-    }
+-target_reqs =
+-    { "type",     "name",   "range", "present"
+-      "CityTile", "Center", "Tile",  TRUE
+-    }
+ 
+ [actionenabler_hut_enter_from_native_tile]
+ action        = "Enter Hut"
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index bd5e5af..abb010c 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -5439,25 +5439,6 @@ reqs    =
+   "Counter", "Turn_of_Celebration", "City", TRUE
+ }
+ 
+-; civ45: city radius grows with the city's accumulated culture (history points).
+-; Base radius_sq is 5 (21 tiles). 300 culture -> 9, 1500 culture -> 13.
+-; Thresholds are a first guess, not tuned.
+-[effect_civ45_culture_radius_1]
+-type    = "City_Radius_Sq"
+-value   = 4
+-reqs    =
+-    { "type",       "name", "range"
+-      "MinCulture", "300",  "City"
+-    }
+-
+-[effect_civ45_culture_radius_2]
+-type    = "City_Radius_Sq"
+-value   = 4
+-reqs    =
+-    { "type",       "name", "range"
+-      "MinCulture", "1500", "City"
+-    }
+-
+ ; civ45: Bazaar (Arab unique building)
+ [effect_civ45_bazaar_luxury]
+ type    = "Output_Bonus"
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index cf584c9..305c92f 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -10,7 +10,7 @@
+ ; than minor changes.
+ 
+ [datafile]
+-description = "Civ45 game rules for Freeciv: sandbox plus Civ4/5-style rules"
++description = "Freeciv45 game rules: sandbox plus stacks of units on a square map"
+ options = "+Freeciv-3.2-ruleset"
+ format_version = 30
+ 
+@@ -23,7 +23,7 @@ description_file = "civ45/README.civ45"
+ 
+ [about]
+ ; Ruleset name
+-name = _("Civ45 ruleset")
++name = _("Freeciv45 ruleset")
+ 
+ ; There`s no separate versioning in rulesets part of main freeciv distribution
+ ;version = ""
+@@ -38,15 +38,16 @@ name = _("Civ45 ruleset")
+ ; /* TRANS: In the client, this is displayed alongside the contents of
+ ;    README.sandbox, which are not localized. */
+ summary = _("\
+-You are playing Freeciv with the civ45 ruleset: the sandbox rules plus \
+-a first slice of Civilization IV/V style mechanics. Hex map, one unit \
+-per tile (cities included; aircraft and ships in port exempt), city \
+-radius that grows with culture, cultural victory, \
++You are playing Freeciv45: the sandbox rules with stacks of units on \
++a square map. Any number of units can share a tile. When a stack is \
++attacked its best defender fights, and if it loses, only that unit \
++dies. The map is a square grid seen from above that wraps east to west, \
++and each city works 21 tiles. \
++Also: cultural victory, \
+ bombardment at range 2, strategic resources (Legion needs Iron, Armor \
+ needs Oil) and a few nation-unique units and buildings.\
+ \n\n\
+-Experimental: balance and AI behaviour under one-unit-per-tile are \
+-not tuned.\
++Experimental: an early slice of Freeciv45, not balanced yet.\
+ ")
+ 
+ ; Detailed description
+@@ -65,7 +66,9 @@ global_init_buildings = "Palace"
+ [tileset]
+ ; If preferred tileset is set, clients that support the feature will suggest
+ ; using that tileset with the ruleset.
+-; preferred = ""
++; civ45: trident is the only overhead square tileset Freeciv ships, until a
++; Freeciv45 tileset exists.
++preferred = "trident"
+ 
+ [soundset]
+ ; If preferred soundset is set, clients that support the feature will suggest
+@@ -906,15 +909,17 @@ colorlist =
+ ; etc...
+ 
+ [settings]
+-; freeciv game settings for civ45 ruleset (hex map, cultural victory enabled)
++; freeciv game settings for civ45 (Freeciv45): overhead square map wrapping east to west,
++; only the defender dies when a stack loses, cultural victory enabled
+ ;
+ set =
+     { "name", "value", "lock"
+       "aifill", 12, FALSE
+       "generator", "FRACTAL", FALSE
+-      "topology", "ISO|HEX", FALSE
++      "topology", "", FALSE
+       "victories", "SPACERACE|ALLIED|CULTURE", FALSE
+-      "wrap", "WRAPX|WRAPY", FALSE
++      "wrap", "WRAPX", FALSE
++      "killstack", "DISABLED", FALSE
+       "mapsize", "PLAYER", FALSE
+       "tilesperplayer", 100, FALSE
+       "tinyisles", "ENABLED", FALSE
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index ad45450..55c602d 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -527,215 +527,3 @@ end
+ 
+ signal.connect("action_started_unit_tile",
+ "action_started_unit_tile_callback")
+-
+--- ====================================================================
+--- civ45: one unit per tile
+---
+--- The "Unit Move" and "Transport Disembark" enablers in actions.ruleset
+--- refuse a voluntary move onto a tile that already holds a unit. The
+--- other ways a second unit can arrive on a tile are handled here:
+--- city production, start units, huts, barbarians, captures, airlifts,
+--- paradrops and unloading in port.
+---
+--- * A unit built in a city that already holds a unit is resolved at
+---   once: the better defender stays, the other one moves to the nearest
+---   free tile.
+--- * Every turn starts with a sweep of the map that does the same for any
+---   tile still holding more than one unit.
+---
+--- Not counted: units inside a transport, unit types with the
+--- "StacksAnywhere" flag (aircraft, helicopters, missiles), and types with
+--- the "StacksInPort" flag (ships) while they are on a city tile.
+--- Only functions are global here: the savegame stores global numbers,
+--- strings and game objects, so all state stays local.
+--- ====================================================================
+-
+--- Squared distances. On a hex map the squared distance is the square of
+--- the hex distance, so 10 reaches 3 tiles and 50 reaches 7.
+-local CIV45_NEAR_SQ_RADIUS = 10
+-local CIV45_FAR_SQ_RADIUS = 50
+-
+--- Relocations done by the unit_built handler since the last turn began,
+--- reported in the turn_begin log line. Local, so not saved; a reload
+--- only loses the count for one turn.
+-local civ45_built_moved, civ45_built_stuck = 0, 0
+-
+-local function civ45_same_player(a, b)
+-  return a ~= nil and b ~= nil and a.id == b.id
+-end
+-
+-local function civ45_stack_exempt(unit, tile)
+-  if unit:transporter() ~= nil then
+-    return true
+-  end
+-  local utype = unit.utype
+-  if utype:has_flag("StacksAnywhere") then
+-    return true
+-  end
+-  if utype:has_flag("StacksInPort") and tile:city() ~= nil then
+-    return true
+-  end
+-  return false
+-end
+-
+--- Units on the tile that count towards the limit.
+-local function civ45_counted_units(tile)
+-  local list = {}
+-  for unit in tile:units_iterate() do
+-    if not civ45_stack_exempt(unit, tile) then
+-      list[#list + 1] = unit
+-    end
+-  end
+-  return list
+-end
+-
+--- Which unit keeps the tile: the city owner's unit, then military over
+--- civilian, then the better defender role, then the dearer unit, then
+--- veterancy, then the older unit.
+-local function civ45_rank(unit, city)
+-  local utype = unit.utype
+-  local rank = 0
+-  if city ~= nil and civ45_same_player(unit.owner, city.owner) then
+-    rank = rank + 1000000
+-  end
+-  if not utype:has_flag("NonMil") then
+-    rank = rank + 100000
+-  end
+-  if utype:has_role("DefendGood") then
+-    rank = rank + 20000
+-  elseif utype:has_role("DefendOk") then
+-    rank = rank + 10000
+-  end
+-  return rank + utype.build_cost * 10 + unit.veteran
+-end
+-
+-local function civ45_sort_keepers(units, city)
+-  table.sort(units, function(a, b)
+-    local ra, rb = civ45_rank(a, city), civ45_rank(b, city)
+-    if ra ~= rb then
+-      return ra > rb
+-    end
+-    return a.id < b.id
+-  end)
+-end
+-
+--- Free tiles for the unit around `from`, nearest first. Own or unowned
+--- tiles only, unless foreign_ok, in which case only foreign-owned tiles;
+--- the server's teleport check then refuses illegal ones (peace treaty
+--- territory, non-allied cities and units).
+-local function civ45_candidates(unit, from, sq_radius, foreign_ok)
+-  local list = {}
+-  for tile in from:circle_iterate(sq_radius) do
+-    if tile:num_units() == 0
+-       and unit.utype:can_exist_at_tile(tile)
+-       and not tile:has_extra("Hut") and not tile:has_extra("Hermit") then
+-      local own = tile.owner == nil or civ45_same_player(tile.owner, unit.owner)
+-      local city = tile:city()
+-      local city_ok = city == nil or civ45_same_player(city.owner, unit.owner)
+-      if (not foreign_ok and own and city_ok) or (foreign_ok and not own) then
+-        list[#list + 1] = tile
+-      end
+-    end
+-  end
+-  table.sort(list, function(a, b)
+-    local da, db = from:sq_distance(a), from:sq_distance(b)
+-    if da ~= db then
+-      return da < db
+-    end
+-    return a.id < b.id
+-  end)
+-  return list
+-end
+-
+--- Try each tile in turn. Returns the tile reached, or nil, plus whether
+--- the unit is still alive.
+-local function civ45_try_tiles(unit, tiles)
+-  for _, dest in ipairs(tiles) do
+-    if not unit:teleport(dest) then
+-      return nil, false
+-    end
+-    if unit.tile.id == dest.id then
+-      return dest, true
+-    end
+-  end
+-  return nil, true
+-end
+-
+--- Returns true if the unit was moved. Search order: own or unowned land
+--- within 3 tiles, then within 7 tiles, then foreign land within 3 tiles.
+-local function civ45_relocate(unit)
+-  local from = unit.tile
+-  local passes = {
+-    { CIV45_NEAR_SQ_RADIUS, false },
+-    { CIV45_FAR_SQ_RADIUS, false },
+-    { CIV45_NEAR_SQ_RADIUS, true },
+-  }
+-  local dest = nil
+-  for _, pass in ipairs(passes) do
+-    local alive
+-    dest, alive = civ45_try_tiles(unit, civ45_candidates(unit, from, pass[1], pass[2]))
+-    if not alive then
+-      return false
+-    end
+-    if dest ~= nil then
+-      break
+-    end
+-  end
+-  if dest == nil then
+-    return false
+-  end
+-  if unit.owner:is_human() then
+-    notify.event(unit.owner, dest, E.UNIT_RELOCATED,
+-                 _("One unit per tile: %s moved to %s."),
+-                 unit:link_text(), dest:link_text())
+-  end
+-  return true
+-end
+-
+--- Keep the best unit on the tile, relocate the rest.
+--- Returns relocated, stuck.
+-local function civ45_resolve_tile(tile)
+-  local units = civ45_counted_units(tile)
+-  if #units <= 1 then
+-    return 0, 0
+-  end
+-  civ45_sort_keepers(units, tile:city())
+-  local moved, stuck = 0, 0
+-  for i = 2, #units do
+-    if civ45_relocate(units[i]) then
+-      moved = moved + 1
+-    else
+-      stuck = stuck + 1
+-    end
+-  end
+-  return moved, stuck
+-end
+-
+-function civ45_unit_built_callback(unit, city)
+-  local tile = unit.tile
+-  if tile:num_units() > 1 then
+-    local m, s = civ45_resolve_tile(tile)
+-    civ45_built_moved = civ45_built_moved + m
+-    civ45_built_stuck = civ45_built_stuck + s
+-  end
+-  return false
+-end
+-signal.connect("unit_built", "civ45_unit_built_callback")
+-
+-function civ45_turn_begin_callback(turn, year)
+-  local moved, stuck = 0, 0
+-  for tile in whole_map_iterate() do
+-    if tile:num_units() > 1 then
+-      local m, s = civ45_resolve_tile(tile)
+-      moved = moved + m
+-      stuck = stuck + s
+-    end
+-  end
+-  if moved + stuck + civ45_built_moved + civ45_built_stuck > 0 then
+-    log.normal("civ45 one-unit-per-tile, turn %d: production %d relocated, %d without a free tile; sweep %d relocated, %d without a free tile",
+-               turn, civ45_built_moved, civ45_built_stuck, moved, stuck)
+-  end
+-  civ45_built_moved, civ45_built_stuck = 0, 0
+-  return false
+-end
+-signal.connect("turn_begin", "civ45_turn_begin_callback")
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 5206110..4e74c8d 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -51,8 +51,6 @@ flags =
+     _("Marines"), _("Can launch attack from non-native tiles.")
+     _("Cant_Fortify")
+     _("OneAttack")
+-    _("StacksAnywhere"), _("Not limited by the one-unit-per-tile rule (civ45): aircraft, helicopters and missiles.")
+-    _("StacksInPort"), _("May share a city tile with other units while in port (civ45).")
+   }
+ 
+ ; Names for custom unit class flags. There can be up to 25 of these.
+@@ -1775,7 +1773,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ targets       = "Air", "Missile", "Helicopter"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "AirAttacker", "HasNoZOC", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "AirAttacker", "HasNoZOC", "IronBased"
+ roles         = "DefendOk", "DefendOkStartUnit"
+ helptext      = _("\
+ Fighters are your first airborne units. They can\
+@@ -1816,7 +1814,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "FieldUnit", "OneAttack", "AirAttacker", "Bombarder",
++flags         = "Shield2Gold", "ShieldToGold", "FieldUnit", "OneAttack", "AirAttacker", "Bombarder",
+                 "HasNoZOC", "IronBased"
+ roles         = ""
+ helptext      = _("\
+@@ -1864,7 +1862,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "OneAttack", "AirAttacker",
++flags         = "Shield2Gold", "ShieldToGold", "OneAttack", "AirAttacker",
+                 "Bombarder", "HasNoZOC", "Provoking", "IronBased"
+ roles         = ""
+ helptext      = _("\
+@@ -1914,7 +1912,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ targets       = "Air", "Missile", "Helicopter"
+ vision_layer  = "Stealth"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "AirAttacker", "HasNoZOC",
++flags         = "Shield2Gold", "ShieldToGold", "AirAttacker", "HasNoZOC",
+                 "IronBased"
+ roles         = "DefendGood", "DefendGoodStartUnit"
+ helptext      = _("\
+@@ -1952,7 +1950,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ vision_layer  = "Stealth"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "FieldUnit", "OneAttack",
++flags         = "Shield2Gold", "ShieldToGold", "FieldUnit", "OneAttack",
+                  "AirAttacker", "Bombarder", "HasNoZOC", "IronBased"
+ roles         = "DefendOk", "DefendOkStartUnit"
+ helptext      = _("\
+@@ -1991,7 +1989,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land", "Small Land", "Merchant"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC",
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC",
+                 "Provoking", "IronBased", "NonMil"
+ roles         = "Ferryboat", "FerryStartUnit"
+ helptext      = _("\
+@@ -2032,7 +2030,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land", "Small Land", "Merchant"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender",
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender",
+                 "Only_Native_Attack", "HasNoZOC", "Provoking", "Coast",
+                 "IronBased", "NonMil"
+ roles         = "Ferryboat", "FerryStartUnit", "BarbarianBoat"
+@@ -2072,7 +2070,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land", "Small Land", "Big Land", "Merchant"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC",
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC",
+                 "Provoking", "IronBased", "NonMil"
+ roles         = "Ferryboat", "FerryStartUnit", "BarbarianBoat"
+ helptext      = _("\
+@@ -2109,7 +2107,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
+ roles         = "Hunter"
+ helptext      = _("\
+ The Frigate is a specialized ship with a strong offensive value,\
+@@ -2145,7 +2143,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
+ roles         = "Hunter"
+ helptext      = _("\
+ The Ironclad is an armored ship,\
+@@ -2185,7 +2183,7 @@ bonuses       =
+    { "flag", "type", "value"
+      "Submarine", "DefenseMultiplier", 1
+    }
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
+ roles         = "Hunter"
+ helptext      = _("\
+ An improved Ironclad, with better move rate and vision.\
+@@ -2224,7 +2222,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
+ roles         = "DefendOk", "DefendOkStartUnit"
+ helptext      = _("\
+ The Cruiser is a strong offensive boat unit.\
+@@ -2263,7 +2261,7 @@ bonuses       =
+    { "flag", "type", "value"
+      "AirAttacker", "DefenseMultiplier", 4
+    }
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
+ roles         = "DefendGood", "DefendGoodStartUnit"
+ helptext      = _("\
+ The AEGIS Cruiser is equipped with an advanced\
+@@ -2303,7 +2301,7 @@ tp_defense    = "Alight"
+ ; Consensus historical article: "Airplanes Sink a Battleship?
+ ; No, Sir! Declares President" Chicago Daily Tribune, Feb. 26, 1938.
+ ; */ <-- avoid gettext warnings
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender",
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender",
+                 "Consensus", "IronBased"
+ roles         = "DefendOk", "DefendOkStartUnit"
+ helptext      = _("\
+@@ -2342,7 +2340,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Missile"
+ vision_layer  = "Subsurface"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender",
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender",
+                 "Only_Native_Attack", "Submarine", "Provoking", "IronBased"
+ roles         = "Hunter"
+ helptext      = _("\
+@@ -2382,7 +2380,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Missile"
+ vision_layer  = "Subsurface"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender",
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender",
+                 "Only_Native_Attack", "Submarine", "Provoking", "TacticalNuke",
+                 "IronBased"
+ roles         = "Hunter"
+@@ -2424,7 +2422,7 @@ cargo         = "Land", "Air", "Missile", "Helicopter"
+ tp_defense    = "Alight"
+ ; Consensus historical article: Julian Borger. "Wake-up call"
+ ; The Guardian, Sep. 6, 2002.
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "BadCityDefender",
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender",
+                 "HasNoZOC", "Consensus", "Provoking", "IronBased"
+ roles         = "DefendGood"
+ helptext      = _("\
+@@ -2469,7 +2467,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land", "Small Land", "Big Land", "Merchant"
+-flags         = "StacksInPort", "Shield2Gold", "ShieldToGold", "Settlers", "BadCityDefender",
++flags         = "Shield2Gold", "ShieldToGold", "Settlers", "BadCityDefender",
+                 "HasNoZOC", "Provoking", "IronBased", "NonMil"
+ veteran_names = _("green"), _("veteran"), _("hardened"), _("elite")
+ veteran_base_raise_chance      = 50, 33, 20, 0
+@@ -2518,7 +2516,7 @@ uk_food       = 0
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ targets       = "Air", "Missile", "Helicopter"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "OneAttack", "AirAttacker",
++flags         = "Shield2Gold", "ShieldToGold", "OneAttack", "AirAttacker",
+                 "CityBuster", "HasNoZOC", "IronBased"
+ roles         = ""
+ helptext      = _("\
+@@ -2558,7 +2556,7 @@ uk_shield     = 1
+ uk_food       = 0
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "FieldUnit", "OneAttack",
++flags         = "Shield2Gold", "ShieldToGold", "FieldUnit", "OneAttack",
+                 "Nuclear", "HasNoZOC", "IronBased"
+ ; No veteran levels (level name is never displayed)
+ veteran_names = _("green")
+@@ -2621,7 +2619,7 @@ uk_shield     = 1
+ uk_food       = 0
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "FieldUnit", "OneAttack",
++flags         = "Shield2Gold", "ShieldToGold", "FieldUnit", "OneAttack",
+                 "NuclearOP", "HasNoZOC", "IronBased"
+ ; No veteran levels (level name is never displayed)
+ veteran_names = _("green")
+@@ -3122,7 +3120,7 @@ uk_shield     = 1
+ uk_food       = 0
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "StacksAnywhere", "Shield2Gold", "ShieldToGold", "HasNoZOC", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "HasNoZOC", "IronBased"
+ roles         = ""
+ helptext      = _("\
+ The AWACS (Airborne Warning and Control System) is an airplane with an \
+@@ -3156,7 +3154,7 @@ uk_shield     = 0
+ uk_food       = 0
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "StacksInPort", "NoBuild", "Cant_Fortify", "Unbribable",
++flags         = "NoBuild", "Cant_Fortify", "Unbribable",
+                 "HasNoZOC", "NoVeteran", "RandomMovement"
+ roles         = ""
+ helptext      = _("\
+-- 
+2.56.0
+

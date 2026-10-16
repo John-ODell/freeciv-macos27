@@ -168,3 +168,38 @@ Lua error and cut that turn's sweep short. Fixed in patch 0004 (fork commit 7913
 - Multiplier UI in the Qt client (sliders exist in 3.2 per the
   `goldkeep` ruleset shipping them): unverified on our build.
 - Lua performance with per-turn handlers over all cities: unverified.
+
+## Freeciv45 slice 1 results (2026-10-16, patch 0006)
+
+Since patch 0005 the rules of slices 1 and 2 above live in `data/civ54`. civ45 is now Freeciv45, the stacking
+game on a square map (John's direction of 2026-10-16). Slice 1 removes the one-unit-per-tile rules and the culture
+steps on the city radius, and sets `topology ""`, `wrap "WRAPX"` and `killstack` disabled in `[settings]`, all
+unlocked (webperimental also ships killstack disabled and unlocked, `refs/freeciv-S3_2/data/webperimental/game.ruleset:724`).
+
+100-turn autogame, 10 AIs, seeds 42/42, data from the source tree (`FREECIV_DATA_PATH=port/freeciv/data
+scripts/test.sh ~/freeciv-builds/qt --ruleset civ45 --no-client`, `logs/test-qt-20261016-175736`), counted with
+`scripts/check-stacking.py --report` on the final save:
+
+| | civ45 slice 2 (now civ54) T101 | Freeciv45 slice 1 T101 |
+|---|---|---|
+| map | hex, wraps both ways | square seen from above, wraps east to west |
+| cities | 64 | 89 |
+| units | 259 | 277 |
+| stacked tiles outside cities | 0 | 10 |
+| stacked city tiles | 0 | 22 |
+| largest stack | 1 | 4 |
+| wall time | 28 s | 38 s |
+
+The save records `"topology",""`, `"wrap","WRAPX"` and `"killstack",FALSE`, each set by the ruleset, and the log
+has no Lua error (observed). The AI stacks only lightly: the field stacks are settlers, workers and triremes moving
+together, and the largest is four Settlers, so in this save the default AI builds no attack stacks (observed;
+later eras not checked). Why there are 25 more cities than on the hex map is not investigated.
+
+A first run without `FREECIV_DATA_PATH` used the installed civ45 instead (its save showed `ISO|HEX` and killstack
+TRUE): `test.sh` takes the ruleset from the install prefix unless that variable points at the source tree (observed).
+
+`scripts/civ45-rules-test.sh` passes 8/8 (`logs/civ45-rules-20261016-175652`). The control run with
+`--extra "set killstack enabled"` fails exactly the killstack case and the combat case, where the stack of three
+lost all three units (`logs/civ45-rules-20261016-175636`), so the combat case discriminates. Against Armor a
+Warriors defended, not the Phalanx: neither has a chance, and on equal odds `get_defender()` takes the cheaper unit
+(`refs/freeciv-S3_2/common/combat.c:877-879`).
