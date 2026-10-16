@@ -56,6 +56,17 @@ done
 cp -R "$PREFIX/share/freeciv" "$C/Resources/share/freeciv"
 [ -d "$PREFIX/share/locale" ] && cp -R "$PREFIX/share/locale" "$C/Resources/share/locale"
 cp "$SRC/data/freeciv-client.icns" "$C/Resources/freeciv-client.icns"
+# licence and source pointer (GPL: a binary distribution must say where the matching source is)
+cp "$SRC/COPYING" "$C/Resources/COPYING"
+{
+  echo "Freeciv $VER, macOS build of the $CLIENT client"
+  echo "Licence: GNU GPL v2 or later, see COPYING next to this file"
+  echo "Upstream source: https://github.com/freeciv/freeciv (branch S3_2)"
+  echo "Upstream commit: $(git -C "$SRC" rev-parse "HEAD~$(ls "$ROOT/patches" 2>/dev/null | wc -l | tr -d ' ')" 2>/dev/null || echo unknown)"
+  echo "Built from tree: $(git -C "$SRC" rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "Local patches applied on top of upstream:"; ls "$ROOT/patches" 2>/dev/null | sed 's/^/  /'
+  echo "Packaging scripts, patches and source tarball: https://github.com/John-ODell/freeciv-macos27/releases"
+} > "$C/Resources/SOURCE.txt"
 
 # launcher. APFS is case-insensitive by default, so the launcher must not collide with a binary name
 # (Freeciv-GTK4 vs freeciv-gtk4 would be the same file).
