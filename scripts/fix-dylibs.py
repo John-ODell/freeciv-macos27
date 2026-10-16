@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Make an .app bundle's Mach-O files self-contained.
 
 Walks every Mach-O under Contents/MacOS, Contents/Frameworks and Contents/PlugIns. Any dependency that lives
