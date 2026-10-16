@@ -150,6 +150,17 @@ crowded interior of one AI (the T201 stack is a Diplomat beside a Phalanx in its
 that searched only own land within 3 tiles found no room 545 times and left 5 city stacks at T201.
 No Lua errors in either log.
 
+The autogames never reach aircraft and have no human player, so `scripts/civ45-rules-test.sh` checks the
+rest directly (observed, `logs/civ45-rules-20261016-150*`): a 40-turn game with one human-controlled player,
+and at turn 12, at a coastal city, eleven cases through the real `Unit Move` enablers and the sweep. A land
+unit is kept out of an occupied city; a Fighter and a Destroyer may enter; a Destroyer is kept off an
+occupied ocean tile; the sweep keeps one land unit, the fighter, the ship and the better defender; a human
+player's stacked unit is relocated with its message. All 11 pass. A copy of civ45 without the two exemption
+enablers fails the four aircraft and ship cases, so the test discriminates. The human case found a bug no
+autogame could: the message called `link()`, which the 3.2 Lua API does not have (it is `link_text()`,
+`common/scriptcore/tolua_game.pkg:326-327,385-386`), so each relocation of a human player's unit raised a
+Lua error and cut that turn's sweep short. Fixed in patch 0004 (fork commit 7913d4b).
+
 ## Not checked
 
 - AI move rejections under 1UPT are not logged by the server, so the count asked for in issue 20 is

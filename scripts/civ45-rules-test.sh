@@ -1,7 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Run scripts/civ45-rules-test.lua in a civ45 game: load the test, start a 10-AI autogame on the civ45
-# ruleset, print the CIV45TEST lines. Exit 0 only if every case passed.
+# ruleset with one human-controlled player ("Tester", no client attached), print the CIV45TEST lines.
+# Exit 0 only if every case passed and the server log holds no Lua error.
 # Usage: scripts/civ45-rules-test.sh <prefix-or-bin-dir> [--data DIR] [--port P]
 #   --data  Freeciv data dir holding civ45 (default: port/freeciv/data, the source tree)
 set -uo pipefail
@@ -19,6 +20,8 @@ set endturn 40
 set timeout -1
 set gameseed 42
 set mapseed 42
+create Tester
+aitoggle Tester
 EOS
 rm -f "$OUT/fifo"; mkfifo "$OUT/fifo"
 FREECIV_DATA_PATH="$DATA" "$BIN/freeciv-server" -p "$PORT" --Announce none --read "$OUT/game.serv" \
@@ -38,7 +41,10 @@ done
 kill -0 $SPID 2>/dev/null && echo quit >&3; exec 3>&-
 wait $SPID 2>/dev/null; rm -f "$OUT/fifo"
 grep "CIV45TEST" "$OUT/server.log" | sed 's/^[0-9]*: //'
-grep -q "CIV45TEST DONE" "$OUT/server.log" || { echo "civ45-rules-test: no result (see $OUT/server.log)"; exit 1; }
-grep -q "CIV45TEST FAIL" "$OUT/server.log" && exit 1
-grep -q "CIV45TEST SKIP" "$OUT/server.log" && exit 1
-exit 0
+RC=0
+grep -q "CIV45TEST DONE" "$OUT/server.log" || { echo "civ45-rules-test: no result (see $OUT/server.log)"; RC=1; }
+grep -q "CIV45TEST FAIL\|CIV45TEST SKIP" "$OUT/server.log" && RC=1
+if grep -q "lua error" "$OUT/server.log"; then
+  echo "civ45-rules-test: Lua errors in $OUT/server.log:"; grep -A2 "lua error" "$OUT/server.log" | head -12; RC=1
+fi
+exit $RC

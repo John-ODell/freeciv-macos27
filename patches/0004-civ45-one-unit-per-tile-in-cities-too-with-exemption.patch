@@ -1,4 +1,4 @@
-From fdee37634d707a395c402bbd766b6c61b0339c51 Mon Sep 17 00:00:00 2001
+From 7913d4b6b4f3fa6d5839e6abf0a7338f5763b0c3 Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Fri, 16 Oct 2026 14:45:05 -0500
 Subject: [PATCH] civ45: one unit per tile in cities too, with exemptions for
@@ -181,7 +181,7 @@ index 751e8ec..cf584c9 100644
  needs Oil) and a few nation-unique units and buildings.\
  \n\n\
 diff --git a/data/civ45/script.lua b/data/civ45/script.lua
-index 55c602d..859bb77 100644
+index 55c602d..ad45450 100644
 --- a/data/civ45/script.lua
 +++ b/data/civ45/script.lua
 @@ -527,3 +527,215 @@ end
@@ -348,7 +348,7 @@ index 55c602d..859bb77 100644
 +  if unit.owner:is_human() then
 +    notify.event(unit.owner, dest, E.UNIT_RELOCATED,
 +                 _("One unit per tile: %s moved to %s."),
-+                 unit:link(), dest:link())
++                 unit:link_text(), dest:link_text())
 +  end
 +  return true
 +end

@@ -5,7 +5,9 @@
 -- at the first turn start from turn 12 on, and
 -- prints "CIV45TEST PASS|FAIL <case>" lines to the server log and a final "CIV45TEST DONE <n>/<total>".
 -- Uses a coastal city: moves through the real "Unit Move" enablers via Unit:perform_action, and calls
--- the global sweep callback from data/civ45/script.lua directly.
+-- the global sweep callback from data/civ45/script.lua directly. One case needs a human-controlled
+-- player (the runner creates "Tester" and toggles it to human in pregame): only human owners get the
+-- relocation message, and autogames have none.
 
 function civ45_rules_test_run()
   local passed, total = 0, 0
@@ -24,6 +26,26 @@ function civ45_rules_test_run()
     local n = 0
     for u in tile:units_iterate() do if pred(u) then n = n + 1 end end
     return n
+  end
+
+  -- Human owner: the sweep relocates the unit and sends a message, without a Lua error.
+  local human_unit = nil
+  for p in players_iterate() do
+    if p:is_human() then
+      for u in p:units_iterate() do
+        if u:transporter() == nil and u.tile:num_units() == 1 then human_unit = u; break end
+      end
+    end
+    if human_unit ~= nil then break end
+  end
+  if human_unit == nil then
+    log.normal("CIV45TEST SKIP no human-controlled player with a unit on its own tile")
+  else
+    local htile = human_unit.tile
+    edit.create_unit(human_unit.owner, htile, find.unit_type("Warriors"), 0, nil, -1)
+    local ok, err = pcall(civ45_turn_begin_callback, game.turn(), 0)
+    if not ok then log.normal("CIV45TEST error: %s", tostring(err)) end
+    check("sweep relocates a human player's unit and sends the message", ok and htile:num_units() == 1)
   end
 
   -- Find a city with one free land neighbour and an ocean neighbour that has a free ocean neighbour.
@@ -81,7 +103,9 @@ function civ45_rules_test_run()
 
     -- sweep: garrison + fighter + ship in the city must stay put; an extra land unit must leave
     local extra = make("Musketeers", city.tile)
-    civ45_turn_begin_callback(game.turn(), 0)
+    local ok, err = pcall(civ45_turn_begin_callback, game.turn(), 0)
+    if not ok then log.normal("CIV45TEST error: %s", tostring(err)) end
+    check("sweep runs without a Lua error", ok)
     local land_left = count_on(city.tile, function(u)
       return u:transporter() == nil and not u.utype:has_flag("StacksAnywhere") and not u.utype:has_flag("StacksInPort")
     end)

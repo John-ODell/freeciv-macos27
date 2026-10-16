@@ -8,7 +8,9 @@ With --ruleset (e.g. port/freeciv/data/civ45) the civ45 exemptions are applied: 
 StacksAnywhere are never counted and types flagged StacksInPort are not counted on city tiles.
 Prints, per save: players, cities, units, units not inside a transport, tiles holding more than one
 such unit, and the worst tiles. Transported units sit on their carrier's tile by design and are skipped.
-Units inside a city stack by necessity (they are built there), so only\nstacks outside cities fail the check. Exit 1 if any save has one.
+Stacks inside cities are reported separately and do not fail the check: most rulesets build units there by
+necessity (civ45 resolves them by script, so a civ45 save should show none). Exit 1 if any save has a stack
+outside a city.
 """
 import csv, gzip, io, os, sys
 from collections import Counter, defaultdict
