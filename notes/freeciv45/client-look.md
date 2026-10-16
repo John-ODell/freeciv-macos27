@@ -33,8 +33,8 @@ before its image format list (`client/svgflag.c:89`), harmless as far as can be 
 ## What it means for Freeciv45
 
 - The suggestion dialog is the only thing between a new player and the isometric look. A ruleset cannot force a
-  tileset, it can only suggest one (`[tileset] preferred`, `data/civ45/game.ruleset:71`; the client only offers or auto-accepts it,
-  `client/packhand.c:3463-3472`).
+  tileset, it can only suggest one (`[tileset] preferred`, `data/civ45/game.ruleset:71`); the client only offers
+  it or, with auto-accept on, loads it (`client/packhand.c:3463-3472`).
 - Trident is the stock overhead square tileset, so it is the stopgap until Freeciv45 has its own (look steps T0 to
   T2 in `notes/freeciv45-plan.md`). Whether Freeciv45 should be overhead at all is decision 3 in that plan; amplio2
   on a square map is what declining the suggestion gives today.
