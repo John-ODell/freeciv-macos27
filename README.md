@@ -46,7 +46,7 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 ```
 
 `build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
-`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003 to 0006: sandbox
+`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004 and 0006: sandbox
 plus stacks of units on a square map, see `port/freeciv/data/civ45/README.civ45` after applying the patches);
 `test.sh` reads the installed data, so put `FREECIV_DATA_PATH=port/freeciv/data` in front of it to test the source
 tree. `--ruleset civ54` does the same for civ54, the copy of civ45's earlier one-unit-per-tile hex rules kept for the
