@@ -13,7 +13,7 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 | `refs/` | Shallow clones of the upstream repos (`freeciv`, `freeciv-S3_2`, `freeciv-web`, `freeciv-environments`, `freeciv-website`). Read-only reference. | No |
 | `port/` | Working fork of Freeciv where fixes are made and built. Its own git repo. | No |
 | `patches/` | Patches exported from `port/` with `git format-patch`, one per concern, upstreamable. | Yes |
-| `scripts/` | `build.sh` (configure+build+install), `test.sh` (autogame + save/load probe), `bundle.sh` + `fix-dylibs.py` (self-contained .app), `dmg.sh` (DMG, optional Developer ID signing/notarization), and the probe helpers used for the evidence. | Yes |
+| `scripts/` | `build.sh` (configure+build+install), `test.sh` (autogame + save/load probe), `bundle.sh` + `fix-dylibs.py` (self-contained .app with a compiled `launcher.c` and the `collect-licenses.py` notices), `sign-app.sh` (ad-hoc or Developer ID, hardened runtime), `dmg.sh` (DMG, optional notarization), and the probe helpers used for the evidence. | Yes |
 | `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log, Civ4/5 planning menu (`civ45-planning.md`), and the proposal for the port, civ45 and civ54 as two or three games (`game-directions.md`). | Yes |
 | `downloads/` | Prebuilt macOS apps and tarballs used for diagnosis. | No |
 
@@ -56,7 +56,8 @@ passes and the server log holds no Lua error.
 Install prefixes and bundles live outside `~/Desktop`, `~/Documents` and `~/Downloads` on purpose: macOS privacy
 protection stalls Finder-launched apps whose libraries sit in those folders (notes/reproduction.md, Failure 2).
 Without an Apple Developer ID the app is ad-hoc signed; Gatekeeper rejects a downloaded copy until the user chooses
-Open Anyway (`dmg.sh --sign ... --notarize-profile ...` does the real thing when credentials exist).
+Open Anyway. With a Developer ID certificate, `bundle.sh --sign` and `dmg.sh --sign ... --notarize-profile ...`
+produce a notarized DMG; the one-time setup and the commands are in `notes/release.md`.
 The bundle's minimum system version is computed from its libraries; with today's Homebrew bottles that is
 macOS 27.0, because `arm64_golden_gate` bottles are built for 27. A build on macOS 26 would produce a 26.x bundle.
 
@@ -84,3 +85,7 @@ License, version 2 or (at your option) any later version: the same terms as Free
 `patches/` modify Freeciv's GPL-2.0-or-later code and keep the upstream licence headers intact.
 Until 2026-10-16 this section said scripts and notes were MIT; copies taken before then may still be used
 under MIT.
+
+The macOS app also contains libraries from Homebrew under their own licences (LGPL, GPL-3.0, MIT, BSD and
+others). Each build lists them, with licence texts and source locations, in
+`Freeciv.app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt`, written by `scripts/collect-licenses.py`.
