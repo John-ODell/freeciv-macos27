@@ -4,9 +4,14 @@
 
 1. `scripts/build.sh qt` on a clean `port/freeciv` at the commit to ship (upstream S3_2 plus `patches/`).
 2. `scripts/test.sh ~/freeciv-builds/qt` (100-turn autogame plus client save/load probe) must pass.
-3. `scripts/bundle.sh qt`, then `scripts/game-probe.sh` against the bundle's `Contents/MacOS/Freeciv`.
-   The bundle carries `Contents/Resources/COPYING` and `SOURCE.txt` (upstream commit, local patches).
-4. `scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app` writes the DMG and its sha256.
+3. `scripts/bundle.sh qt` (for a notarized release add `--sign "Developer ID Application: <Name> (<TEAMID>)"`),
+   then `scripts/game-probe.sh` against the bundle's `Contents/MacOS/Freeciv`. The bundle carries
+   `Contents/Resources/COPYING`, `SOURCE.txt` (upstream commit, local patches) and `licenses/`: each bundled
+   library's licence texts and source location, summed up in `licenses/THIRD-PARTY-NOTICES.txt`.
+   `bundle.sh` stops if `scripts/collect-licenses.py` cannot trace a bundled library to its Homebrew formula
+   or finds no licence text for it.
+4. `scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app` writes the DMG and its sha256 (for a notarized release add
+   `--sign "Developer ID Application: <Name> (<TEAMID>)" --notarize-profile freeciv-notary`, see below).
 5. Source tarball of the exact tree: `git -C port/freeciv archive --format=tar.gz --prefix=freeciv-<ver>-mac<N>/ -o freeciv-<ver>-mac<N>-src.tar.gz <commit>`.
    GPL v2 section 3 requires the matching source to be available with the binary; the tarball on the release
    page is that source, and `SOURCE.txt` in the bundle points to it.
@@ -17,6 +22,46 @@ Nothing is notarized unless `dmg.sh --sign <Developer ID> --notarize-profile <pr
 Apple Developer Program membership (99 USD/year, observed on developer.apple.com pricing as of 2026, unverified
 for the current year). Without it macOS 27 Gatekeeper refuses the first launch (observed, notes/step5-port.md)
 and the user must choose Open Anyway or clear the quarantine attribute. No App Store is involved either way.
+
+## Developer ID signing and notarization
+
+Apple's notary service requires, for every executable: a Developer ID certificate (not ad hoc, not Apple
+Development), hardened runtime, a secure timestamp, no `get-task-allow` entitlement, and the macOS 10.9 SDK or
+later (observed, "Prepare your software for notarization" on
+https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution, read
+2026-10-16). `scripts/sign-app.sh` does the first four for every Mach-O in the bundle, the compiled launcher
+(`scripts/launcher.c`) included. Nothing in the bundle needs an entitlement (derived: no JIT, no `DYLD_`
+variables, one signing identity for every library, so library validation passes).
+
+State on 2026-10-16: the login keychain holds one valid code-signing identity, an Apple Development
+certificate (observed, `security find-identity -v -p codesigning`). It cannot be used for notarization.
+
+One-time setup, done by John (Claude never handles the certificate's key or the passwords):
+
+1. Create a "Developer ID Application" certificate. Required role: Account Holder; a team can have up to five
+   (observed, https://developer.apple.com/help/account/create-certificates/create-developer-id-certificates/).
+   Web: Certificates, Identifiers & Profiles > Certificates > + > Developer ID > Developer ID Application,
+   upload a certificate signing request made in Keychain Access, download the `.cer`, double-click it.
+   Xcode can do the same from Settings > Accounts > Manage Certificates (unverified on Xcode for macOS 27).
+2. Check: `security find-identity -v -p codesigning` lists `Developer ID Application: <Name> (<TEAMID>)`.
+3. Make an app-specific password for the Apple ID at https://account.apple.com (Sign-In and Security).
+4. Store it for notarytool, which prompts for the password when `--password` is left out (observed,
+   `xcrun notarytool store-credentials --help`, notarytool 1.1.3):
+
+       xcrun notarytool store-credentials freeciv-notary --apple-id <apple-id> --team-id <TEAMID>
+
+Each notarized release, after steps 1 and 2 of the checklist above:
+
+    scripts/bundle.sh qt --sign "Developer ID Application: <Name> (<TEAMID>)"
+    scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app --sign "Developer ID Application: <Name> (<TEAMID>)" \
+        --notarize-profile freeciv-notary
+    xcrun stapler validate ~/freeciv-builds/apps/Freeciv-<ver>-arm64.dmg
+    spctl -a -t open --context context:primary-signature -vv ~/freeciv-builds/apps/Freeciv-<ver>-arm64.dmg
+
+`dmg.sh` uploads the DMG to Apple, waits for the verdict and staples the ticket. If Apple rejects it,
+`xcrun notarytool log <submission-id> --keychain-profile freeciv-notary` shows why. The expected `spctl`
+verdict is "accepted" with source "Notarized Developer ID" (inferred from Gatekeeper's usual output, to be
+confirmed on the first run). Do not put the Apple ID, team ID or password in this repository: it is public.
 
 ## v3.2.6-mac1 (2026-10-16)
 

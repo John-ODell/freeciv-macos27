@@ -7,8 +7,8 @@
 #                                 [--notarize-profile PROFILE] [--volname NAME]
 #
 #   default: ad-hoc signed app (as bundle.sh leaves it), unsigned DMG, sha256 sidecar written next to it.
-#   --sign              re-sign the whole bundle inside-out with the identity, hardened runtime, secure timestamp
-#                       (entitlements: none needed; Lua 5.4 has no JIT and every dylib is signed by the same identity)
+#   --sign              sign the DMG with the identity, and the app too (scripts/sign-app.sh: inside-out, hardened
+#                       runtime, secure timestamp) unless bundle.sh --sign already signed it with that identity
 #   --notarize-profile  `xcrun notarytool submit --wait` with a keychain profile made by
 #                       `xcrun notarytool store-credentials PROFILE`, then `xcrun stapler staple` on the DMG.
 #                       Needs a paid Apple Developer account; nothing here is done automatically without it.
@@ -29,16 +29,18 @@ DMG="$OUT/$NAME-$VER-$ARCH.dmg"
 mkdir -p "$OUT"
 
 if [ -n "$SIGN" ]; then
-  echo "== signing with: $SIGN"
-  C="$APP/Contents"
-  find "$C/Frameworks" "$C/PlugIns" -type f 2>/dev/null | while read -r f; do
-    file -b "$f" | grep -q Mach-O && codesign --force --sign "$SIGN" --options runtime --timestamp "$f"; done
-  find "$C/Frameworks" -maxdepth 1 -name "*.framework" -exec codesign --force --sign "$SIGN" --options runtime --timestamp {} \;
-  for f in "$C"/MacOS/freeciv-*; do codesign --force --sign "$SIGN" --options runtime --timestamp "$f"; done
-  codesign --force --sign "$SIGN" --options runtime --timestamp "$APP"
+  # Re-sign the app unless bundle.sh --sign already signed it with this identity and hardened runtime.
+  INFO="$(codesign -dv --verbose=2 "$APP" 2>&1 || true)"
+  if grep -q "^Signature=adhoc" <<<"$INFO" || ! grep -q "flags=.*runtime" <<<"$INFO" \
+     || { ! [[ "$SIGN" =~ ^[0-9A-Fa-f]{40}$ ]] && ! grep -qF "Authority=$SIGN" <<<"$INFO"; }; then
+    echo "== signing the app with: $SIGN"
+    "$(dirname "$0")/sign-app.sh" "$APP" "$SIGN"
+  else
+    echo "== app already signed with: $SIGN (hardened runtime)"
+  fi
 fi
 codesign --verify --strict --deep "$APP"
-echo "app signature: $(codesign -dv "$APP" 2>&1 | grep -E '^Signature|^Authority' | head -1)"
+echo "app signature: $(codesign -dv --verbose=2 "$APP" 2>&1 | grep -E '^Signature=adhoc|^Authority=' | head -1)"
 spctl -a -t exec -vv "$APP" 2>&1 | head -2 || true   # 'rejected' is expected for ad-hoc; informational
 
 # staging folder: the app + an /Applications symlink
@@ -52,6 +54,7 @@ Drag $NAME.app to the Applications folder.
 
 Freeciv is free software under the GNU GPL v2 or later: https://www.freeciv.org
 Licence text: $NAME.app/Contents/Resources/COPYING. Exact source commit and patches: Contents/Resources/SOURCE.txt.
+Bundled third-party libraries, their licences and sources: Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt.
 Source tarball, packaging scripts and patches: https://github.com/John-ODell/freeciv-macos27/releases
 $( [ -z "$SIGN" ] && echo "
 This copy is not notarized. If macOS says the app is damaged or from an unidentified developer:
