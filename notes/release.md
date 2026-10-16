@@ -29,14 +29,16 @@ Apple's notary service requires, for every executable: a Developer ID certificat
 Development), hardened runtime, a secure timestamp, no `get-task-allow` entitlement, and the macOS 10.9 SDK or
 later (observed, "Prepare your software for notarization" on
 https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution, read
-2026-10-16). `scripts/sign-app.sh` does the first four for every Mach-O in the bundle, the compiled launcher
-(`scripts/launcher.c`) included. Nothing in the bundle needs an entitlement (derived: no JIT, no `DYLD_`
-variables, one signing identity for every library, so library validation passes).
+2026-10-16). Given a Developer ID identity, `scripts/sign-app.sh` meets the first four for every Mach-O in
+the bundle, the compiled launcher (`scripts/launcher.c`) included; the binaries are built with the current
+macOS SDK, which covers the fifth (derived). Nothing in the bundle needs an entitlement (derived: no JIT, no
+`DYLD_` variables, one signing identity for every library, so library validation passes; a copy signed with
+hardened runtime by the Apple Development identity passed `scripts/game-probe.sh`, observed 2026-10-16).
 
 State on 2026-10-16: the login keychain holds one valid code-signing identity, an Apple Development
 certificate (observed, `security find-identity -v -p codesigning`). It cannot be used for notarization.
 
-One-time setup, done by John (Claude never handles the certificate's key or the passwords):
+One-time setup, done by the account holder by hand (no script here touches the private key or the passwords):
 
 1. Create a "Developer ID Application" certificate. Required role: Account Holder; a team can have up to five
    (observed, https://developer.apple.com/help/account/create-certificates/create-developer-id-certificates/).
