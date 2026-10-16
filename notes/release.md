@@ -35,17 +35,43 @@ macOS SDK, which covers the fifth (derived). Nothing in the bundle needs an enti
 `DYLD_` variables, one signing identity for every library, so library validation passes; a copy signed with
 hardened runtime by the Apple Development identity passed `scripts/game-probe.sh`, observed 2026-10-16).
 
-State on 2026-10-16: the login keychain holds one valid code-signing identity, an Apple Development
-certificate (observed, `security find-identity -v -p codesigning`). It cannot be used for notarization.
+State on 2026-10-16: the login keychain holds a Developer ID Application identity, issued that day by
+Developer ID Certification Authority (G2) and valid until 2027-11-15, next to the Apple Development one
+(observed, `security find-identity -v -p codesigning` and `openssl x509 -dates`). A throwaway binary signed
+with it, hardened runtime and secure timestamp, passes `codesign --verify --strict` and carries the chain
+Developer ID Application > Developer ID Certification Authority > Apple Root CA (observed). No notarytool
+profile is stored yet, so nothing has been notarized.
 
 One-time setup, done by the account holder by hand (no script here touches the private key or the passwords):
 
 1. Create a "Developer ID Application" certificate. Required role: Account Holder; a team can have up to five
    (observed, https://developer.apple.com/help/account/create-certificates/create-developer-id-certificates/).
-   Web: Certificates, Identifiers & Profiles > Certificates > + > Developer ID > Developer ID Application,
-   upload a certificate signing request made in Keychain Access, download the `.cer`, double-click it.
    Xcode can do the same from Settings > Accounts > Manage Certificates (unverified on Xcode for macOS 27).
-2. Check: `security find-identity -v -p codesigning` lists `Developer ID Application: <Name> (<TEAMID>)`.
+   By hand on macOS 27 (observed 2026-10-16 unless marked otherwise):
+   - Make the signing request in Keychain Access. `open -a "Keychain Access"` opens the Passwords app
+     instead; open the real one (Keychain Access 11.0) by its path:
+
+         open "/System/Library/CoreServices/Applications/Keychain Access.app"
+
+     Click an empty spot in the item list, then choose Keychain Access > Certificate Assistant > Request a
+     Certificate From a Certificate Authority…. With an item selected the menu item ends in "With “<item>”…"
+     (its `Localizable.loctable`) and, inferred, uses that item's key instead of a new one. Enter the Apple ID
+     email and a name, leave CA Email Address empty, choose Saved to disk. Do not open the saved
+     `.certSigningRequest`: double-clicking it starts Certificate Assistant's flow for issuing a certificate
+     as your own CA.
+   - Web: Certificates, Identifiers & Profiles > Certificates > + > Developer ID Application, G2 Sub-CA,
+     Choose File with the request, Continue, Download. Developer ID Installer sits next to it and only signs
+     `.pkg` installers; the download's name tells them apart: `developerID_application.cer` is the right one,
+     `developerID_installer.cer` is not.
+   - One request per certificate: the portal refuses a request that "has already been used to generate
+     another certificate" and asks for a new one.
+   - Double-click the `.cer` and choose the login keychain, not iCloud or System.
+2. Check: `security find-identity -v -p codesigning` lists `Developer ID Application: <Name> (<TEAMID>)` with
+   its 40-hex SHA-1 hash; `--sign` takes either, and the hash avoids retyping a name with punctuation in it.
+   The first signatures with a key made this way most likely ask for the login keychain password: choose
+   Always Allow, because `sign-app.sh` signs every Mach-O in the bundle separately. Observed: the first three
+   test signatures with the new key took 10 to 12 s each, the next ones 0.03 s (the Apple Development key:
+   0.04 s); that the password prompt was the delay is inferred.
 3. Make an app-specific password for the Apple ID: account.apple.com > Sign-In and Security > App-Specific
    Passwords (observed, https://support.apple.com/en-us/102654, read 2026-10-16).
 4. Store it for notarytool, which prompts for the password when `--password` is left out (observed,
