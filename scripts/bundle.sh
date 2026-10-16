@@ -125,6 +125,10 @@ if [ "$CLIENT" = qt ]; then
   cp "$QP/platforms/libqcocoa.dylib" "$C/PlugIns/platforms/"
   cp "$QP/styles/libqmacstyle.dylib" "$C/PlugIns/styles/"
   for f in libqgif libqico libqjpeg; do cp "$QP/imageformats/$f.dylib" "$C/PlugIns/imageformats/"; done
+  # SVG flags need Qt's SVG image plugin (client/svgflag.c turns them off without it), which is in qtsvg, not qtbase
+  QSVG="$(brew --prefix qtsvg)/share/qt/plugins/imageformats/libqsvg.dylib"
+  [ -f "$QSVG" ] || { echo "no $QSVG: install Homebrew's qtsvg, or the bundled client draws PNG flags"; exit 1; }
+  cp "$QSVG" "$C/PlugIns/imageformats/"
 fi
 
 # GTK runtime data: compiled GSettings schemas (file chooser aborts without them), fontconfig configuration
