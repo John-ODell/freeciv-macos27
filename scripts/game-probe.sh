@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Drive a client through a real game without GUI clicks: local server + autoconnect client,
 # server-side start / save / load / quit sent over a FIFO. Captures per-window screenshots.
 # Usage: game-probe.sh <client-binary> <outdir> <port>

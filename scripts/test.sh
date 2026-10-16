@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Smoke-test a Freeciv install: server autogame, then (for each client binary present) the FIFO-driven
 # save/load/restart probe from scripts/game-probe.sh with per-window screenshots and crash-report diff.
 #

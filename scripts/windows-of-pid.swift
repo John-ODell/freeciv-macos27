@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // List on-screen windows (id, bounds, title) of a process. Usage: windows-of-pid <pid>
 import Foundation
 import CoreGraphics
