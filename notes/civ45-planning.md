@@ -39,7 +39,7 @@ the lowest layer a Civ4/5 feature needs:
 | Trade goods / trade routes with resource types | `[goods_*]` sections, `Establish Trade Route` and `Enter Marketplace` actions, `Max_Trade_Routes`, `Traderoute_Pct` | `data/sandbox/game.ruleset:664-698`, `doc/README.effects:488,712` | observed |
 | Unit promotions (linear) | `[veteran_system]`: named levels, raise chances, power and move bonuses | `data/civ2civ3/units.ruleset:70-75` | observed |
 | Ranged / bombard attacks | `Bombard` action, `bombard_rate`, `bombard_max_range` (shipped value 1), `Combat_Rounds` effect | `data/sandbox/actions.ruleset:164,1202-1232`, `data/sandbox/units.ruleset:448,1752`, `doc/README.effects:324` | observed |
-| One unit per tile (Civ5 1UPT) | `Unit Move` is an enabler-controlled action; add a target req `MaxUnitsOnTile 0 Tile` (sandbox already uses it on Conquer City). Server-side rule only; the AI does not plan around it | `data/sandbox/actions.ruleset:2818-2823,1675`, `doc/README.effects:106,903-910` | derived; AI impact inferred |
+| One unit per tile (Civ5 1UPT) | `Unit Move` is an enabler-controlled action; a target req `MaxUnitsOnTile 0 Tile` blocks moves into occupied tiles (done in civ45, see "Slice 1 results"). Units built in a city still stack there | `data/sandbox/actions.ruleset:2818-2823,1675`, `doc/README.effects:106,903-910`, `patches/0003-*.patch` | observed (100-turn autogame) |
 | Empire size unhappiness / expansion cost | `Empire_Size_Base`, `Empire_Size_Step`, `Unit_Slots`, `Upkeep_*` | `doc/README.effects:339-345,760` | observed |
 | Health (Civ4) | `Health_Pct` effect plus `[civstyle] illness_*` settings | `doc/README.effects:403`, `data/civ2civ3/game.ruleset:209-215` | observed |
 | Achievements (Civ5 style) | `[achievement_*]` sections (8 in civ2civ3/sandbox) with culture rewards | `data/civ2civ3/game.ruleset:507-580` | observed |
@@ -89,11 +89,36 @@ the lowest layer a Civ4/5 feature needs:
    as the candidate, because both are self-contained server mechanics with a
    small client surface compared with 1UPT-aware AI.
 
+## Slice 1 results (2026-10-16, `data/civ45`, patch 0003)
+
+civ45 is sandbox plus: hex topology, 1UPT on regular moves, culture-driven `City_Radius_Sq`
+(+4 at 300 culture, +4 at 1500), `victories` with CULTURE, `bombard_max_range = 2`, Legion needs Iron
+and Armor needs Oil at City range, Aztec Jaguar Warrior, Persian Immortal, Arab Bazaar.
+
+100-turn autogame, 10 AIs, seeds 42/42, release Qt build, data read from the source tree
+(`scripts/test.sh --ruleset civ45 --no-client`, log `logs/test-qt-20261016-130853`), compared with the
+default-ruleset run from the morning (`logs/test-qt-20261016-074609`). Counted with `scripts/check-stacking.py`
+on the turn-101 saves; transported units are skipped.
+
+| | default ruleset | civ45 |
+|---|---|---|
+| cities at T101 | 64 | 61 |
+| units | 224 | 263 |
+| tiles with >1 unit outside cities | 11 | **0** |
+| tiles with >1 unit in cities | 18 | 19 |
+| wall time | about 30 s | 30 s |
+
+Observed: the move rule holds for every unit on the map, including boats, and the AI still founds cities at the
+same rate and ends the game with more units. Units stack inside cities because production places them there and
+nothing moves them out; Civ5 handles that with a city garrison slot, which Freeciv lacks (Tier C if wanted).
+Not observed: how often the AI's chosen moves were rejected (the server does not log it), AI behaviour in wars
+past turn 100, and whether the extra units are defenders the AI cannot route. One foreign Settlers sat inside
+another player's city at T101; cause not investigated.
+
 ## Not checked
 
-- Whether `MaxUnitsOnTile` on `Unit Move` also blocks the AI from moving
-  (expected yes, since enablers are evaluated server-side) and how badly
-  the AI then stalls: unverified.
+- AI move rejections under 1UPT are not logged by the server, so the count asked for in issue 20 is
+  not available without a server patch; the autogame outcome above is the evidence.
 - Multiplier UI in the Qt client (sliders exist in 3.2 per the
   `goldkeep` ruleset shipping them): unverified on our build.
 - Lua performance with per-turn handlers over all cities: unverified.
