@@ -17,7 +17,7 @@ BIN="$P"; [ -d "$P/bin" ] && BIN="$P/bin"
 TURNS=100; CLIENTS=1; PORT=5590; RULESET=""; DATA=""
 while [ $# -gt 0 ]; do case "$1" in --turns) TURNS="$2"; shift;; --no-client) CLIENTS=0;; --port) PORT="$2"; shift;; --ruleset) RULESET="$2"; shift;; --data) DATA="$2"; shift;; *) echo "unknown $1"; exit 1;; esac; shift; done
 NAME="$(basename "$(cd "$BIN/.." && pwd)")"
-OUT="$ROOT/logs/test-$NAME-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$OUT"
+OUT="$ROOT/logs/test-$NAME-$(date +%Y%m%d-%H%M%S)"; [ -e "$OUT" ] && OUT="$OUT-$$"; mkdir -p "$OUT"   # two runs in one second
 FAIL=0
 echo "== test $NAME -> $OUT"
 
