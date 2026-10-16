@@ -60,6 +60,9 @@ is the control run, which must fail. `scripts/civ54-rules-test.sh ~/freeciv-buil
 directly: it loads `scripts/civ54-rules-test.lua` into a civ54 game with one human-controlled player, moves a land
 unit, a fighter and destroyers at a coastal city at turn 12, runs the turn-start sweep, and exits 0 only if every case
 passes and the server log holds no Lua error.
+`scripts/ruleset-look.sh CLIENT OUTDIR` plays a ruleset (civ45 unless `--ruleset`, read from the source tree) in a
+real client and captures every client window at pregame and at turn 1; the client runs on an options file of its own
+in OUTDIR (notes/freeciv45/client-look.md).
 Install prefixes and bundles live outside `~/Desktop`, `~/Documents` and `~/Downloads` on purpose: macOS privacy
 protection stalls Finder-launched apps whose libraries sit in those folders (notes/reproduction.md, Failure 2).
 Without an Apple Developer ID the app is ad-hoc signed; Gatekeeper rejects a downloaded copy until the user chooses
