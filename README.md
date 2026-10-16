@@ -49,7 +49,9 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 `test.sh ... --ruleset civ45` runs the autogame on the civ45 ruleset (patch 0003: sandbox plus Civ4/5-style rules,
 see `port/freeciv/data/civ45/README.civ45` after applying the patches), and `scripts/check-stacking.py SAVE.gz`
 counts units per tile in the saves it leaves behind (add `--ruleset port/freeciv/data/civ45` to apply civ45's
-exemptions for aircraft and ships in port).
+exemptions for aircraft and ships in port). `scripts/civ45-rules-test.sh ~/freeciv-builds/qt` checks those rules
+directly: it loads `scripts/civ45-rules-test.lua` into a civ45 game, moves a land unit, a fighter and destroyers at a
+coastal city at turn 12, runs the turn-start sweep, and exits 0 only if all nine cases pass.
 Install prefixes and bundles live outside `~/Desktop`, `~/Documents` and `~/Downloads` on purpose: macOS privacy
 protection stalls Finder-launched apps whose libraries sit in those folders (notes/reproduction.md, Failure 2).
 Without an Apple Developer ID the app is ad-hoc signed; Gatekeeper rejects a downloaded copy until the user chooses
