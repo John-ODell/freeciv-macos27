@@ -46,11 +46,13 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 ```
 
 `build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
-`test.sh ... --ruleset civ45` runs the autogame on the civ45 ruleset (patch 0003: sandbox plus Civ4/5-style rules,
-see `port/freeciv/data/civ45/README.civ45` after applying the patches), and `scripts/check-stacking.py SAVE.gz`
-counts units per tile in the saves it leaves behind (add `--ruleset port/freeciv/data/civ45` to apply civ45's
-exemptions for aircraft and ships in port). `scripts/civ45-rules-test.sh ~/freeciv-builds/qt` checks those rules
-directly: it loads `scripts/civ45-rules-test.lua` into a civ45 game with one human-controlled player, moves a land
+`test.sh ... --ruleset civ45` runs the autogame on the civ45 ruleset (patches 0003 and 0004: sandbox plus Civ4/5-style
+rules, see `port/freeciv/data/civ45/README.civ45` after applying the patches). `--ruleset civ54` does the same for
+civ54, the copy of civ45's one-unit-per-tile hex rules kept for the later Civ5-style game (patch 0005,
+`data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz` counts units per tile in the saves an autogame leaves
+behind (add `--ruleset port/freeciv/data/civ54` to apply civ54's exemptions for aircraft and ships in port).
+`scripts/civ54-rules-test.sh ~/freeciv-builds/qt` checks those rules
+directly: it loads `scripts/civ54-rules-test.lua` into a civ54 game with one human-controlled player, moves a land
 unit, a fighter and destroyers at a coastal city at turn 12, runs the turn-start sweep, and exits 0 only if every case
 passes and the server log holds no Lua error.
 Install prefixes and bundles live outside `~/Desktop`, `~/Documents` and `~/Downloads` on purpose: macOS privacy
