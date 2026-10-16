@@ -39,6 +39,7 @@ the lowest layer a Civ4/5 feature needs:
 | Trade goods / trade routes with resource types | `[goods_*]` sections, `Establish Trade Route` and `Enter Marketplace` actions, `Max_Trade_Routes`, `Traderoute_Pct` | `data/sandbox/game.ruleset:664-698`, `doc/README.effects:488,712` | observed |
 | Unit promotions (linear) | `[veteran_system]`: named levels, raise chances, power and move bonuses | `data/civ2civ3/units.ruleset:70-75` | observed |
 | Ranged / bombard attacks | `Bombard` action, `bombard_rate`, `bombard_max_range` (shipped value 1), `Combat_Rounds` effect | `data/sandbox/actions.ruleset:164,1202-1232`, `data/sandbox/units.ruleset:448,1752`, `doc/README.effects:324` | observed |
+| Civ5 ranged units (attack at range 2 and can kill) | `Bombard Lethal` action: "can kill target units", own `bombard_lethal_max_range`; shipped rulesets leave it at range 1 and unused | `doc/README.actions:811-820`, `data/sandbox/actions.ruleset:185` | observed; AI use unknown |
 | One unit per tile (Civ5 1UPT) | `Unit Move` is an enabler-controlled action; a target req `MaxUnitsOnTile 0 Tile` blocks moves into occupied tiles (done in civ45, see "Slice 1 results"). Units built in a city still stack there | `data/sandbox/actions.ruleset:2818-2823,1675`, `doc/README.effects:106,903-910`, `patches/0003-*.patch` | observed (100-turn autogame) |
 | Empire size unhappiness / expansion cost | `Empire_Size_Base`, `Empire_Size_Step`, `Unit_Slots`, `Upkeep_*` | `doc/README.effects:339-345,760` | observed |
 | Health (Civ4) | `Health_Pct` effect plus `[civstyle] illness_*` settings | `doc/README.effects:403`, `data/civ2civ3/game.ruleset:209-215` | observed |
@@ -68,7 +69,7 @@ the lowest layer a Civ4/5 feature needs:
 | Great People as a real system (points per city, named greats, specialist-driven) | Needs per-city accumulators per GP type and a player-wide pool; counters are per-city scalar only | `data/sandbox/game.ruleset:823-850` | derived |
 | Civ5 global happiness and single-pool luxury | Freeciv happiness is per city (`Make_Content`, `Martial_Law_*`, `Unhappy_Factor`); a nation-wide pool changes `server/cityturn.c` and every city dialog | `doc/README.effects:453-466,724` | observed |
 | Promotion trees (branching perks per unit) | `[veteran_system]` is one linear ladder per unit type | `data/civ2civ3/units.ruleset:70-75` | observed |
-| True ranged combat at distance > 1 with AI support | `bombard_max_range` exists, so range is data, but the AI only knows bombard as an adjacent attack; Civ5-style siege needs `ai/default/daimilitary.c` changes | `data/sandbox/actions.ruleset:164` | derived; AI inferred |
+| Ranged combat the AI plays well, city ranged strike | Range and lethal bombard are data (Tier A row above); the AI using them and cities shooting back are not | `data/sandbox/actions.ruleset:164,185` | derived; AI inferred |
 | 1UPT the AI can actually play | Rule is Tier A, but the default AI's path and stack logic assumes stacking; without AI work 1UPT games are human-only | `ai/default/` | inferred |
 | City-state diplomacy, influence, quests | No minor-civ player kind, no influence score, no diplomacy UI for it | `common/player.h`, client diplomacy dialogs | derived |
 | Civ5 one-building-per-tile wonders / tile improvements with yield adjacency | Extras have adjacency reqs, so partial in Tier A; wonders occupying map tiles need engine | `doc/README.effects:70-72` | derived |
@@ -114,6 +115,51 @@ nothing moves them out; Civ5 handles that with a city garrison slot, which Freec
 Not observed: how often the AI's chosen moves were rejected (the server does not log it), AI behaviour in wars
 past turn 100, and whether the extra units are defenders the AI cannot route. One foreign Settlers sat inside
 another player's city at T101; cause not investigated.
+
+## Slice 2 results (2026-10-16, patch 0004): one unit per tile in cities too
+
+Slice 1 left units stacking inside cities, because production places units there (issue 25). Slice 2:
+
+- `script.lua` resolves a unit built in an occupied city at once: the better defender stays (city owner's
+  unit, then military, then `DefendGood`/`DefendOk` role, then build cost, then veterancy, then age), the
+  other unit moves to the nearest free tile. A sweep at every turn start does the same for anything else
+  (start units, huts, barbarians, captures, airlifts, paradrops, units unloaded in port).
+- Search order for a free tile: own or unowned land within 3 tiles, then within 7, then foreign land
+  within 3 that the server's teleport check accepts (it refuses peace-treaty territory and non-allied
+  cities, `common/movement.c:818-881`).
+- New unit flags: `StacksAnywhere` on aircraft, helicopters and missiles (never counted, may move onto
+  occupied tiles); `StacksInPort` on ships (not counted on city tiles, may enter occupied cities).
+  Landing from a transport now needs an empty tile like any other move.
+- Known limit: the move rule's `MaxUnitsOnTile` counts every unit, so a parked ship or aircraft keeps a
+  land unit out of its city. Units built there still appear inside. A class-aware tile limit is engine work.
+
+Autogames, 10 AIs, seeds 42/42, data from the source tree, counted with
+`scripts/check-stacking.py --ruleset port/freeciv/data/civ45` (exemptions applied) on the final save:
+
+| | default ruleset T101 | civ45 slice 1 T101 | civ45 slice 2 T101 | civ45 slice 2 T201 |
+|---|---|---|---|---|
+| cities | 64 | 61 | 64 | 99 |
+| units | 224 | 263 | 259 | 412 |
+| stacked tiles outside cities | 11 | 0 | 0 | 0 |
+| stacked city tiles | 18 | 16 | 0 | 1 |
+
+Logs: `logs/test-qt-20261016-143625` (100 turns, 28 s) and `logs/test-qt-20261016-144233` (200 turns, 98 s).
+Over the 200 turns the production handler relocated 216 units and found no room once; the turn sweep
+relocated 20 start units on turn 1 and later found no room 11 times, all from turn 190, all in the
+crowded interior of one AI (the T201 stack is a Diplomat beside a Phalanx in its city). A first version
+that searched only own land within 3 tiles found no room 545 times and left 5 city stacks at T201.
+No Lua errors in either log.
+
+The autogames never reach aircraft and have no human player, so `scripts/civ45-rules-test.sh` checks the
+rest directly (observed, `logs/civ45-rules-20261016-150*`): a 40-turn game with one human-controlled player,
+and at turn 12, at a coastal city, eleven cases through the real `Unit Move` enablers and the sweep. A land
+unit is kept out of an occupied city; a Fighter and a Destroyer may enter; a Destroyer is kept off an
+occupied ocean tile; the sweep keeps one land unit, the fighter, the ship and the better defender; a human
+player's stacked unit is relocated with its message. All 11 pass. A copy of civ45 without the two exemption
+enablers fails the four aircraft and ship cases, so the test discriminates. The human case found a bug no
+autogame could: the message called `link()`, which the 3.2 Lua API does not have (it is `link_text()`,
+`common/scriptcore/tolua_game.pkg:326-327,385-386`), so each relocation of a human player's unit raised a
+Lua error and cut that turn's sweep short. Fixed in patch 0004 (fork commit 7913d4b).
 
 ## Not checked
 
