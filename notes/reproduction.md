@@ -44,7 +44,7 @@ meson setup build-sdl2 -Dclients=sdl2        -Dfcmp=cli                  -Daudio
 
 Observed in `sample` stack traces: Qt runs `QCocoaEventDispatcher -> [NSApplication run]`; GTK3 `gtk_main -> g_main_loop_run -> poll_func (gdk quartz) -> nextEventMatchingMask`; GTK4 `g_application_run -> poll_func (libgtk-4) -> nextEventMatchingMask`; SDL2 `gui_event_loop -> SDL_SYS_DelayNS (libSDL3.0.dylib)` i.e. the "SDL2" client really runs on SDL3 through sdl2-compat.
 
-Note on the first game-probe attempt: `set timeout -1` turned on the server's autogame test mode (debug builds only, per `help timeout`) and the game raced to turn 580 with the human idle. Not a port bug; the probe was rerun with `timeout 0`.
+Note on the first game-probe attempt: `set timeout -1` turned on the server's autogame test mode (meant "for debugging" per `help timeout`; allowed in any build from the console, `server/settings.c:1161`) and the game raced to turn 580 with the human idle. Not a port bug; the probe was rerun with `timeout 0`.
 
 ### Failure 1 (build): missing SDL include path for gtk3.22 / gtk4 / qt clients
 - Error: `fatal error: 'SDL2/SDL.h' file not found` at `client/gui-qt/gui_main.cpp:26` and `client/gui-gtk-3.22/gui_main.c:26` (observed, logs/ninja-qt.log, logs/ninja-gtk.log).

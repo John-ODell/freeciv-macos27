@@ -3,10 +3,12 @@
 # no dylib bundling, data path is the compiled-in install prefix). Usage: mk-min-app.sh <binary> <AppName> <bundle-id>
 set -eu
 BIN="$1"; NAME="$2"; BID="$3"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SRC="${FREECIV_SRC:-$ROOT/port/freeciv}"
 APP=${APPDIR:-$HOME/freeciv-builds/apps}/$NAME.app
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/$(basename "$BIN")"
-cp ~/Desktop/freeciv-port/port/freeciv/data/freeciv-client.icns "$APP/Contents/Resources/"
+if [ -f "$SRC/data/freeciv-client.icns" ]; then cp "$SRC/data/freeciv-client.icns" "$APP/Contents/Resources/"; else echo "warning: no icon at $SRC/data/freeciv-client.icns (set FREECIV_SRC); bundle gets the generic icon"; fi
 cat > "$APP/Contents/Info.plist" <<EOP
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

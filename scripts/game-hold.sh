@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERVER="$(dirname "$CLIENT")/freeciv-server"
 mkdir -p "$OUT"; rm -f "$OUT/fifo"; mkfifo "$OUT/fifo"
 printf 'set aifill 4\nset timeout 0\nset minp 1\nset gameseed 7\nset mapseed 7\n' > "$OUT/game.serv"
-"$SERVER" -p "$PORT" --Announce none -F --read "$OUT/game.serv" --saves "$OUT" < "$OUT/fifo" > "$OUT/server.log" 2>&1 &
+"$SERVER" -p "$PORT" --Announce none --read "$OUT/game.serv" --saves "$OUT" < "$OUT/fifo" > "$OUT/server.log" 2>&1 &
 echo $! > "$OUT/server.pid"
 ( exec sleep 7200 ) > "$OUT/fifo" &
 echo $! > "$OUT/holder.pid"

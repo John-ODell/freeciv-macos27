@@ -17,7 +17,7 @@ set mapseed 7
 EOS
 BEFORE=$(ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | sort)
 mkfifo "$OUT/fifo"
-"$SERVER" -p "$PORT" --Announce none -F --read "$OUT/game.serv" --saves "$OUT" < "$OUT/fifo" > "$OUT/server.log" 2>&1 &
+"$SERVER" -p "$PORT" --Announce none --read "$OUT/game.serv" --saves "$OUT" < "$OUT/fifo" > "$OUT/server.log" 2>&1 &
 SPID=$!
 exec 3>"$OUT/fifo"
 cmd() { echo ">>> $1" | tee -a "$OUT/run.txt"; echo "$1" >&3; }

@@ -13,9 +13,26 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 | `refs/` | Shallow clones of the upstream repos (`freeciv`, `freeciv-S3_2`, `freeciv-web`, `freeciv-environments`, `freeciv-website`). Read-only reference. | No |
 | `port/` | Working fork of Freeciv where fixes are made and built. Its own git repo. | No |
 | `patches/` | Patches exported from `port/` with `git format-patch`, one per concern, upstreamable. | Yes |
-| `scripts/` | Probe scripts used for the evidence (launch, game save/load, minimal .app). One-command build, bundle and sign scripts arrive with Step 5. | Yes |
+| `scripts/` | `build.sh` (configure+build+install), `test.sh` (autogame + save/load probe), `bundle.sh` + `fix-dylibs.py` (self-contained .app), `dmg.sh` (DMG, optional Developer ID signing/notarization), and the probe helpers used for the evidence. | Yes |
 | `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log. | Yes |
 | `downloads/` | Prebuilt macOS apps and tarballs used for diagnosis. | No |
+
+## Quick start (macOS 27, Apple Silicon, Homebrew)
+
+```bash
+git clone --depth 50 --branch S3_2 https://github.com/freeciv/freeciv.git port/freeciv
+git -C port/freeciv am ../../patches/*.patch
+scripts/build.sh qt                       # installs to ~/freeciv-builds/qt (Homebrew deps installed if missing)
+scripts/test.sh ~/freeciv-builds/qt       # 100-turn autogame + client save/load probe
+scripts/bundle.sh qt                      # ~/freeciv-builds/apps/Freeciv.app, self-contained, ad-hoc signed
+scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg + sha256
+```
+
+`build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
+Install prefixes and bundles live outside `~/Desktop`, `~/Documents` and `~/Downloads` on purpose: macOS privacy
+protection stalls Finder-launched apps whose libraries sit in those folders (notes/reproduction.md, Failure 2).
+Without an Apple Developer ID the app is ad-hoc signed; Gatekeeper rejects a downloaded copy until the user chooses
+Open Anyway (`dmg.sh --sign ... --notarize-profile ...` does the real thing when credentials exist).
 
 ## Plan
 
