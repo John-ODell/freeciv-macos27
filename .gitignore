@@ -39,6 +39,10 @@ logs/
 *.crash
 *.ips
 
+# Notes between this desk and other Claude desks (inbox/README.md): local only, they can carry other projects'
+# private details
+inbox/
+
 # Secrets
 *.p12
 *.cer
