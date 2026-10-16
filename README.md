@@ -13,7 +13,7 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 | `refs/` | Shallow clones of the upstream repos (`freeciv`, `freeciv-S3_2`, `freeciv-web`, `freeciv-environments`, `freeciv-website`). Read-only reference. | No |
 | `port/` | Working fork of Freeciv where fixes are made and built. Its own git repo. | No |
 | `patches/` | Patches exported from `port/` with `git format-patch`, one per concern, upstreamable. | Yes |
-| `scripts/` | One-command build, bundle and sign scripts for macOS. | Yes |
+| `scripts/` | Probe scripts used for the evidence (launch, game save/load, minimal .app). One-command build, bundle and sign scripts arrive with Step 5. | Yes |
 | `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log. | Yes |
 | `downloads/` | Prebuilt macOS apps and tarballs used for diagnosis. | No |
 
