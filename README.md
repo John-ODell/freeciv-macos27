@@ -48,7 +48,8 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 `build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
 `test.sh ... --ruleset civ45` runs the autogame on the civ45 ruleset (patch 0003: sandbox plus Civ4/5-style rules,
 see `port/freeciv/data/civ45/README.civ45` after applying the patches), and `scripts/check-stacking.py SAVE.gz`
-counts units per tile in the saves it leaves behind.
+counts units per tile in the saves it leaves behind (add `--ruleset port/freeciv/data/civ45` to apply civ45's
+exemptions for aircraft and ships in port).
 Install prefixes and bundles live outside `~/Desktop`, `~/Documents` and `~/Downloads` on purpose: macOS privacy
 protection stalls Finder-launched apps whose libraries sit in those folders (notes/reproduction.md, Failure 2).
 Without an Apple Developer ID the app is ad-hoc signed; Gatekeeper rejects a downloaded copy until the user chooses
