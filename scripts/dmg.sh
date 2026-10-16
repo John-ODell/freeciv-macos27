@@ -14,7 +14,7 @@
 #                       Needs a paid Apple Developer account; nothing here is done automatically without it.
 # Output: <out>/<Name>-<version>-arm64.dmg and .dmg.sha256 (both git-ignored). DMGs are never committed.
 set -euo pipefail
-[ $# -ge 1 ] || { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+[ $# -ge 1 ] || { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 APP="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; shift
 OUT="$(dirname "$APP")"; SIGN=""; PROFILE=""; VOLNAME=""
 while [ $# -gt 0 ]; do case "$1" in
