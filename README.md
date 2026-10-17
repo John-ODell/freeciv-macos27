@@ -91,6 +91,9 @@ passes and the server log holds no Lua error.
 `scripts/ruleset-look.sh CLIENT OUTDIR` plays a ruleset (civ45 unless `--ruleset`, read from the source tree) in a
 real client and captures every client window at pregame and at turn 1; the client runs on an options file of its own
 in OUTDIR (notes/freeciv45/client-look.md).
+The Qt client carries the Freeciv45 unit bar (patch 0015): a bar under the map with the focus unit's portrait, its tile
+mates as chips and its common orders with key hints, themed by NightStalker and System (`notes/freeciv45/ui/first-slice.md`).
+
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It
 plays a 50-turn civ45 game in which `scripts/harness-chooser.py` answers at random (`--mode first`: always the AI's
