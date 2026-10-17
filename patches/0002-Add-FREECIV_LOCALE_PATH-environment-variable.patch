@@ -1,14 +1,12 @@
-From 5e65e6b99f5fdb1f3c2051de68ad23fa63ffeac1 Mon Sep 17 00:00:00 2001
+From 79b6b5035ca6b81f1241b28b87c0f12ad5f99936 Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Fri, 16 Oct 2026 07:33:34 -0500
-Subject: [PATCH 2/2] Add FREECIV_LOCALE_PATH environment variable
+Subject: [PATCH] Add FREECIV_LOCALE_PATH environment variable
 
 Relocatable installations such as a macOS .app bundle cannot know the
 locale directory at compile time. Like FREECIV_DATA_PATH for data files,
 FREECIV_LOCALE_PATH overrides the built-in LOCALEDIR in get_locale_dir().
 Documented in the client and server man pages.
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 ---
  doc/man/freeciv-client.6.in |  5 +++++
  doc/man/freeciv-server.6.in |  5 +++++

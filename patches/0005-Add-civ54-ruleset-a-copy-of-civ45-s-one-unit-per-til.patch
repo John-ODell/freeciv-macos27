@@ -1,4 +1,4 @@
-From ccd0b1d77531255ff002cbd50f5b9764914adc56 Mon Sep 17 00:00:00 2001
+From fc0a7a17ac80e65ea8bea86e69511f4becfa2af7 Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Fri, 16 Oct 2026 17:46:07 -0500
 Subject: [PATCH] Add civ54 ruleset: a copy of civ45's one-unit-per-tile hex

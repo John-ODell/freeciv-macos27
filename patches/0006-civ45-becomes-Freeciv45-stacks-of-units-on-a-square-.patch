@@ -1,4 +1,4 @@
-From 6ec77446eb1d42f5b73ae2f162faf8975e439320 Mon Sep 17 00:00:00 2001
+From 970d756e08a9781971d695797b2b8b61fd85cb5c Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Fri, 16 Oct 2026 17:58:29 -0500
 Subject: [PATCH] civ45 becomes Freeciv45: stacks of units on a square map,
