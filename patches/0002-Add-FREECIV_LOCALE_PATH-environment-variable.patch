@@ -8,7 +8,6 @@ locale directory at compile time. Like FREECIV_DATA_PATH for data files,
 FREECIV_LOCALE_PATH overrides the built-in LOCALEDIR in get_locale_dir().
 Documented in the client and server man pages.
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 ---
  doc/man/freeciv-client.6.in |  5 +++++
  doc/man/freeciv-server.6.in |  5 +++++

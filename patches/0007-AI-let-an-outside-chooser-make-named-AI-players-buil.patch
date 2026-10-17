@@ -19,7 +19,6 @@ would build something else. Research is asked again after each new tech
 or when something else changes it. Everything else (units, rates,
 government, diplomacy) stays with the AI.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  ai/default/Makefile.am  |    2 +
  ai/default/aitech.c     |   24 +-
