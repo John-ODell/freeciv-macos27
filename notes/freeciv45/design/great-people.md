@@ -114,8 +114,11 @@ and the fallback is `obsolete_by` left empty plus a `"Nation", "Barbarian", "Pla
 | Resident Commander | `Veteran_Build` 1; `User_Effect_3` 2 |
 | Resident Spymaster | `Spy_Resistant` 50; `Incite_Cost_Pct` 100; `User_Effect_3` 2 |
 
-Each Resident feeds its own kind, so a city that settles Sages breeds Sages. Residents are lost with the city and
-are not sold or captured like other buildings only if `sabotage 0` and the capture rules say so (open question 2).
+Each Resident feeds its own kind, so a city that settles Sages breeds Sages. Residents stay with a captured city
+(John's decision of 2026-10-17): settling records the kind in `fc45_gp_res_<city id>` (a string such as `Sage;`)
+and the owner in `fc45_gp_res_owner_<city id>`; the `city_transferred` signal (conquest only,
+`server/citytools.c:2145`) and a sweep in `turn_begin` for cities whose owner no longer matches the record
+(trades, incitement, civil war) re-create every recorded Resident the city lacks. `city_destroyed` clears both.
 
 ### 4.2 Deeds: "User Action 3"
 
@@ -157,9 +160,13 @@ user_action_4_max_range              = 0
 user_action_4_actor_consuming_always = TRUE
 ```
 
-One enabler: `UnitFlag GreatPerson`, `MinMoveFrags 1`. The handler adds one to `fc45_golden_pledges_<player id>`;
-when pledges reach `1 + fc45_golden_count_<player id>` (the first age costs one great person, the second two, the
-third three) the age starts: pledges reset, count increments, `fc45_golden_until_<player id> = turn + 10`, and
+Seven enablers, one per kind (John's decision of 2026-10-17): `UnitType Great <Kind>`, `Building "Pledge of the
+<Kind>" Player FALSE`, `MinMoveFrags 1`. A pledge that does not yet start the age creates the "Pledge of the <Kind>"
+small wonder (`MinYear 9999`, cost 1) in the capital, so a second great person of that kind cannot pledge the same
+age; the handler counts the kinds with a marker (plus this one) and mirrors the count in
+`fc45_golden_pledges_<player id>`. When the count reaches `1 + fc45_golden_count_<player id>` (the first age costs
+one great person, the second two of different kinds, the third three) the age starts: the markers are removed,
+pledges reset, count increments, `fc45_golden_until_<player id> = turn + 10`, and
 `edit.create_building(capital, find.building_type("Golden Age"))` where the capital is the first city with the
 Palace (`Player:cities_iterate` at `tolua_game.pkg:733`). `turn_begin` removes the building when
 `turn >= fc45_golden_until` and clears the global. If the player has no city the pledge is refused with a notice.
@@ -168,9 +175,9 @@ Palace (`Player:cities_iterate` at `tolua_game.pkg:733`). `turn_begin` removes t
 |---|---|
 | genus `SmallWonder`, `build_cost 1`, `reqs MinYear 9999 World` | `Output_Inc_Tile` 1 shield on tiles with at least 1 shield (`output_granularity 1`, `civ45/game.ruleset:203`); `Output_Inc_Tile` 1 trade on tiles with at least 1 trade; `User_Effect_4` 100; `No_Anarchy` 1 |
 
-The reference game's rule that later ages need great people of different kinds is dropped (mechanics.md 2.9);
-pledges of any kind count. A conquered capital takes the building with it, which ends the age early and is
-accepted; `turn_begin` tolerates a missing building.
+The reference game's rule that later ages need great people of different kinds (mechanics.md 2.9) is kept through
+the markers; the first build counted any kind. A conquered capital takes the building and the markers with it, which
+ends the age early and forgets the pledges; both are accepted, and `turn_begin` tolerates a missing building.
 
 ## 6. The AI gap and the auto-use rule
 
