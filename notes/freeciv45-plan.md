@@ -28,6 +28,7 @@ Sources: four research reports, written by separate agents from public sources a
 | A hook (patch 0007) that hands an AI player's builds and research to an outside chooser, so the play harness can play-test Freeciv45 | PR 63; `scripts/harness-test.sh`, all checks pass with a random chooser and with the AI's own pick; `notes/freeciv45/harness.md` |
 | Slice 2, Combat (patch 0008): siege units wound every unit of a stack of two or more and kill none ("Bombard 2" with a new `Collateral` flag), fights go to the death (`Combat_Rounds` 0) except for `Withdraws` attackers, which break off after 12 rounds per 10 hit points, and aircraft bombard at range 1 | PR 89 (issue 75); `scripts/civ45-rules-test.sh` 18/18, 11/18 on the slice 1 rules; four 200-turn autogames with `scripts/civ45-combat-log.lua`, `notes/freeciv45/mechanics.md` section 6 |
 | Six ways to win (patch 0009): conquest, domination (Lua: 60 % of the land and 50 % of the citizens for 3 turns, from turn 100), culture at 8000 points with a 50 % lead, the spaceship's arrival, the allied win, and the best score at turn 475 (Lua names the winner) | PR 100 (issue 92); `scripts/civ45-rules-test.sh` 24/24 and the score winner with `--extra "set endturn 6"`; two 475-turn autogames (allied victory at 152, cultural victory at 437), `notes/freeciv45/mechanics.md` section 7 |
+| Design notes for the next rules slices, each implementable without re-deriving anything: the six wins (built as patch 0009), the 82-unit roster with class counters and upgrade chains, a 92-tech seven-era tree with a consistency checker, and great people with deeds, golden ages and an AI auto-use rule | PRs 77, 90, 96 and 101 (issues 76, 87, 93, 97); `notes/freeciv45/design/{victory,units-and-upgrades,tech-tree,great-people}.md`; `scripts/tech-tree-check.py` passes against the tree, the roster and `civ45/buildings.ruleset` |
 
 Open from slice 1: `test.sh` reads the installed ruleset unless told otherwise (#48), and the AI's stack use in
 later eras (#49). The client look (#50) found a stale line in the tileset dialog (#53) and a missing SVG plugin in
@@ -41,6 +42,12 @@ until the roster and the one-strength decision (7).
 Open from the victory slice: the design note's five questions (decision 8), and no AI came near the domination
 thresholds in 437 turns, so that rule is untested in play.
 
+Open from the design notes: their questions are decisions 9 to 11. Findings while writing them: the committed fork
+sets `victory_min_points 20000`, which no autogame came within half of before the victory slice replaced it;
+`Output_Bonus_Absolute` is clamped to zero or below in 3.2 (`common/city.c:2409`), the opposite of its README
+entry; only `User_Effect_3`/`_4` and "User Action 3"/"4" are free because the sandbox leftovers hold 1 and 2;
+and the sandbox tree the fork inherits places several techs out of era order (tech-tree.md section 3).
+
 ## Decisions for John
 
 | # | Question | Recommendation |
@@ -53,6 +60,9 @@ thresholds in 437 turns, so that rule is untested in play.
 | 6 | Public name "Freeciv45" | Fine as a working name. It follows the "Freeciv21" fork's pattern and avoids "Civilization"/"Civ" (inferred; Freeciv's naming guidance not checked). |
 | 8 | Victory numbers: domination at 60 % of the land and 50 % of the citizens for 3 turns (the spec says about 65 % plus a population lead); allies do not pool for it (Lua cannot see alliances); `endturn` 475 as the shipped default; culture 8000 with a 50 % lead before the culture slice; the score winner announced by Lua | Built with these values 2026-10-17 (PR 100). Keep them until the culture and roster slices, then re-tune from autogames. |
 | 7 | One strength number per unit, for attack and defence alike, as in the reference game (spec 2.5, rated MUST), or Freeciv's separate attack and defence values? | One strength, brought in with slice 2 and the roster (slice 10), with an autogame before and after. Freeciv already decides each round by strength share; only the damage per round stays fixed (spec 2.5). |
+| 9 | Roster: HP by era (10/20/30), the five dropped sandbox units, the 11 renames, resource gating by `Extra` until slice 4, and the three draft units (`notes/freeciv45/design/units-and-upgrades.md`, "Open questions for John") | Take the note's defaults; re-tune after the first roster autogame. |
+| 10 | Tech tree: six added and three dropped techs, era cost percents 100 to 150, the building re-homing table, and whether the checker runs in `test.sh` (`notes/freeciv45/design/tech-tree.md`, "Open questions for John") | Take the note's tree as the slice 10 baseline; add the checker to `test.sh`. |
+| 11 | Great people: one source of truth for point values (effects or Lua), Residents on capture, whether every great person may "Disband Unit Recover", golden age pledges of any kind, and the Spymaster without a deed (`notes/freeciv45/design/great-people.md`, "Open questions for John") | Lua as the single source for points, Residents lost on capture, no recover, any kind pledges, Spymaster stays native. |
 
 ## Roadmap
 
@@ -65,15 +75,15 @@ own, as the clean-room rule asks.
 | # | Slice | Main change | Effort | Main risk |
 |---|---|---|---|---|
 | 2 | Combat | Siege "Bombard 2" allowed only against two or more units, so it wounds a stack without killing it; `Combat_Rounds` 0 (to the death) plus a capped break-off for a new `Withdraws` flag; bombard range 1 | S-M | The AI bombards instead of taking cities; tuning |
-| 3 | Upgrades, drafting and whipping | Upgrades keep veteran levels; one draft unit per era that costs a citizen, behind a government; whipping as the spec's levy unit, which costs a citizen and is recycled into the build, because Lua cannot shrink a city | S-M | The AI drafts its cities small |
+| 3 | Upgrades, drafting and whipping | Upgrades keep veteran levels along the chains and at the prices in `notes/freeciv45/design/units-and-upgrades.md` (sections 1 and 2, `upgrade_veteran_loss 0`); one draft unit per era that costs a citizen, behind a government (the Levy, Militia and Conscripts rows there); whipping as the spec's levy unit, which costs a citizen and is recycled into the build, because Lua cannot shrink a city | S-M | The AI drafts its cities small |
 | 4 | Happiness and health from resources | +1 content per luxury and +health per food resource the nation can reach, through a marker building per resource that Lua keeps (an Extra requirement stops at TradeRoute range); the missing resources (horses, copper, stone, marble, aluminium, uranium) | M | Lua decides what counts as connected; its turn-start cost on big maps |
 | 5 | Cottages | Four tile improvements that grow while worked and give more trade | M | Growth is random, not a fixed count of turns |
 | 6 | Great Generals | Lua counts combat; a General joins a stack to promote it or settles as a military academy | M | The AI never uses it |
 | 7 | Leader traits | Trait bonuses per nation, as hidden small wonders at first | M | Picking traits per nation |
 | 8 | Culture and civics | A culture rate as a Freeciv "multiplier" slider; culture levels that add city defence (`MinCulture`); civics as governments plus, as the spec proposes, one policy building per column that Lua swaps | M | Five columns of exclusive choices are not native; the AI won't pick policies |
 | 9 | Economy | Linear food box, content and health caps at the reference values, national gold upkeep for buildings and units, seven specialists (spec 2.4) | M | Freeciv riots where the reference game idles unhappy citizens (spec question 9) |
-| 10 | Roster | The reference game's breadth, about 85 units over seven eras, with class counters, resource gating from slice 4 and a unique unit per nation (spec 2.8) | L | Every unit needs art (T2); balance |
-| 11 | Great People and golden ages | Points from buildings and wonders through the blank `User_Effect` slots (Lua finds no specialist count), the seven kinds with their one-off uses, a golden age as a timed national building (spec 2.9) | M | The AI ignores Lua-only systems (spec question 10) |
+| 10 | Roster and tech tree | The 82 unit types, eight class flags and paired counter bonuses of `notes/freeciv45/design/units-and-upgrades.md` (46 kept, 11 renamed, 5 dropped, 18 new, 7 great people), on the 92-tech seven-era tree of `notes/freeciv45/design/tech-tree.md` with its building re-homing table and `scripts/tech-tree-check.py`; resource gating from slice 4; a unique unit per nation later (spec 2.8) | L | Every unit needs art (T2); balance |
+| 11 | Great People and golden ages | As `notes/freeciv45/design/great-people.md`: `User_Effect_3` points and `User_Effect_4` percent read by Lua each turn (no specialist count), seven kinds (Sage, Builder, Magnate, Virtuoso, Oracle, Commander, Spymaster) that settle through "Join City" as Resident buildings, do a deed through "User Action 3" or native "Help Wonder", and pledge a 10-turn golden age ("User Action 4", a timed small wonder); a `turn_begin` rule spends AI great people through the same enablers (spec 2.9) | M | The AI cannot plan around them; `Output_Bonus_Absolute` is unusable, so settled greats give percents and centre-tile output |
 | 12 | Religion, simplified | Seven Lua-founded religions as city marker buildings with passive spread, temples, state-religion happiness and shrine gold (spec 2.10) | L | The same AI gap; no missionaries at first |
 
 Slice 2 moves first because slice 1 brought stacks back with no counter to them (mapping study, risk column of its slice 1).
