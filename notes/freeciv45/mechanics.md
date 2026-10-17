@@ -837,3 +837,121 @@ at hand), which is the first thing to tune.
   `u.great_oracle`, `u.great_commander`, `u.great_spymaster`, `b.resident_*` (seven), `b.sanctum`, `b.golden_age`.
 - Points from specialists (design note section 1) stay out until Lua can count them; the Commander from combat
   waits for slice 6.
+
+## 12. John's decisions 9 to 12 applied: the tree, the curve, the roster and the great people (2026-10-17, patch 0014)
+
+John answered the design notes' questions on 2026-10-17 (plan decisions 9 to 12, issue 115). Six answers kept the
+first build (three draft units; hit points 10/20/30; both Cruiser and Ship of the Line; point values in the effect
+rows and the Lua table; no recycling of great people, the Builder's Help Wonder stays; the Spymaster with the
+native diplomat actions as its deed). The rest changed the fork at commit 9c9b25c, lines cited there.
+
+### What the ruleset says now
+
+| Answer | Built | Where |
+|---|---|---|
+| Archery in era I | `class = "Ancient"`; Archers stay in the era I roster table, Horse Bowmen keep era II (they need Horseback Riding too) | `civ45/techs.ruleset:186` |
+| Horses gate the mounted units now | `[extra_horses]` and `[resource_horses]` (shield 1, trade 1) on Grassland and Plains; `"Extra", "Horses", "City"` on Horsemen, Horse Bowmen, Chariot, Zealots, Knights, Dragoons and Cavalry, as Iron and Oil already were | `terrain.ruleset:599,815,1114,2164`; `units.ruleset:1671-1965` |
+| Keep the three techs, 95 in all | Labor Union (Communism + Mobile Warfare, Modern), Nanomaterials (Plastics + Computers, Information), Ruler Apotheosis (Polytheism + Mysticism, Classical); the Altar needs Ruler Apotheosis, the Space Elevator and its Tether Nanomaterials, Women's Suffrage Labor Union (it was at Conscription); Mechanized Infantry stays at Robotics, which the checker's re-homed table had already settled | `techs.ruleset:545,720,906`; `buildings.ruleset:1260,1520,2307,2478` |
+| The steep curve | `cost_pct` 100, 150, 175, 200, 225, 250, 275 by era (the first build: 100, 100, 110, 120, 130, 140, 150) | `techs.ruleset:49-75` |
+| Themed unlocks | Physics: Siege Workshop (`Veteran_Build` 1 for `UnitFlag Siege`); Medicine: Apothecary (`Health_Pct` 30, `HP_Regen` 10 for Land units in the city); Electricity: Telegraph Office (`Max_Trade_Routes` 1) | `buildings.ruleset:2504-2572`; `effects.ruleset:6272-6306` |
+| Alpine Troops and Crusaders back, nation-neutral | Alpine Troops at Tactics: strength 14, cost 100, move 1, `IgTer`, `Gun`, obsolete by Infantry (civ45's 7/4 under one strength). Zealots at Monotheism: strength 8, cost 50, move 2, `Mounted`, `Withdraws`, Horses and no Iron, obsolete by Knights (civ45's Crusaders under a name that belongs to no faith) | `units.ruleset:1197,1834` |
+| Transport cargo 4 | `transport_cap = 4` | `units.ruleset:3149` |
+| Residents stay with a captured city | Settling records the kind in `fc45_gp_res_<city id>` (`Sage;` and so on) and the owner in `fc45_gp_res_owner_<city id>`; `fc45_gp_residents_restore` re-creates every recorded Resident the city lacks, from the `city_transferred` signal (conquest only, `server/citytools.c:2145`) and from a `turn_begin` sweep over cities whose owner no longer matches the record (trades, incitement and civil war emit no signal) | `script.lua:776,807-824` |
+| Golden ages need different kinds | Seven "Pledge of the <Kind>" small wonders (`MinYear 9999`, cost 1); seven enablers for "User Action 4", one per `UnitType Great <Kind>`, each with `Building "Pledge of the <Kind>" Player FALSE`; a pledge short of the age raises its marker in the capital, the age removes all seven; the AI pledges with one great person of each kind it has not pledged, when it holds enough of them | `buildings.ruleset:2780-2940`; `actions.ruleset:3109-3170`; `script.lua:895-957,960` |
+
+### The cost curve
+
+Bulbs = 10 × (tier + 1) × `cost_pct` / 100 (`common/tech.c:273`, a double) × `Tech_Cost_Factor` 3, with the
+tiers of `notes/freeciv45/design/tech-tree.md`. The reference game's own era ratios are not in this note's sources
+(2.4 cites the science pages, not a cost table), so "rise steeply era over era" is the target and the numbers are
+ours: +50 points after era I, then +25 per era, chosen so that each era's average costs about twice the one before
+from era IV on and the last era's cheapest tech costs more than the first era's dearest by a factor of 45.
+
+| Era | Techs | Tier range | `cost_pct` | Cheapest to dearest, bulbs | Era average | Ratio to era I | First build's average |
+|---|---|---|---|---|---|---|---|
+| I | 14 | 0 to 2 | 100 | 30 to 90 | 47 | 1 | 47 |
+| II | 14 | 1 to 8 | 150 | 90 to 405 | 199 | 4.2 | 132 |
+| III | 12 | 5 to 14 | 175 | 315 to 787 | 542 | 11.5 | 341 |
+| IV | 10 | 10 to 22 | 200 | 660 to 1,380 | 1,068 | 22.7 | 641 |
+| V | 14 | 20 to 49 | 225 | 1,417 to 3,375 | 2,372 | 50 | 1,370 |
+| VI | 15 | 28 to 59 | 250 | 2,175 to 4,500 | 3,635 | 77 | 2,036 |
+| VII | 16 | 49 to 70 | 275 | 4,125 to 5,857 | 5,161 | 110 | 2,815 |
+
+(The first build's column uses the same tiers with 100 to 150; the three restored techs sit at tiers 5, 59
+and 65.) The rules test pins Alphabet 30, Gunpowder 1,080 (tier 17, 200%) and Fusion Power 5,857 (tier 70,
+275%; 710 × 2.75 = 1,952.5, times 3).
+
+### What stock Freeciv 3.2 cannot express (observed in the source)
+
+- A city-range requirement has no Lua test: `Player:can_build_direct` is `can_player_build_unit_direct`
+  (`common/unittype.c:1968`), which treats city-range requirements as possible, so the Horses gate is a shell
+  check over the ruleset text and the autogame is the only evidence in play.
+- `edit.transfer_city` and the diplomatic, incitement and civil-war transfers emit no `city_transferred`; only
+  `unit_conquer_city` does (`server/citytools.c:2145`). The turn sweep covers the rest a turn late.
+- An action enabler cannot count buildings, so "different kinds" is seven markers and seven enablers rather than
+  one rule; the markers are small wonders so that `Building ... Player` can read them, which means they go with
+  the capital when it falls.
+
+### Tests
+
+`scripts/civ45-rules-test.sh ~/freeciv-builds/qt --data port/freeciv/data`: 57/57 Lua cases and eighteen shell
+checks (`logs/civ45-rules-20261017-183334`); the control on the installed slice 1 ruleset gives 13/25 and exit 1
+as before. New cases: the three restored techs exist and the costs above; Alpine Troops (`Gun`, `IgTer`) and
+Zealots (`Mounted`, `Withdraws`); the Altar and Women's Suffrage need their techs again; the three buildings'
+effects measured on a Catapult and the city before and after (`Veteran_Build` 0 to 1, `Health_Pct` 0 to 30,
+`Max_Trade_Routes` 2 to 3); a second Sage cannot pledge the age a Sage has pledged while the marker stands; a
+settled Sage is recorded (`Sage;`) and re-created after its Resident is removed; a second city of the Tester's
+settles a Great Oracle, is handed to another player and still has its Resident Oracle a turn later with the record
+pointing at the new owner. Shell: 95 advances each in a class, the seven `cost_pct` values, 85 unit types with one
+strength and firepower 1, Transport cargo 4, the Horses extra, resource and seven requirements.
+`scripts/tech-tree-check.py --ruleset --buildings`: PASS, 95 techs, deepest tier 70, with the design note's tiers
+refilled.
+
+### Autogames
+
+Three 400-turn games, 10 AIs, seeds 42/42, with `scripts/civ45-tech-log.lua`: the previous build (patch 0013,
+diplomacy off, `logs/test-qt-20261017-180813`) against this one with diplomacy off
+(`logs/test-qt-20261017-182517`) and on (`logs/test-qt-20261017-182519`), read by `scripts/civ45-tech-summary.py`
+and `scripts/civ45-gp-summary.py`. The diplomacy-on game ended at turn 155 with an allied victory, so its pace
+(era V at turn 125 through tech trading) is not comparable and only its great people count below.
+
+| Era | Before: first AI, median | After, diplomacy off: first AI, median |
+|---|---|---|
+| I | 15, 26 | 11, 18 |
+| II | 58, 83 | 44, 70 |
+| III | 110, 170 | 82, 154 |
+| IV | 142, 233 | 131, 178 |
+| V | 180, 269 | 232, 254 |
+| VI | 327, 357 | 367, 388 |
+| VII | nobody | nobody |
+| Techs per AI at the end | 55 to 60 (one outlier at 27) | 57 to 59 |
+
+Observed: the curve moves era V and VI first arrivals later by 52 and 40 turns, but the AIs end with the same
+number of techs, because the early eras went faster (era IV's median 55 turns earlier) and the late-game science
+of these AIs outruns the costs. Inferred: the steep curve shapes when the eras arrive more than how many techs a
+game holds, and era VII in 400 turns is still out of reach for the Easy AI, as section 9 found on the gentle curve.
+
+| Great people | Before | After, diplomacy off | After, diplomacy on (155 turns) |
+|---|---|---|---|
+| Born | 48 | 50 | 15 |
+| Used by the AI within 20 turns | 46 of 47 | 43 of 43 | 14 of 14 |
+| Settled | 9 | 8 | 0 |
+| Golden ages begun | 12 (10 first, 2 second) | 8 (all first) | 7 (all first) |
+| Pledges short of an age | 2 | 0 | 0 |
+| Cities held by a player other than their founder at the end | 36 of 95 | 30 of 93 | |
+| Residents re-created for a new owner | | 0 | 0 |
+
+Observed: no AI reached a second golden age under the different-kinds rule in 400 turns, where two did before:
+the AI pledges only when it holds enough great people of distinct kinds at once, and it spends each one within a
+turn or two, so it never does. The settled cities (Bangkok, Oneida, Wien) were none of the 30 that changed hands,
+so the Residents-on-capture rule ran in no game; the handover case in the rules test is its evidence.
+
+### Open
+
+- The AI never reaches a second golden age (issue 121): let it pledge one great person of a kind it
+  lacks whenever no age runs and the marker will wait, or lower the second age to two of any kind for the AI.
+- Residents re-created after a conquest are untested in play; the signal path and the sweep are tested by the
+  rules test only.
+- The pledge markers and the Golden Age fall with the capital, forgetting the pledges.
+- Art: `b.siege_workshop`, `b.apothecary`, `b.telegraph_office`, `b.pledge`, `u.zealots` and the `ts.horses`
+  tile are borrowed until civ45-tileset draws them.

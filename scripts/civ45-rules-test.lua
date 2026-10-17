@@ -246,6 +246,32 @@ function fc45_gp_test_run(tester, used)
         refused and rawget(_G, fc45_gp_key("fc45_golden_pledges_", pid)) == 1)
   if not refused then third = nil end
   if third ~= nil then third:kill("disbanded", nil) end
+  -- Residents stay with a city that changes hands (John's decision of 2026-10-17): a second city of the
+  -- Tester's settles a Great Oracle and is handed to another player with edit.transfer_city, which emits no
+  -- city_transferred signal (only unit_conquer_city does, server/citytools.c:2145), so the turn_begin sweep
+  -- is what keeps the Resident; a turn later the city is checked for it. The restore itself is checked then
+  -- too, by removing Testerburg's Resident Sage and calling it.
+  local victim = nil
+  for p in players_iterate() do
+    if p.id ~= tester.id and fc45_is_civ(p) and victim == nil then victim = p end
+  end
+  local spot = nil
+  for t in city.tile:square_iterate(6) do
+    if spot == nil and t:sq_distance(city.tile) >= 16 and t:city() == nil and t:num_units() == 0
+       and (t.terrain:rule_name() == "Grassland" or t.terrain:rule_name() == "Plains") then spot = t end
+  end
+  if victim ~= nil and spot ~= nil and edit.create_city(tester, spot, "Residentia") then
+    local c2 = spot:city()
+    local oracle = edit.create_unit(tester, c2.tile, find.unit_type("Great Oracle"), 0, c2, -1)
+    local settled = oracle:perform_action(find.action("Join City"), c2)
+    local handed = edit.transfer_city(c2, victim)
+    log.normal("FC45TEST handover: Residentia settled an Oracle %s, handed to %s %s, owner now %s",
+               tostring(settled), victim.name, tostring(handed), c2.owner.name)
+    check("a second city settles a Great Oracle and is handed to another player", settled and handed and c2.owner.id == victim.id)
+    fc45_test.gp_city2 = c2.id
+  else
+    log.normal("FC45TEST SKIP no second player or no site for Residentia (victim %s, spot %s)", tostring(victim ~= nil), tostring(spot ~= nil))
+  end
   -- End the age next turn, and put the city one turn short of a birth: both are checked then.
   fc45_gp_set(fc45_gp_key("fc45_golden_until_", pid), game.turn() + 2)
   fc45_gp_set(fc45_gp_key("fc45_gp_pool_", city.id), 148)
@@ -271,6 +297,15 @@ function fc45_gp_test_later()
         and fc45_gp_get(fc45_gp_key("fc45_gp_born_", pid)) == fc45_test.gp_born + 1)
   check("the golden age has ended a turn later", not city:has_building(find.building_type("Golden Age"))
         and rawget(_G, fc45_gp_key("fc45_golden_until_", pid)) == nil)
+  if fc45_test.gp_city2 ~= nil then
+    local c2 = find.city(nil, fc45_test.gp_city2)
+    local res = find.building_type("Resident Oracle")
+    local owner_rec = c2 and rawget(_G, fc45_gp_key("fc45_gp_res_owner_", c2.id))
+    log.normal("FC45TEST handover a turn later: city %s, owner %s, Resident Oracle %s, record owner %s",
+               tostring(c2 ~= nil), c2 and c2.owner.name or "-", tostring(c2 and c2:has_building(res)), tostring(owner_rec))
+    check("the handed-over city still has its Resident Oracle a turn later, under its new owner",
+          c2 ~= nil and c2.owner.id ~= pid and c2:has_building(res) and owner_rec == c2.owner.id)
+  end
   if born ~= nil then
     local join = find.action("Join City")
     local size = city.size
