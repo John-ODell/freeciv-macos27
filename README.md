@@ -64,6 +64,11 @@ passes and the server log holds no Lua error.
 `scripts/ruleset-look.sh CLIENT OUTDIR` plays a ruleset (civ45 unless `--ruleset`, read from the source tree) in a
 real client and captures every client window at pregame and at turn 1; the client runs on an options file of its own
 in OUTDIR (notes/freeciv45/client-look.md).
+`scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
+build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It
+plays a 50-turn civ45 game in which `scripts/harness-chooser.py` answers at random (`--mode first`: always the AI's
+own pick), checks the decisions against the saves with `scripts/harness-check.py`, and plays a control game on the
+same seeds without the hook.
 Install prefixes and bundles live outside `~/Desktop`, `~/Documents` and `~/Downloads` on purpose: macOS privacy
 protection stalls Finder-launched apps whose libraries sit in those folders (notes/reproduction.md, Failure 2).
 Without an Apple Developer ID the app is ad-hoc signed; Gatekeeper rejects a downloaded copy until the user chooses
