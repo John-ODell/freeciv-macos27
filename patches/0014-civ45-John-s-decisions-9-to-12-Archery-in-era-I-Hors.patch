@@ -1,0 +1,941 @@
+From 9c9b25c5573386fd8dcc906e0f17231b44e0881d Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 18:27:41 -0500
+Subject: [PATCH] civ45: John's decisions 9 to 12: Archery in era I, Horses, 95
+ techs, a steep era curve, themed unlocks, Zealots and Alpine Troops,
+ Transport 4, Residents on capture, golden ages of different kinds
+
+Archery is an Ancient tech. Horses is a grassland and plains resource and
+Horsemen, Horse Bowmen, Chariot, Zealots, Knights, Dragoons and Cavalry need one
+in the city's radius. Ruler Apotheosis (the Altar), Nanomaterials (the Space
+Elevator and its Tether) and Labor Union (Women's Suffrage, from Conscription)
+are back: 95 advances. The era cost_pct is 100, 150, 175, 200, 225, 250, 275.
+Physics unlocks the Siege Workshop (Veteran_Build for siege units), Medicine the
+Apothecary (Health_Pct 30, HP_Regen 10 for land units), Electricity the
+Telegraph Office (one trade route). Alpine Troops return at Tactics (14, IgTer,
+Gun) and Crusaders return as Zealots (Monotheism, 8, move 2, Horses, no Iron).
+The Transport carries 4. script.lua records each settled great person's kind per
+city and re-creates the Residents on city_transferred and, for trades and
+incitement, when the owner no longer matches at turn start. A golden age needs
+great people of different kinds, one more than the last: a pledge raises a
+"Pledge of the <Kind>" small wonder in the capital that the kind's enabler
+reads, and the age removes them; the AI pledges one of each kind it lacks.
+---
+ data/civ45/README.civ45      |  15 ++-
+ data/civ45/actions.ruleset   |  61 ++++++++-
+ data/civ45/buildings.ruleset | 240 ++++++++++++++++++++++++++++++++++-
+ data/civ45/effects.ruleset   |  34 +++++
+ data/civ45/script.lua        |  93 ++++++++++++--
+ data/civ45/techs.ruleset     |  44 ++++++-
+ data/civ45/terrain.ruleset   |  25 +++-
+ data/civ45/units.ruleset     |  86 ++++++++++++-
+ 8 files changed, 566 insertions(+), 32 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index adfafdc..3fa22ab 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -71,7 +71,7 @@ Differences from sandbox
+   the whip too: disbanded in a city ("Disband recovering production")
+   each puts 30 shields into the build, whatever it cost, so a citizen
+   becomes 30 shields. No unhappiness follows a draft yet.
+-- The roster: 76 unit types over seven eras (notes/freeciv45/design/
++- The roster: 78 unit types over seven eras (notes/freeciv45/design/
+   units-and-upgrades.md), with one strength number for attack and
+   defence (0 attack for scouts, transports, machine gunners, air
+   defence and the radar plane), 10 hit points in the first three eras,
+@@ -93,7 +93,9 @@ Differences from sandbox
+   Mech. Inf. Mechanized Infantry, Helicopter Gunship, AWACS Radar Plane,
+   AEGIS Cruiser Missile Cruiser, SSBN Missile Submarine, ICBM Nuclear
+   Missile), so saves and scripts load. Jaguar Warrior, Immortal, Alpine
+-  Troops, Crusaders and Mechanic are gone (Engineers heal vehicles).
++  Troops, Crusaders and Mechanic are gone (Engineers heal vehicles);
++  Alpine Troops are back at Tactics and Zealots (mounted, Monotheism,
++  no armour) stand where Crusaders stood. Transports carry four.
+ - Great people (notes/freeciv45/design/great-people.md): every city
+   collects great-person points from its temples, libraries, markets,
+   theatres, courts and their successors (1 to 3 a turn), from wonders
+@@ -106,15 +108,16 @@ Differences from sandbox
+   (a free tech, 240 shields into a wonder, a trade mission, 400 history,
+   the Sanctum, a veteran level for the stack, or the diplomat actions)
+   or pledges a golden age: ten turns of +1 shield and +1 trade on
+-  working tiles, double points and no anarchy, for one pledge, then two,
+-  then three. The first to Philosophy, Theology, Economics or
++  working tiles, double points and no anarchy, for one pledge, then two
++  of different kinds, then three. A captured city keeps its Residents. The first to Philosophy, Theology, Economics or
+   Electricity gets one free. script.lua runs it, and spends the AI's
+   great people for it each turn through the same actions.
+ - Strategic resources: Swordsmen, Macebearers, Crossbowmen, Knights,
+   Cannon, Ship of the Line and Ironclad need Iron (Ironclad Coal too),
+   War Elephants Ivory, and armour, aircraft and modern warships Oil,
+-  somewhere in the city's radius. Horses, copper, aluminium and uranium
+-  wait for the resources slice.
++  somewhere in the city's radius, and every mounted unit from Horsemen
++  to Cavalry needs Horses (a grassland and plains resource). Copper,
++  aluminium and uranium wait for the resources slice.
+ - Nation-unique buildings: Arab Bazaar (built on a Marketplace, +50%
+   luxury, +25% gold). No new graphics yet; they reuse the sprites of the
+   unit or building they replace.
+diff --git a/data/civ45/actions.ruleset b/data/civ45/actions.ruleset
+index eac5dcc..b92bdbd 100644
+--- a/data/civ45/actions.ruleset
++++ b/data/civ45/actions.ruleset
+@@ -3104,10 +3104,67 @@ actor_reqs    =
+     }
+ 
+ ; Pledge a golden age (User Action 4): any great person, anywhere.
+-[actionenabler_golden_pledge]
++; One pledge enabler per kind: a kind that has pledged the next age (its "Pledge of the <Kind>" small wonder
++; stands in the capital) cannot pledge again until the age begins (John's decision of 2026-10-17).
++[actionenabler_golden_pledge_sage]
+ action        = "User Action 4"
+ actor_reqs    =
+     { "type",        "name",        "range", "present"
+-      "UnitFlag",    "GreatPerson", "Local", TRUE
++      "UnitType",    "Great Sage", "Local", TRUE
++      "Building",    "Pledge of the Sage", "Player", FALSE
++      "MinMoveFrags", "1",          "Local", TRUE
++    }
++
++[actionenabler_golden_pledge_builder]
++action        = "User Action 4"
++actor_reqs    =
++    { "type",        "name",        "range", "present"
++      "UnitType",    "Great Builder", "Local", TRUE
++      "Building",    "Pledge of the Builder", "Player", FALSE
++      "MinMoveFrags", "1",          "Local", TRUE
++    }
++
++[actionenabler_golden_pledge_magnate]
++action        = "User Action 4"
++actor_reqs    =
++    { "type",        "name",        "range", "present"
++      "UnitType",    "Great Magnate", "Local", TRUE
++      "Building",    "Pledge of the Magnate", "Player", FALSE
++      "MinMoveFrags", "1",          "Local", TRUE
++    }
++
++[actionenabler_golden_pledge_virtuoso]
++action        = "User Action 4"
++actor_reqs    =
++    { "type",        "name",        "range", "present"
++      "UnitType",    "Great Virtuoso", "Local", TRUE
++      "Building",    "Pledge of the Virtuoso", "Player", FALSE
++      "MinMoveFrags", "1",          "Local", TRUE
++    }
++
++[actionenabler_golden_pledge_oracle]
++action        = "User Action 4"
++actor_reqs    =
++    { "type",        "name",        "range", "present"
++      "UnitType",    "Great Oracle", "Local", TRUE
++      "Building",    "Pledge of the Oracle", "Player", FALSE
++      "MinMoveFrags", "1",          "Local", TRUE
++    }
++
++[actionenabler_golden_pledge_commander]
++action        = "User Action 4"
++actor_reqs    =
++    { "type",        "name",        "range", "present"
++      "UnitType",    "Great Commander", "Local", TRUE
++      "Building",    "Pledge of the Commander", "Player", FALSE
++      "MinMoveFrags", "1",          "Local", TRUE
++    }
++
++[actionenabler_golden_pledge_spymaster]
++action        = "User Action 4"
++actor_reqs    =
++    { "type",        "name",        "range", "present"
++      "UnitType",    "Great Spymaster", "Local", TRUE
++      "Building",    "Pledge of the Spymaster", "Player", FALSE
+       "MinMoveFrags", "1",          "Local", TRUE
+     }
+diff --git a/data/civ45/buildings.ruleset b/data/civ45/buildings.ruleset
+index 95af226..8d077d1 100644
+--- a/data/civ45/buildings.ruleset
++++ b/data/civ45/buildings.ruleset
+@@ -1262,7 +1262,7 @@ name            = _("Space Elevator Tether")
+ genus           = "Improvement"
+ reqs            =
+     { "type",         "name",           "range",     "present"
+-      "Tech",         "Superconductors", "Player",    TRUE
++      "Tech",         "Nanomaterials", "Player",    TRUE
+       "Building",     "Space Elevator", "Continent", TRUE
+       "Building",     "Space Elevator", "City",      FALSE
+     }
+@@ -1522,7 +1522,7 @@ name            = _("Altar to The Divine Ruler")
+ genus           = "GreatWonder"
+ reqs            =
+     { "type", "name",             "range"
+-      "Tech", "Monarchy", "Player"
++      "Tech", "Ruler Apotheosis", "Player"
+     }
+ graphic         = "b.altar"
+ graphic_alt     = "b.oracle"
+@@ -2309,7 +2309,7 @@ name            = _("Space Elevator")
+ genus           = "SmallWonder"
+ reqs            =
+     { "type",         "name",           "range", "present"
+-      "Tech",         "Superconductors", "Player", TRUE
++      "Tech",         "Nanomaterials", "Player", TRUE
+       "Building",     "Apollo Program", "World",  TRUE
+       "Building",     "Space Elevator", "Player", FALSE
+       "TerrainClass", "Oceanic",        "City",   TRUE
+@@ -2480,7 +2480,7 @@ name		= _("Women's Suffrage")
+ genus		= "GreatWonder"
+ reqs	=
+     { "type", "name", "range"
+-      "Tech", "Conscription", "Player"
++      "Tech", "Labor Union", "Player"
+     }
+ graphic         = "b.womens_suffrage"
+ graphic_alt     = "-"
+@@ -2501,6 +2501,75 @@ halves the unhappiness caused by military units (reducing it to the \
+ same level as a Republic).\
+ ")
+ 
++[building_siege_workshop]
++name		= _("Siege Workshop")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "Tech", "Physics", "Player"
++    }
++graphic         = "b.siege_workshop"
++graphic_alt     = "b.barracks_i"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 60
++upkeep		= 1
++sabotage	= 100
++sound		= "b_siege_workshop"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Where engines of war are built and their crews drilled: every siege unit (Catapult to Howitzer) built here starts one veteran level up.\
++")
++
++[building_apothecary]
++name		= _("Apothecary")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "Tech", "Medicine", "Player"
++    }
++graphic         = "b.apothecary"
++graphic_alt     = "b.aqueduct"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 60
++upkeep		= 1
++sabotage	= 100
++sound		= "b_apothecary"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Herbs, salves and a physician: the city is 30% less prone to illness, and land units in it recover 10% more of their hit points each turn.\
++")
++
++[building_telegraph_office]
++name		= _("Telegraph Office")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "Tech", "Electricity", "Player"
++    }
++graphic         = "b.telegraph_office"
++graphic_alt     = "b.courthouse"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 80
++upkeep		= 2
++sabotage	= 100
++sound		= "b_telegraph_office"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++News and prices by wire: the city can keep one more trade route.\
++")
++
+ [building_resident_sage]
+ name		= _("Resident Sage")
+ genus		= "Improvement"
+@@ -2705,7 +2774,168 @@ sound		= "b_golden_age"
+ sound_alt	= "b_generic"
+ sound_alt2      = "-"
+ helptext	= _("\
+-A golden age is running: for ten turns every worked tile that yields a shield yields one more, every tile that yields trade yields one more, great-person points are doubled and a change of government costs no anarchy. Great people pledge it: one for the first age, two for the second, three for the third.\
++A golden age is running: for ten turns every worked tile that yields a shield yields one more, every tile that yields trade yields one more, great-person points are doubled and a change of government costs no anarchy. Great people pledge it: one for the first age, two of different kinds for the second, three for the third.\
++")
++
++[building_pledge_sage]
++name		= _("Pledge of the Sage")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.pledge"
++graphic_alt     = "b.palace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_pledge"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A Great Sage has pledged your next golden age. Each age needs great people of different kinds, one more than the last: no second Sage can pledge until the age begins.\
++")
++
++[building_pledge_builder]
++name		= _("Pledge of the Builder")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.pledge"
++graphic_alt     = "b.palace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_pledge"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A Great Builder has pledged your next golden age. Each age needs great people of different kinds, one more than the last: no second Builder can pledge until the age begins.\
++")
++
++[building_pledge_magnate]
++name		= _("Pledge of the Magnate")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.pledge"
++graphic_alt     = "b.palace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_pledge"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A Great Magnate has pledged your next golden age. Each age needs great people of different kinds, one more than the last: no second Magnate can pledge until the age begins.\
++")
++
++[building_pledge_virtuoso]
++name		= _("Pledge of the Virtuoso")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.pledge"
++graphic_alt     = "b.palace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_pledge"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A Great Virtuoso has pledged your next golden age. Each age needs great people of different kinds, one more than the last: no second Virtuoso can pledge until the age begins.\
++")
++
++[building_pledge_oracle]
++name		= _("Pledge of the Oracle")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.pledge"
++graphic_alt     = "b.palace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_pledge"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A Great Oracle has pledged your next golden age. Each age needs great people of different kinds, one more than the last: no second Oracle can pledge until the age begins.\
++")
++
++[building_pledge_commander]
++name		= _("Pledge of the Commander")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.pledge"
++graphic_alt     = "b.palace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_pledge"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A Great Commander has pledged your next golden age. Each age needs great people of different kinds, one more than the last: no second Commander can pledge until the age begins.\
++")
++
++[building_pledge_spymaster]
++name		= _("Pledge of the Spymaster")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.pledge"
++graphic_alt     = "b.palace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_pledge"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A Great Spymaster has pledged your next golden age. Each age needs great people of different kinds, one more than the last: no second Spymaster can pledge until the age begins.\
+ ")
+ 
+ [building_capitalization]
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index 5a763f9..9b94b47 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -6268,3 +6268,37 @@ reqs    =
+       "Building", "Golden Age", "Player"
+     }
+ 
++; John's decisions of 2026-10-17 (plan decision 10): the three themed buildings of Physics, Medicine and Electricity.
++[effect_siege_workshop]
++type    = "Veteran_Build"
++value   = 1
++reqs    =
++    { "type", "name", "range", "present"
++      "Building", "Siege Workshop", "City", TRUE
++      "UnitFlag", "Siege", "Local", TRUE
++    }
++
++[effect_apothecary_health]
++type    = "Health_Pct"
++value   = 30
++reqs    =
++    { "type", "name", "range"
++      "Building", "Apothecary", "City"
++    }
++
++[effect_apothecary_regen]
++type    = "HP_Regen"
++value   = 10
++reqs    =
++    { "type", "name", "range"
++      "Building", "Apothecary", "City"
++      "UnitClass", "Land", "Local"
++    }
++
++[effect_telegraph_office]
++type    = "Max_Trade_Routes"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Telegraph Office", "City"
++    }
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index d7e5742..1be5fa7 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -772,6 +772,8 @@ function fc45_gp_turn(turn, year)
+         log.normal("FC45GP turn %d golden age of %s ended", turn, p.name)
+       end
+       for c in p:cities_iterate() do
++        local res_owner = rawget(_G, fc45_gp_key("fc45_gp_res_owner_", c.id))
++        if res_owner ~= nil and res_owner ~= p.id then fc45_gp_residents_restore(c, "new owner") end
+         local rate, pct = fc45_gp_rate(c)
+         if rate > 0 then
+           local key = fc45_gp_key("fc45_gp_pool_", c.id)
+@@ -793,9 +795,34 @@ signal.connect("turn_begin", "fc45_gp_turn")
+ 
+ function fc45_gp_city_destroyed(city, loser, destroyer)
+   fc45_gp_set(fc45_gp_key("fc45_gp_pool_", city.id), nil)
++  fc45_gp_set(fc45_gp_key("fc45_gp_res_", city.id), nil)
++  fc45_gp_set(fc45_gp_key("fc45_gp_res_owner_", city.id), nil)
+ end
+ signal.connect("city_destroyed", "fc45_gp_city_destroyed")
+ 
++-- Settled great people stay with a captured city (John's decision of 2026-10-17): every kind recorded in
++-- fc45_gp_res_<city id> is re-created for the new owner. The city_transferred signal fires only on conquest
++-- (server/citytools.c:2145), so fc45_gp_turn also compares each recorded city's owner with the one at settling
++-- and re-creates after a trade, an incitement or a civil war within the turn.
++function fc45_gp_residents_restore(city, why)
++  local have = rawget(_G, fc45_gp_key("fc45_gp_res_", city.id))
++  if have == nil then return end
++  for kind in string.gmatch(have, "([^;]+);") do
++    local b = find.building_type("Resident " .. kind)
++    if b ~= nil and not city:has_building(b) then
++      edit.create_building(city, b)
++      notify.event(city.owner, city.tile, E.WONDER_BUILD, _("The Resident %s of %s stays on under its new ruler."), kind, city.name)
++      log.normal("FC45GP turn %d resident %s re-created in %s for %s (%s)", game.turn(), kind, city.name, city.owner.name, why)
++    end
++  end
++  fc45_gp_set(fc45_gp_key("fc45_gp_res_owner_", city.id), city.owner.id)
++end
++
++function fc45_gp_city_transferred(city, loser, winner, reason)
++  fc45_gp_residents_restore(city, reason)
++end
++signal.connect("city_transferred", "fc45_gp_city_transferred")
++
+ -- Settling: "Join City" adds the citizen; the Resident building is founded here.
+ function fc45_gp_join(action, actor, city)
+   if action:rule_name() ~= "Join City" then return end
+@@ -803,6 +830,10 @@ function fc45_gp_join(action, actor, city)
+   if kind == nil then return end
+   local b = find.building_type("Resident " .. kind)
+   if b ~= nil and not city:has_building(b) then edit.create_building(city, b) end
++  local key = fc45_gp_key("fc45_gp_res_", city.id)
++  local have = rawget(_G, key) or ""
++  if not string.find(have, kind .. ";", 1, true) then fc45_gp_set(key, have .. kind .. ";") end
++  fc45_gp_set(fc45_gp_key("fc45_gp_res_owner_", city.id), city.owner.id)
+   log.normal("FC45GP turn %d settled %s of %s in %s unit %d", game.turn(), actor.utype:rule_name(), actor.owner.name, city.name, actor.id)
+ end
+ signal.connect("action_started_unit_city", "fc45_gp_join")
+@@ -854,19 +885,53 @@ function fc45_gp_deed(action, actor)
+ end
+ signal.connect("action_started_unit_self", "fc45_gp_deed")
+ 
+--- A pledge counts towards the next age: the first age costs one great person, the second two, and so on.
+--- The age is the "Golden Age" small wonder in the capital for FC45_GOLDEN_TURNS turns.
++-- A pledge counts towards the next age: the first age costs one great person, the second two of different
++-- kinds, the third three (John's decision of 2026-10-17). Each kind that has pledged holds a "Pledge of the
++-- <Kind>" small wonder in the capital, which its enabler reads, so a second pledge of that kind is refused
++-- before it reaches here. The age is the "Golden Age" small wonder in the capital for FC45_GOLDEN_TURNS turns,
++-- and starting it clears the pledges.
++FC45_GP_KINDS = {"Sage", "Builder", "Magnate", "Virtuoso", "Oracle", "Commander", "Spymaster"}
++
++function fc45_gp_pledged(p)
++  local kinds, n = {}, 0
++  for _, kind in ipairs(FC45_GP_KINDS) do
++    local b = find.building_type("Pledge of the " .. kind)
++    for c in p:cities_iterate() do
++      if b ~= nil and c:has_building(b) then
++        kinds[kind] = true
++        n = n + 1
++        break
++      end
++    end
++  end
++  return kinds, n
++end
++
+ function fc45_gp_pledge(actor)
+   local p = actor.owner
++  local kind = fc45_gp_kind_of_unit[actor.utype:rule_name()]
+   local key_pl, key_ct = fc45_gp_key("fc45_golden_pledges_", p.id), fc45_gp_key("fc45_golden_count_", p.id)
+-  local pledges, need = fc45_gp_get(key_pl) + 1, 1 + fc45_gp_get(key_ct)
++  local pledged, pledges = fc45_gp_pledged(p)
++  local need = 1 + fc45_gp_get(key_ct)
+   local home = fc45_gp_home(p)
+-  if pledges < need or home == nil then
++  if home == nil then
++    log.normal("FC45GP turn %d pledge by %s of %s unit %d lost: no city", game.turn(), actor.utype:rule_name(), p.name, actor.id)
++    return
++  end
++  if not pledged[kind] then pledges = pledges + 1 end
++  if pledges < need then
++    edit.create_building(home, find.building_type("Pledge of the " .. kind))
+     fc45_gp_set(key_pl, pledges)
+-    notify.event(p, actor.tile, E.SCRIPT, _("%d of %d great people have pledged your next golden age."), pledges, need)
++    notify.event(p, actor.tile, E.SCRIPT, _("%d of %d great people of different kinds have pledged your next golden age."), pledges, need)
+     log.normal("FC45GP turn %d pledge %d of %d by %s of %s unit %d", game.turn(), pledges, need, actor.utype:rule_name(), p.name, actor.id)
+     return
+   end
++  for _, k in ipairs(FC45_GP_KINDS) do
++    local b = find.building_type("Pledge of the " .. k)
++    for c in p:cities_iterate() do
++      if b ~= nil and c:has_building(b) then edit.remove_building(c, b) end
++    end
++  end
+   fc45_gp_set(key_pl, 0)
+   fc45_gp_set(key_ct, need)
+   fc45_gp_set(fc45_gp_key("fc45_golden_until_", p.id), game.turn() + FC45_GOLDEN_TURNS)
+@@ -888,7 +953,8 @@ end
+ signal.connect("tech_researched", "fc45_gp_tech")
+ 
+ -- The AI's rule (design note section 6): pledge when enough great people are at hand and no age runs;
+--- Sage, Virtuoso and Magnate do their deed where they stand; Oracle and Commander settle where no Resident
++-- Sage, Virtuoso and Magnate do their deed where they stand (the pledge takes one great person of each kind
++-- not yet pledged); Oracle and Commander settle where no Resident
+ -- of their kind is, else deed; the Builder is left to the native AI (Help Wonder) for 10 turns and the
+ -- Spymaster (diplomat actions) for 20, then they settle. A deed an enabler refuses falls through to settling.
+ function fc45_gp_ai(p, turn)
+@@ -899,10 +965,19 @@ function fc45_gp_ai(p, turn)
+   end
+   if #people == 0 then return end
+   local running = rawget(_G, fc45_gp_key("fc45_golden_until_", p.id)) ~= nil
+-  local need = 1 + fc45_gp_get(fc45_gp_key("fc45_golden_count_", p.id)) - fc45_gp_get(fc45_gp_key("fc45_golden_pledges_", p.id))
+-  if not running and #people >= need then
++  local pledged, pledges = fc45_gp_pledged(p)
++  local need = 1 + fc45_gp_get(fc45_gp_key("fc45_golden_count_", p.id)) - pledges
++  local picks, seen = {}, {}
++  for _, u in ipairs(people) do
++    local kind = fc45_gp_kind_of_unit[u.utype:rule_name()]
++    if not pledged[kind] and not seen[kind] then
++      seen[kind] = true
++      picks[#picks + 1] = u
++    end
++  end
++  if not running and #picks >= need then
+     for i = 1, need do
+-      local u = people[i]
++      local u = picks[i]
+       local uid, uname = u.id, u.utype:rule_name()
+       if edit.perform_action(u, pledge) then
+         log.normal("FC45GP turn %d ai pledge by %s of %s unit %d", turn, uname, p.name, uid)
+diff --git a/data/civ45/techs.ruleset b/data/civ45/techs.ruleset
+index ab83d70..487df32 100644
+--- a/data/civ45/techs.ruleset
++++ b/data/civ45/techs.ruleset
+@@ -52,27 +52,27 @@ cost_pct = 100
+ 
+ [techclass_classical]
+ name     = _("Classical")
+-cost_pct = 100
++cost_pct = 150
+ 
+ [techclass_medieval]
+ name     = _("Medieval")
+-cost_pct = 110
++cost_pct = 175
+ 
+ [techclass_renaissance]
+ name     = _("Renaissance")
+-cost_pct = 120
++cost_pct = 200
+ 
+ [techclass_industrial]
+ name     = _("Industrial")
+-cost_pct = 130
++cost_pct = 225
+ 
+ [techclass_modern]
+ name     = _("Modern")
+-cost_pct = 140
++cost_pct = 250
+ 
+ [techclass_information]
+ name     = _("Information")
+-cost_pct = 150
++cost_pct = 275
+ 
+ ; /* <-- avoid gettext warnings
+ ;
+@@ -187,7 +187,7 @@ graphic_alt = "-"
+ name     = _("Archery")
+ req1     = "Hunting"
+ req2     = "Warrior Code"
+-class    = "Classical"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.archery"
+ graphic_alt = "a.warrior_code"
+@@ -542,6 +542,16 @@ flags    = ""
+ graphic     = "a.iron_working"
+ graphic_alt = "-"
+ 
++[advance_labor_union]
++name     = _("Labor Union")
++req1     = "Communism"
++req2     = "Mobile Warfare"
++class    = "Modern"
++flags    = ""
++graphic     = "a.labor_union"
++graphic_alt = "-"
++helptext = _("Organised labour wins the vote and the eight-hour day: Women's Suffrage can be built.")
++
+ [advance_laser]
+ name     = _("Laser")
+ req1     = "Computers"
+@@ -707,6 +717,16 @@ graphic     = "a.mysticism"
+ graphic_alt = "-"
+ helptext = _("Improves the effect of Temples.")
+ 
++[advance_nanomaterials]
++name     = _("Nanomaterials")
++req1     = "Plastics"
++req2     = "Computers"
++class    = "Information"
++flags    = ""
++graphic     = "a.nanomaterials"
++graphic_alt = "a.plastics"
++helptext = _("Materials engineered atom by atom: the Space Elevator and its Tether can be built.")
++
+ [advance_navigation]
+ name     = _("Navigation")
+ req1     = "Compass"
+@@ -883,6 +903,16 @@ helptext = _("Doubles movement of nuclear units.")
+ ; seek to find out if you are a god yourself. You are after all extremely
+ ; powerful.
+ 
++[advance_ruler_apotheosis]
++name        = _("Ruler Apotheosis")
++req1        = "Polytheism"
++req2        = "Mysticism"
++class    = "Classical"
++flags       = ""
++graphic     = "a.apotheosis"
++graphic_alt = "a.polytheism"
++helptext = _("The ruler is worshipped as a god: the Altar to The Divine Ruler can be built.")
++
+ [advance_sanitation]
+ name     = _("Sanitation")
+ req1     = "Bridge Building"
+diff --git a/data/civ45/terrain.ruleset b/data/civ45/terrain.ruleset
+index 9aed11a..c5b1573 100644
+--- a/data/civ45/terrain.ruleset
++++ b/data/civ45/terrain.ruleset
+@@ -596,7 +596,7 @@ defense_bonus        = 0
+ food                 = 2
+ shield               = 0
+ trade                = 0
+-resources            = "Resources"
++resources            = "Resources", "Horses"
+ road_food_incr_pct   = 0
+ road_shield_incr_pct = 0
+ road_trade_incr_pct  = 100
+@@ -812,7 +812,7 @@ defense_bonus        = 0
+ food                 = 1
+ shield               = 1
+ trade                = 0
+-resources            = "Buffalo", "Wheat"
++resources            = "Buffalo", "Wheat", "Horses"
+ road_food_incr_pct   = 0
+ road_shield_incr_pct = 0
+ road_trade_incr_pct  = 100
+@@ -1111,6 +1111,13 @@ identifier  = "w"
+ trade       = 4
+ # hills-only.
+ 
++[resource_horses]
++extra       = "Horses"
++identifier  = "k"
++shield      = 1
++trade       = 1
++# grassland, plains: the mounted units need one in the city's radius
++
+ [resource_oil]
+ extra       = "Oil"
+ identifier  = "x"
+@@ -2154,6 +2161,20 @@ rmact_gfx      = "None"
+ rmact_gfx_alt  = "-"
+ rmact_gfx_alt2 = "-"
+ 
++[extra_horses]
++name           = _("Horses")
++category       = "Resource"
++causes         = "Resource"
++;rmcauses       = ""
++graphic        = "ts.horses"
++graphic_alt    = "ts.buffalo"
++activity_gfx   = "None"
++act_gfx_alt    = "-"
++act_gfx_alt2   = "-"
++rmact_gfx      = "None"
++rmact_gfx_alt  = "-"
++rmact_gfx_alt2 = "-"
++
+ [extra_wheat]
+ name           = _("Wheat")
+ category       = "Resource"
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 82592f2..432e327 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -1194,6 +1194,43 @@ helptext      = _("\
+ Riflemen of the machine age, in uniform and in numbers: the backbone of an industrial army.\
+ ")
+ 
++[unit_alpine_troops]
++name          = _("Alpine Troops")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Tactics", "Player"
++  }
++obsolete_by   = "Infantry"
++graphic       = "u.alpine_troops"
++graphic_alt   = "-"
++sound_move    = "m_alpine_troops"
++sound_move_alt = "m_generic"
++sound_fight   = "f_alpine_troops"
++sound_fight_alt = "f_generic"
++build_cost    = 100
++pop_cost      = 0
++attack        = 14
++defense       = 14
++hitpoints     = 20
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++embarks       = "Helicopter"
++disembarks    = "Helicopter"
++flags         = "Shield2Gold", "ShieldToGold", "IgTer", "Capturer", "Fortress", "FleshBased", "Gun"
++roles         = "DefendOk", "DefendOkStartUnit"
++helptext      = _("\
++Mountain infantry: Riflemen's strength, and every tile costs them a single move, so they cross hills, forest and swamp as fast as a road.\
++")
++
+ [unit_machine_gunners]
+ name          = _("Machine Gunners")
+ class         = "Land"
+@@ -1631,6 +1668,7 @@ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Horseback Riding", "Player"
++    "Extra", "Horses", "City"
+   }
+ obsolete_by   = "Horse Bowmen"
+ graphic       = "u.horsemen"
+@@ -1674,6 +1712,7 @@ reqs          =
+   { "type", "name", "range"
+     "Tech", "Archery", "Player"
+     "Tech", "Horseback Riding", "Player"
++    "Extra", "Horses", "City"
+   }
+ obsolete_by   = "Knights"
+ graphic       = "u.horse_bowmen"
+@@ -1714,6 +1753,7 @@ class         = "Big Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "The Wheel", "Player"
++    "Extra", "Horses", "City"
+   }
+ obsolete_by   = "Knights"
+ graphic       = "u.chariot"
+@@ -1791,12 +1831,54 @@ Elephants are towering animals trained for war that are often used as\
+  powerful shock troops.\
+ ")
+ 
++[unit_zealots]
++name          = _("Zealots")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Monotheism", "Player"
++    "Extra", "Horses", "City"
++  }
++obsolete_by   = "Knights"
++graphic       = "u.zealots"
++graphic_alt   = "u.crusaders"
++sound_move    = "m_zealots"
++sound_move_alt = "m_generic"
++sound_fight   = "f_zealots"
++sound_fight_alt = "f_generic"
++build_cost    = 50
++pop_cost      = 0
++attack        = 8
++defense       = 8
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased", "Mounted"
++roles         = "AttackFastStartUnit", "Hunter"
++bonuses       =
++    { "flag", "type", "value"
++      "Siege", "DefenseMultiplierPct", 50
++      "Siege", "DefenseDividerPct", 50
++    }
++helptext      = _("\
++Riders sworn to a cause, cheaper than Knights and without their armour: a faith's or a ruler's mounted levy, raised wherever horses are.\
++")
++
+ [unit_knights]
+ name          = _("Knights")
+ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Chivalry", "Player"
++    "Extra", "Horses", "City"
+     "Extra", "Iron", "City"
+   }
+ obsolete_by   = "Dragoons"
+@@ -1839,6 +1921,7 @@ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Leadership", "Player"
++    "Extra", "Horses", "City"
+   }
+ obsolete_by   = "Cavalry"
+ graphic       = "u.dragoons"
+@@ -1879,6 +1962,7 @@ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Tactics", "Player"
++    "Extra", "Horses", "City"
+   }
+ obsolete_by   = "Armoured Cars"
+ graphic       = "u.cavalry"
+@@ -3062,7 +3146,7 @@ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 5
+ vision_radius_sq = 8
+-transport_cap = 8
++transport_cap = 4
+ fuel          = 0
+ uk_happy      = 0
+ uk_shield     = 1
+-- 
+2.56.0
+

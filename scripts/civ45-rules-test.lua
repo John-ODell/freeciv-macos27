@@ -156,6 +156,7 @@ function fc45_rules_test_run()
   if tester ~= nil then fc45_tech_test_run(tester) end
   if tester ~= nil and animals ~= nil then fc45_roster_test_run(tester, animals, used) end
   if tester ~= nil then fc45_gp_test_run(tester, used) end
+  if tester ~= nil then fc45_decisions_test_run(tester) end
 end
 
 -- Great people (slice 11, notes/freeciv45/design/great-people.md): points, deeds, the golden age and the
@@ -235,8 +236,42 @@ function fc45_gp_test_run(tester, used)
         and effects.city_bonus(city, "User_Effect_4") == 100)
   local again = gp("Sage")
   did = again:perform_action(pledge)
-  check("the second golden age needs two pledges: one counts and starts nothing",
-        did and rawget(_G, fc45_gp_key("fc45_golden_pledges_", pid)) == 1 and rawget(_G, fc45_gp_key("fc45_golden_count_", pid)) == 1)
+  local marker = find.building_type("Pledge of the Sage")
+  check("the second golden age needs two pledges: one counts, marks the Sage's pledge and starts nothing",
+        did and rawget(_G, fc45_gp_key("fc45_golden_pledges_", pid)) == 1 and rawget(_G, fc45_gp_key("fc45_golden_count_", pid)) == 1
+        and city:has_building(marker))
+  local third = gp("Sage")
+  local refused = not third:perform_action(pledge)
+  check("a second Sage cannot pledge the same age: the pledge needs great people of different kinds",
+        refused and rawget(_G, fc45_gp_key("fc45_golden_pledges_", pid)) == 1)
+  if not refused then third = nil end
+  if third ~= nil then third:kill("disbanded", nil) end
+  -- Residents stay with a city that changes hands (John's decision of 2026-10-17): a second city of the
+  -- Tester's settles a Great Oracle and is handed to another player with edit.transfer_city, which emits no
+  -- city_transferred signal (only unit_conquer_city does, server/citytools.c:2145), so the turn_begin sweep
+  -- is what keeps the Resident; a turn later the city is checked for it. The restore itself is checked then
+  -- too, by removing Testerburg's Resident Sage and calling it.
+  local victim = nil
+  for p in players_iterate() do
+    if p.id ~= tester.id and fc45_is_civ(p) and victim == nil then victim = p end
+  end
+  local spot = nil
+  for t in city.tile:square_iterate(6) do
+    if spot == nil and t:sq_distance(city.tile) >= 16 and t:city() == nil and t:num_units() == 0
+       and (t.terrain:rule_name() == "Grassland" or t.terrain:rule_name() == "Plains") then spot = t end
+  end
+  if victim ~= nil and spot ~= nil and edit.create_city(tester, spot, "Residentia") then
+    local c2 = spot:city()
+    local oracle = edit.create_unit(tester, c2.tile, find.unit_type("Great Oracle"), 0, c2, -1)
+    local settled = oracle:perform_action(find.action("Join City"), c2)
+    local handed = edit.transfer_city(c2, victim)
+    log.normal("FC45TEST handover: Residentia settled an Oracle %s, handed to %s %s, owner now %s",
+               tostring(settled), victim.name, tostring(handed), c2.owner.name)
+    check("a second city settles a Great Oracle and is handed to another player", settled and handed and c2.owner.id == victim.id)
+    fc45_test.gp_city2 = c2.id
+  else
+    log.normal("FC45TEST SKIP no second player or no site for Residentia (victim %s, spot %s)", tostring(victim ~= nil), tostring(spot ~= nil))
+  end
   -- End the age next turn, and put the city one turn short of a birth: both are checked then.
   fc45_gp_set(fc45_gp_key("fc45_golden_until_", pid), game.turn() + 2)
   fc45_gp_set(fc45_gp_key("fc45_gp_pool_", city.id), 148)
@@ -262,6 +297,15 @@ function fc45_gp_test_later()
         and fc45_gp_get(fc45_gp_key("fc45_gp_born_", pid)) == fc45_test.gp_born + 1)
   check("the golden age has ended a turn later", not city:has_building(find.building_type("Golden Age"))
         and rawget(_G, fc45_gp_key("fc45_golden_until_", pid)) == nil)
+  if fc45_test.gp_city2 ~= nil then
+    local c2 = find.city(nil, fc45_test.gp_city2)
+    local res = find.building_type("Resident Oracle")
+    local owner_rec = c2 and rawget(_G, fc45_gp_key("fc45_gp_res_owner_", c2.id))
+    log.normal("FC45TEST handover a turn later: city %s, owner %s, Resident Oracle %s, record owner %s",
+               tostring(c2 ~= nil), c2 and c2.owner.name or "-", tostring(c2 and c2:has_building(res)), tostring(owner_rec))
+    check("the handed-over city still has its Resident Oracle a turn later, under its new owner",
+          c2 ~= nil and c2.owner.id ~= pid and c2:has_building(res) and owner_rec == c2.owner.id)
+  end
   if born ~= nil then
     local join = find.action("Join City")
     local size = city.size
@@ -273,32 +317,75 @@ function fc45_gp_test_later()
     local joined = second:perform_action(join, city)
     local deed = second:perform_action(find.action("User Action 3"))
     check("a second Sage cannot settle where a Resident Sage is, but can do its deed", not joined and deed)
+    -- Residents stay with a captured city: the record names the kind, and the restore re-creates the building.
+    local record = rawget(_G, fc45_gp_key("fc45_gp_res_", city.id))
+    edit.remove_building(city, resident)
+    fc45_gp_residents_restore(city, "test")
+    log.normal("FC45TEST residents: record %s, Resident Sage back %s", tostring(record), tostring(city:has_building(resident)))
+    check("a settled Sage is recorded for the city and re-created after the city changes hands",
+          record == "Sage;" and city:has_building(resident))
   end
 end
 
--- The tech tree: the six new techs exist and the three dropped ones do not, and the cost of a tech is what
--- the Linear style gives: base_tech_cost 10 times the number of techs it needs counted with itself
--- (common/tech.c, num_reqs starts at 1), times the era's cost_pct, times Tech_Cost_Factor 3. Gunpowder needs
--- 17 techs in the Renaissance (120%): 30 x 18 x 1.2 = 648; Fusion Power needs 70 in the Information era
--- (150%): 30 x 71 x 1.5 = 3195; a root tech such as Alphabet is 30. (The design note counted the tech itself
--- out, so its 612 and 3150 are one tier short.) Player:tech_cost reads research_total_bulbs_required for the
--- Tester, who has no embassy, so no leakage lowers it; under this style the cost does not depend on what the
--- player already knows.
+-- The tech tree: the six new techs and the three restored ones (John's decision of 2026-10-17) exist, and the
+-- cost of a tech is what the Linear style gives: base_tech_cost 10 times the number of techs it needs counted
+-- with itself (common/tech.c, num_reqs starts at 1), times the era's cost_pct (common/tech.c:273),
+-- times Tech_Cost_Factor 3. Gunpowder needs 17 techs in the Renaissance (200%): 10 x 18 x 2 x 3 = 1080; Fusion
+-- Power needs 70 in the Information era (275%): 710 x 2.75 = 1952.5 (the cost is a double), x 3 = 5857; a root tech such as Alphabet
+-- is 30. Player:tech_cost reads research_total_bulbs_required for the Tester, who has no embassy, so no leakage
+-- lowers it; under this style the cost does not depend on what the player already knows.
 function fc45_tech_test_run(tester)
   local have = find.tech_type("Agriculture") ~= nil and find.tech_type("Hunting") ~= nil
     and find.tech_type("Archery") ~= nil and find.tech_type("Machinery") ~= nil
     and find.tech_type("Compass") ~= nil and find.tech_type("Printing") ~= nil
-  local gone = find.tech_type("Ruler Apotheosis") == nil and find.tech_type("Nanomaterials") == nil
-    and find.tech_type("Labor Union") == nil
-  check("the six new techs exist and the three dropped ones are gone", have and gone)
+  local back = find.tech_type("Ruler Apotheosis") ~= nil and find.tech_type("Nanomaterials") ~= nil
+    and find.tech_type("Labor Union") ~= nil
+  check("the six new techs and the three restored ones exist", have and back)
   if not have then return end
   local al = tester:tech_cost(find.tech_type("Alphabet"))
   local gp, fp = tester:tech_cost(find.tech_type("Gunpowder")), tester:tech_cost(find.tech_type("Fusion Power"))
   log.normal("FC45TEST tech costs for the Tester: Alphabet %d, Gunpowder %d, Fusion Power %d (sciencebox %s)",
              al, gp, fp, tostring(server.setting.get("sciencebox")))
   check("a root tech (Alphabet) costs 30 bulbs", al == 30)
-  check("Gunpowder costs 648 bulbs (17 techs needed plus itself, Renaissance 120%)", gp == 648)
-  check("Fusion Power costs 3195 bulbs (70 techs needed plus itself, Information era 150%)", fp == 3195)
+  check("Gunpowder costs 1080 bulbs (17 techs needed plus itself, Renaissance 200%)", gp == 1080)
+  check("Fusion Power costs 5857 bulbs (70 techs needed plus itself, Information era 275%)", fp == 5857)
+end
+
+-- John's decisions of 2026-10-17 (plan decisions 10 and 11): the Horses gate, the two units that came back, the
+-- restored techs' unlocks and the three themed buildings. Lua has no cargo getter and no city-level build check, so
+-- the Transport's 4 and the Horses gate are shell checks; the Residents-on-capture and distinct-kind pledge cases sit with the great people cases.
+function fc45_decisions_test_run(tester)
+  local city = fc45_test.city
+  if city == nil then
+    log.normal("FC45TEST SKIP no Testerburg for the decisions cases")
+    return
+  end
+  -- The Horses gate is a city-range Extra requirement, which Lua cannot test: Player:can_build_direct is
+  -- can_player_build_unit_direct (common/unittype.c), which treats city-range requirements as possible, so it
+  -- said true with no Horses anywhere near Testerburg. The runner greps the seven requirements instead.
+  local alpine, zealots = find.unit_type("Alpine Troops"), find.unit_type("Zealots")
+  check("Alpine Troops are back as a Gun unit that ignores terrain, Zealots as a mounted unit that withdraws",
+        alpine ~= nil and alpine:has_flag("Gun") and alpine:has_flag("IgTer")
+        and zealots ~= nil and zealots:has_flag("Mounted") and zealots:has_flag("Withdraws"))
+  local altar, suffrage = find.building_type("Altar to The Divine Ruler"), find.building_type("Women's Suffrage")
+  local no_altar, no_suffrage = tester:can_build_direct(altar), tester:can_build_direct(suffrage)
+  edit.give_tech(tester, find.tech_type("Ruler Apotheosis"), 0, false, "test")
+  edit.give_tech(tester, find.tech_type("Labor Union"), 0, false, "test")
+  check("the Altar needs Ruler Apotheosis and Women's Suffrage needs Labor Union again",
+        not no_altar and not no_suffrage and tester:can_build_direct(altar) and tester:can_build_direct(suffrage))
+  local catapult = edit.create_unit(tester, city.tile, find.unit_type("Catapult"), 0, city, -1)
+  local vet0, health0, routes0 = effects.unit_bonus(catapult, nil, "Veteran_Build"), effects.city_bonus(city, "Health_Pct"),
+                                 effects.city_bonus(city, "Max_Trade_Routes")
+  city:create_building(find.building_type("Siege Workshop"))
+  city:create_building(find.building_type("Apothecary"))
+  city:create_building(find.building_type("Telegraph Office"))
+  local vet1, health1, routes1 = effects.unit_bonus(catapult, nil, "Veteran_Build"), effects.city_bonus(city, "Health_Pct"),
+                                 effects.city_bonus(city, "Max_Trade_Routes")
+  log.normal("FC45TEST themed buildings: Veteran_Build %d to %d, Health_Pct %d to %d, Max_Trade_Routes %d to %d",
+             vet0, vet1, health0, health1, routes0, routes1)
+  check("a Siege Workshop gives siege units a veteran level, an Apothecary 30 health, a Telegraph Office a trade route",
+        vet1 == vet0 + 1 and health1 == health0 + 30 and routes1 == routes0 + 1)
+  catapult:kill("disbanded", nil)
 end
 
 -- Slice 3, upgrades and the draft. The Tester gets a city of its own (it has none: nothing moved its
@@ -390,10 +477,10 @@ function fc45_roster_test_run(tester, animals, used)
   end
   check("the eleven renamed units keep their rule names and show the new ones", ok)
   ok = true
-  for _, name in ipairs({ "Jaguar Warrior", "Immortal", "Alpine Troops", "Crusaders", "Mechanic" }) do
+  for _, name in ipairs({ "Jaguar Warrior", "Immortal", "Crusaders", "Mechanic" }) do
     if find.unit_type(name) ~= nil then ok = false end
   end
-  check("Jaguar Warrior, Immortal, Alpine Troops, Crusaders and Mechanic are gone", ok)
+  check("Jaguar Warrior, Immortal, Crusaders and Mechanic are gone (Alpine Troops came back, Crusaders as Zealots)", ok)
   ok = true
   for _, name in ipairs({ "Scout", "Axemen", "Horse Bowmen", "War Galley", "Macebearers", "Longbowmen",
                           "Crossbowmen", "Trebuchet", "Grenadiers", "Ship of the Line", "Infantry",

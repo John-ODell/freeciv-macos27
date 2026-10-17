@@ -92,6 +92,7 @@ Axemen in the open. A city with Archers behind walls holds against anything of i
 | Longbowmen | Land [Archer] | Feudalism | 6 | 1 | 45 | | +50% in cities; +25% on hills (`Defend_Bonus` cannot do this per defender; use `Fortify_Defense_Bonus` with a `Terrain Hills Tile` req, inferred) | Riflemen | new |
 | Crossbowmen | Land [Archer] | Machinery† | 6 | 1 | 50 | Iron | +50% vs Melee | Riflemen | new |
 | Knights | Land [Mounted] | Chivalry | 10 | 2 | 70 | Horses, Iron | `Withdraws`; +50% vs Siege | Dragoons | stay |
+| Zealots | Land [Mounted] | Monotheism | 8 | 2 | 50 | Horses | `Withdraws`; +50% vs Siege; no armour, so no Iron: the cheap rider of the era (civ45's Crusaders under a nation-neutral name) | Knights | back, John 2026-10-17 |
 | Trebuchet | Big Land [Siege] | Machinery† | 4 | 1 | 50 | | `Collateral`, `bombard_rate` 8; +100% vs cities | Cannon | new |
 | Caravel | Sea [Naval] | Optics† | 3 | 3 | 40 | | cargo 1 (Small Land only), may cross ocean | Galleon | stay |
 | Explorer | Small Land [Recon] | Optics† | 1 | 2 | 30 | | `NonMil`, `IgTer`, `IgZOC` | none | stay |
@@ -117,9 +118,10 @@ Axemen in the open. A city with Archers behind walls holds against anything of i
 | Infantry | Land [Gun] | Machine Tools | 20 | 1 | 120 | | `DefendGood`, `Marines` flag dropped | Mechanized Infantry | new |
 | Machine Gunners | Land [Gun] | Machine Tools | 18 | 1 | 110 | | attack 0; +50% vs Gun and Melee; `DefendGood` | Mechanized Infantry | new |
 | Cavalry | Land [Mounted] | Tactics | 15 | 2 | 100 | Horses | `Withdraws`; +50% vs Siege | Armoured Cars | stay |
+| Alpine Troops | Land [Gun] | Tactics | 14 | 1 | 100 | | `IgTer` (every tile costs one move); `DefendOk` | Infantry | back, John 2026-10-17 |
 | Artillery | Big Land [Siege] | Steel | 18 | 1 | 110 | | `Collateral`, `bombard_rate` 14; +100% vs cities; `CityBuster` dropped (one strength, so firepower stays 1) | Howitzer | stay |
 | Ironclad | Sea [Naval] | Steam Engine | 14 | 4 | 90 | Iron, Coal | coast only (`Trireme`-style restriction through `unitclass` is not possible for class Sea; use the built-in `CoastStrict` flag, `civ45/units.ruleset:387`) | Destroyer | stay |
-| Transport | Sea [Naval] | Industrialization | 3 | 5 | 50 | | attack 0; cargo 8 | none | stay |
+| Transport | Sea [Naval] | Industrialization | 3 | 5 | 50 | | attack 0; cargo 4 (John 2026-10-17; the first build had 8) | none | stay |
 | Engineers | Small Land | Explosives | 0 | 2 | 30 | | `Transform` | none | stay |
 | Freight | Merchant | The Corporation | 0 | 2 | 50 | | | none | stay |
 | Spy | Small Land | Espionage | 0 | 3 | 30 | | | none | stay |
@@ -168,13 +170,14 @@ Axemen in the open. A city with Archers behind walls holds against anything of i
 | Leader, Barbarian Leader, Storm | stay | Sandbox machinery: the game-loss unit, barbarian ransom, weather (`civ45/units.ruleset:3012-3160`) |
 | Fanatics | stay | The Fundamentalism unit; it already has `AddToCity` and a government requirement, so it is the model for the draft units |
 | Jaguar Warrior, Immortal | go | The reference game's own unique units by name; the unique-unit pass (section 4) brings nation units back under Freeciv45 names |
-| Alpine Troops | go | Infantry and Partisan cover the niche; one unit less to paint |
-| Crusaders | go | Knights cover the niche; the name belongs to one faith |
+| Alpine Troops | back (John 2026-10-17) | The first build dropped it; it returns nation-neutral at Tactics, strength 14, `IgTer`, until the unique-unit pass |
+| Crusaders | renamed Zealots (John 2026-10-17) | The first build dropped it; the name belongs to one faith, so it returns as Zealots: Monotheism, strength 8, move 2, Horses, no Iron |
 | Mechanic | go | Sandbox's infrastructure repair unit; Workers and Engineers take its `Transform` and repair roles |
 | Great people (7) | new, in `great-people.md` | |
 
-Count: 46 units stay, 11 are renamed, 5 go, 18 are new here (15 military and recon plus 3 draft units), plus the
-7 great people: 82 unit types before unique units. Of the 62 today, every one has a verdict above.
+Count: 46 units stay, 12 are renamed (Crusaders to Zealots among them), 3 go, 18 are new here (15 military and recon
+plus 3 draft units), plus Alpine Troops back and the 7 great people: 85 unit types in `units.ruleset` before unique units
+(78 of the roster and the 7 great people). Of the 62 today, every one has a verdict above.
 
 ## 3. Balance logic per era
 
@@ -247,6 +250,11 @@ rest the standard unit. Names, nations and edges are a separate design note once
 3. Keep Cruiser and Ship of the Line (two capital ships the reference roster lacks), or cut them for art?
 4. Should Alpine Troops and Crusaders go, or stay as nation-neutral units until the unique-unit pass?
 5. Transport cargo: 8 as today (Freeciv) or 4 (fewer, bigger invasions)?
+
+Answered by John 2026-10-17 (plan decision 11): three draft units as built; hit points 10/20/30 as built; both
+Cruiser and Ship of the Line stay; Alpine Troops come back as they were and Crusaders come back as Zealots, both
+nation-neutral until the unique-unit pass; Transport cargo 4. Horses gate the mounted units from this build on
+(the resource exists on grassland and plains), not from slice 4.
 
 ## Implementation order
 

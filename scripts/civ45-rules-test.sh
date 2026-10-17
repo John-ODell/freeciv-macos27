@@ -60,20 +60,31 @@ done
 # The tech tree's shape (techs.ruleset; Lua has no class getter): seven era classes, and every advance in one.
 TR="$DATA/civ45/techs.ruleset"
 NC=$(grep -c '^\[techclass_' "$TR"); NA=$(grep -c '^\[advance_' "$TR"); NCL=$(grep -c '^class    = "' "$TR")
-if [ "$NC" = 7 ] && [ "$NA" = 92 ] && [ "$NCL" = 92 ]; then echo "FC45TEST PASS techs.ruleset: 7 era classes, 92 advances, each in a class"
-else echo "FC45TEST FAIL techs.ruleset: $NC classes, $NA advances, $NCL with a class (want 7, 92, 92)"; RC=1; fi
+if [ "$NC" = 7 ] && [ "$NA" = 95 ] && [ "$NCL" = 95 ]; then echo "FC45TEST PASS techs.ruleset: 7 era classes, 95 advances, each in a class"
+else echo "FC45TEST FAIL techs.ruleset: $NC classes, $NA advances, $NCL with a class (want 7, 95, 95)"; RC=1; fi
+# The era cost curve (decision 10, John 2026-10-17): 100, 150, 175, 200, 225, 250, 275.
+PCT=$(grep "^cost_pct" "$TR" | awk '{print $3}' | tr "\n" " ")
+if [ "$PCT" = "100 150 175 200 225 250 275 " ]; then echo "FC45TEST PASS techs.ruleset: era cost_pct 100 150 175 200 225 250 275"
+else echo "FC45TEST FAIL techs.ruleset: era cost_pct is $PCT"; RC=1; fi
 # The draft units cost a citizen (units.ruleset; Lua has no pop_cost getter).
 for u in levy militia conscripts; do
   if sed -n "/^\[unit_$u\]/,/^\[unit_/p" "$DATA/civ45/units.ruleset" | grep -q '^pop_cost      = 1'; then
     echo "FC45TEST PASS units.ruleset: $u costs one citizen"; else echo "FC45TEST FAIL units.ruleset: $u lacks pop_cost 1"; RC=1; fi
 done
-# The roster's shape (units.ruleset): 83 unit types (76 of the roster and 7 great people), one strength number for attack and defence unless one of
+# The roster's shape (units.ruleset): 85 unit types (78 of the roster and 7 great people), one strength number for attack and defence unless one of
 # them is 0, firepower 1 everywhere, and City Walls keyed on the attacker's class flag rather than the Ground class.
 UR="$DATA/civ45/units.ruleset"
 NU=$(grep -c '^\[unit_' "$UR")
 UNEVEN=$(awk '/^\[unit_/{n=$0} /^attack  *=/{a=$3} /^defense  *=/{d=$3} /^firepower  *=/{if ((a!=0 && d!=0 && a!=d) || $3!=1) print n}' "$UR" | tr '\n' ' ')
-if [ "$NU" = 83 ] && [ -z "$UNEVEN" ]; then echo "FC45TEST PASS units.ruleset: 83 unit types, one strength each, firepower 1"
+if [ "$NU" = 85 ] && [ -z "$UNEVEN" ]; then echo "FC45TEST PASS units.ruleset: 85 unit types, one strength each, firepower 1"
 else echo "FC45TEST FAIL units.ruleset: $NU unit types, uneven or firepower not 1: $UNEVEN"; RC=1; fi
+# Transport cargo 4 and the Horses gate on the seven mounted units (decision 11, John 2026-10-17); Lua reads neither.
+if sed -n "/^\[unit_transport\]/,/^\[unit_/p" "$UR" | grep -q '^transport_cap = 4'; then echo "FC45TEST PASS units.ruleset: a Transport carries 4"
+else echo "FC45TEST FAIL units.ruleset: the Transport's transport_cap is not 4"; RC=1; fi
+NH=$(grep -c '"Extra", "Horses", "City"' "$UR")
+if [ "$NH" = 7 ] && grep -q '^\[extra_horses\]' "$DATA/civ45/terrain.ruleset" && grep -q '^\[resource_horses\]' "$DATA/civ45/terrain.ruleset"; then
+  echo "FC45TEST PASS Horses is a resource and seven mounted units need it in the city's radius"
+else echo "FC45TEST FAIL Horses: $NH units need it (want 7), or terrain.ruleset lacks the extra or resource"; RC=1; fi
 NW=$(grep -c '^\[effect_city_walls_\(melee\|archer\|mounted\|siege\)\]' "$DATA/civ45/effects.ruleset")
 if [ "$NW" = 4 ] && ! grep -q '^\[effect_city_walls_0\]' "$DATA/civ45/effects.ruleset"; then
   echo "FC45TEST PASS effects.ruleset: City Walls are keyed on the attacker's class flag"

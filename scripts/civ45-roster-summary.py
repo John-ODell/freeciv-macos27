@@ -10,9 +10,9 @@ import collections, csv, gzip, re, sys
 ERAS = [
     ("I", ["Warriors", "Scout", "Phalanx", "Axemen", "Archers", "Horsemen", "Horse Bowmen", "Chariot", "Trireme", "Levy"]),
     ("II", ["Legion", "Elephants", "Catapult", "War Galley"]),
-    ("III", ["Macebearers", "Pikemen", "Longbowmen", "Crossbowmen", "Knights", "Trebuchet", "Caravel", "Explorer"]),
+    ("III", ["Macebearers", "Pikemen", "Longbowmen", "Crossbowmen", "Zealots", "Knights", "Trebuchet", "Caravel", "Explorer"]),
     ("IV", ["Musketeers", "Grenadiers", "Dragoons", "Cannon", "Galleon", "Frigate", "Ship of the Line", "Militia"]),
-    ("V", ["Riflemen", "Infantry", "Machine Gunners", "Cavalry", "Artillery", "Ironclad", "Transport", "Conscripts"]),
+    ("V", ["Riflemen", "Infantry", "Machine Gunners", "Alpine Troops", "Cavalry", "Artillery", "Ironclad", "Transport", "Conscripts"]),
     ("VI", ["Armoured Cars", "Armor", "Marines", "Paratroopers", "Partisan", "Fanatics", "Fighter", "Bomber", "Destroyer",
             "Cruiser", "Battleship", "Submarine", "Carrier", "Cruise Missile", "Nuclear"]),
     ("VII", ["Main Battle Tank", "Mech. Inf.", "Helicopter", "Air Defence Infantry", "Howitzer", "Jet Fighter",

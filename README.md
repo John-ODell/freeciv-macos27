@@ -47,7 +47,7 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 ```
 
 `build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
-`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004, 0006 and 0008 to 0013: sandbox
+`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004, 0006 and 0008 to 0014: sandbox
 plus stacks of units on a square map, siege units that wound whole stacks, fights to the death, six ways to win, upgrades
 that keep veterancy, draft units raised from a citizen, a tech tree in seven eras, a roster of 76 units with one
 strength number and class counters, and great people with residents, deeds and golden ages, see
