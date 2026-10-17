@@ -101,3 +101,18 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
   `tilesets/` (first made to the `tileset-t0` worktree, re-pointed to the main checkout after the merge), so any
   client on this machine can load the test tileset by name. Delete the two links to uninstall; nothing else.
 - `scripts/windows-of-pid` compiled again in the worktree (git-ignored).
+
+## Added and removed 2026-10-17 midday (local terrain-texture generation trial; all deleted the same day)
+
+- `~/freeciv-builds/art-venv/` (1.0 GB): Python 3.14 venv (`/opt/homebrew/bin/python3.14 -m venv`; the default python3 is
+  3.15, for which PyTorch has no wheel) with pip packages torch 2.14.1, torchvision, diffusers 0.41.0, transformers,
+  accelerate, safetensors, pillow. Used only by `~/freeciv-builds/art/tile_render.py`.
+- `~/freeciv-builds/hf-cache/` (6.7 GB): Hugging Face cache (`HF_HOME`) holding the fp16 safetensors of
+  `stabilityai/stable-diffusion-xl-base-1.0` at commit 462165984030d82259a11f4367a4eed129e94a7b, licence
+  CreativeML Open RAIL++-M (outputs belong to the person who makes them; the weights themselves are not redistributed
+  and are not part of any repo). No HF account or token was used.
+- `~/freeciv-builds/art/` : the render scripts and their output tiles.
+- **Removed 2026-10-17 afternoon.** The trial produced seamless but flat, wallpaper-like textures (SDXL base, 1024 px,
+  circular padding), far from the painted-realism target, so John dropped it. `~/freeciv-builds/art-venv`,
+  `~/freeciv-builds/hf-cache` and `~/freeciv-builds/art` were deleted (7.7 GB freed). Nothing remains installed from it;
+  terrain art continues through the ChatGPT requests in ~/Desktop/asset_generator/freeciv45/.
