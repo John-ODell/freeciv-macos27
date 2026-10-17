@@ -94,3 +94,10 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
   `~/freeciv-builds/apps/{Freeciv-GTK4,Freeciv-GTK3,Freeciv-SDL2}.app` from `scripts/bundle.sh`; the stale
   `FreecivGTK4.app`/`FreecivQt.app` test wrappers from last night were deleted. `~/Desktop/freeciv-port/builds/` (last
   night's debug installs) is now unused and can be deleted.
+
+## 2026-10-17, test tileset (issue 74)
+
+- `~/.freeciv/3.2/freeciv45test.tilespec` and `~/.freeciv/3.2/freeciv45test`: symlinks into this repo's
+  `tilesets/` (first made to the `tileset-t0` worktree, re-pointed to the main checkout after the merge), so any
+  client on this machine can load the test tileset by name. Delete the two links to uninstall; nothing else.
+- `scripts/windows-of-pid` compiled again in the worktree (git-ignored).
