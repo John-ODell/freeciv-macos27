@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" font-family="Helvetica, Arial, sans-serif">
+  <!-- Freeciv45 panel mockup, drawn by hand for notes/freeciv45/ui/panels.md (2026-10-17). 1x sizes in px. GPL-2.0-or-later. -->
+  <defs>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <rect width="48" height="48" fill="#3f6b3a"/>
+      <path d="M48 0H0V48" fill="none" stroke="#365e32" stroke-width="1"/>
+    </pattern>
+    <pattern id="sea" width="48" height="48" patternUnits="userSpaceOnUse">
+      <rect width="48" height="48" fill="#1f3f6e"/>
+      <path d="M48 0H0V48" fill="none" stroke="#1a3760" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- window -->
+  <rect x="0" y="0" width="1440" height="900" fill="#101418"/>
+  <text x="12" y="20" font-size="13" fill="#9aa3ad">Freeciv45 (Qt) mockup, 1x: window 1440 x 900, map area starts at x = 90</text>
+
+  <!-- existing left sidebar (unchanged) -->
+  <rect x="0" y="30" width="90" height="870" fill="#1c2129"/>
+  <g font-size="11" fill="#c9d1d9" text-anchor="middle">
+    <text x="45" y="60">4000 BCE</text><text x="45" y="74">T:12</text>
+    <text x="45" y="170">View</text>
+    <text x="45" y="270">Units</text>
+    <text x="45" y="370">Cities</text>
+    <text x="45" y="470">Nations</text>
+    <text x="45" y="570">Research</text>
+    <text x="45" y="670">Economy</text>
+    <text x="45" y="770">Rates</text>
+    <text x="45" y="880">Turn Done</text>
+  </g>
+  <text x="45" y="110" font-size="9" fill="#6b7480" text-anchor="middle">fc_sidebar</text>
+
+  <!-- map -->
+  <rect x="90" y="30" width="1350" height="870" fill="url(#sea)"/>
+  <rect x="450" y="150" width="672" height="528" fill="url(#grid)"/>
+  <rect x="1122" y="294" width="192" height="240" fill="url(#grid)"/>
+  <rect x="306" y="390" width="144" height="192" fill="url(#grid)"/>
+
+  <!-- worked tiles of the open city, shown on the map while the panel is open -->
+  <g fill="none" stroke="#ffd54a" stroke-width="2" stroke-dasharray="4 3">
+    <rect x="642" y="294" width="48" height="48"/>
+    <rect x="690" y="294" width="48" height="48"/>
+    <rect x="594" y="342" width="48" height="48"/>
+    <rect x="738" y="390" width="48" height="48"/>
+  </g>
+  <g font-size="9" fill="#ffd54a">
+    <text x="646" y="306">2/1/0</text><text x="694" y="306">1/2/0</text><text x="598" y="354">3/0/1</text><text x="742" y="402">1/1/2</text>
+  </g>
+
+  <!-- the city: tile, name bar, round marker -->
+  <rect x="642" y="342" width="48" height="48" fill="#8a7b5a"/>
+  <rect x="610" y="394" width="112" height="16" rx="3" fill="#0b0f14" fill-opacity="0.8"/>
+  <text x="666" y="406" font-size="11" fill="#e6edf3" text-anchor="middle">Lookton</text>
+  <circle cx="666" cy="366" r="14" fill="#f2b632" stroke="#fff3c4" stroke-width="2"/>
+  <text x="666" y="371" font-size="13" font-weight="bold" fill="#1a1a1a" text-anchor="middle">4</text>
+  <!-- halo = selected -->
+  <circle cx="666" cy="366" r="19" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.8"/>
+  <text x="690" y="372" font-size="10" fill="#fff3c4">city_marker: size, click opens the panel</text>
+
+  <!-- enemy stack on the map with hover odds tooltip -->
+  <rect x="834" y="438" width="48" height="48" fill="#6b3f3a"/>
+  <rect x="846" y="446" width="24" height="30" rx="3" fill="#c23b3b"/>
+  <rect x="846" y="480" width="24" height="4" fill="#222"/><rect x="846" y="480" width="16" height="4" fill="#4caf50"/>
+  <g>
+    <rect x="890" y="404" width="252" height="92" rx="4" fill="#0b0f14" fill-opacity="0.92" stroke="#3a4350"/>
+    <text x="900" y="424" font-size="12" fill="#e6edf3" font-weight="bold">Attack Warriors (fortified, hills)</text>
+    <rect x="900" y="432" width="232" height="10" fill="#7a2626"/>
+    <rect x="900" y="432" width="158" height="10" fill="#2e8b57"/>
+    <text x="900" y="458" font-size="11" fill="#c9d1d9">Chance to win: A: 68%   D: 32%</text>
+    <text x="900" y="474" font-size="11" fill="#c9d1d9">A 1 x FP1 HP 10/10  vs  D 1.5 x FP1 HP 8/10</text>
+    <text x="900" y="490" font-size="10" fill="#8b949e">odds_tooltip (combat_odds_to_astr), shows while hovering an enemy</text>
+  </g>
+
+  <!-- selected unit on the map -->
+  <rect x="690" y="438" width="48" height="48" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <rect x="702" y="446" width="24" height="30" rx="3" fill="#3a7bd5"/>
+  <text x="724" y="500" font-size="9" fill="#e6edf3">3</text>
+
+  <!-- ================= city panel (left, over the map) ================= -->
+  <g id="city_panel">
+    <rect x="90" y="30" width="320" height="870" fill="#141a21" fill-opacity="0.96" stroke="#2b3441"/>
+    <!-- header -->
+    <rect x="90" y="30" width="320" height="44" fill="#1c2531"/>
+    <circle cx="116" cy="52" r="12" fill="#f2b632"/><text x="116" y="56" font-size="12" font-weight="bold" fill="#1a1a1a" text-anchor="middle">4</text>
+    <text x="136" y="49" font-size="15" font-weight="bold" fill="#e6edf3">Lookton</text>
+    <text x="136" y="64" font-size="10" fill="#8b949e">grows in 6 turns   granary 12/24</text>
+    <text x="372" y="52" font-size="11" fill="#8b949e">&lt;  &gt;</text>
+    <text x="398" y="54" font-size="16" fill="#e6edf3">x</text>
+    <!-- yields -->
+    <g font-size="12" fill="#e6edf3">
+      <text x="104" y="98" font-weight="bold" fill="#8b949e" font-size="10">YIELDS</text>
+      <rect x="104" y="106" width="60" height="30" rx="3" fill="#1c2531"/><text x="110" y="118" font-size="9" fill="#8b949e">food</text><text x="110" y="131">+2</text>
+      <rect x="170" y="106" width="60" height="30" rx="3" fill="#1c2531"/><text x="176" y="118" font-size="9" fill="#8b949e">shields</text><text x="176" y="131">+3</text>
+      <rect x="236" y="106" width="60" height="30" rx="3" fill="#1c2531"/><text x="242" y="118" font-size="9" fill="#8b949e">trade</text><text x="242" y="131">+3</text>
+      <rect x="302" y="106" width="48" height="30" rx="3" fill="#1c2531"/><text x="308" y="118" font-size="9" fill="#8b949e">gold</text><text x="308" y="131">+1</text>
+      <rect x="356" y="106" width="48" height="30" rx="3" fill="#1c2531"/><text x="362" y="118" font-size="9" fill="#8b949e">bulbs</text><text x="362" y="131">2</text>
+    </g>
+    <!-- production -->
+    <text x="104" y="160" font-weight="bold" fill="#8b949e" font-size="10">PRODUCTION</text>
+    <rect x="104" y="168" width="300" height="46" rx="4" fill="#1c2531"/>
+    <rect x="110" y="174" width="34" height="34" rx="3" fill="#3a7bd5"/>
+    <text x="152" y="188" font-size="13" fill="#e6edf3">Warriors</text>
+    <text x="152" y="204" font-size="10" fill="#8b949e">4/10 shields, 2 turns</text>
+    <rect x="152" y="208" width="180" height="3" fill="#2b3441"/><rect x="152" y="208" width="72" height="3" fill="#4caf50"/>
+    <rect x="340" y="176" width="58" height="14" rx="3" fill="#2b3441"/><text x="369" y="187" font-size="9" fill="#e6edf3" text-anchor="middle">Change</text>
+    <rect x="340" y="194" width="58" height="14" rx="3" fill="#2b3441"/><text x="369" y="205" font-size="9" fill="#e6edf3" text-anchor="middle">Buy 50g</text>
+    <g font-size="11" fill="#c9d1d9">
+      <text x="110" y="232">1. Granary</text><text x="380" y="232" fill="#8b949e">12 t</text>
+      <text x="110" y="248">2. Settlers</text><text x="380" y="248" fill="#8b949e">8 t</text>
+      <text x="110" y="264" fill="#8b949e">+ add to queue</text>
+    </g>
+    <!-- citizens -->
+    <text x="104" y="292" font-weight="bold" fill="#8b949e" font-size="10">CITIZENS</text>
+    <g>
+      <circle cx="116" cy="310" r="8" fill="#4caf50"/><circle cx="136" cy="310" r="8" fill="#4caf50"/><circle cx="156" cy="310" r="8" fill="#c9d1d9"/><circle cx="176" cy="310" r="8" fill="#c23b3b"/>
+      <text x="196" y="314" font-size="11" fill="#c9d1d9">2 happy, 1 content, 1 unhappy</text>
+      <text x="104" y="334" font-size="11" fill="#c9d1d9">health: plague risk 1.2%   pollution 0</text>
+    </g>
+    <!-- buildings -->
+    <text x="104" y="362" font-weight="bold" fill="#8b949e" font-size="10">BUILDINGS (upkeep 1)</text>
+    <g font-size="11" fill="#c9d1d9">
+      <text x="110" y="380">Palace</text>
+      <text x="110" y="396">Barracks</text>
+      <text x="110" y="412" fill="#8b949e">(sell on right click, help on hover)</text>
+    </g>
+    <!-- worked tiles -->
+    <text x="104" y="440" font-weight="bold" fill="#8b949e" font-size="10">WORKED TILES</text>
+    <rect x="104" y="448" width="150" height="18" rx="3" fill="#2b3441"/><text x="179" y="461" font-size="10" fill="#e6edf3" text-anchor="middle">Show on map  [on]</text>
+    <text x="104" y="482" font-size="10" fill="#8b949e">click a ringed tile on the map to toggle its worker</text>
+    <!-- units -->
+    <text x="104" y="510" font-weight="bold" fill="#8b949e" font-size="10">UNITS HERE 3, SUPPORTED 2</text>
+    <g>
+      <rect x="104" y="518" width="28" height="28" rx="3" fill="#3a7bd5"/><rect x="138" y="518" width="28" height="28" rx="3" fill="#3a7bd5"/><rect x="172" y="518" width="28" height="28" rx="3" fill="#8a7b5a"/>
+    </g>
+    <!-- footer -->
+    <rect x="104" y="856" width="300" height="30" rx="4" fill="#2b3441"/>
+    <text x="254" y="876" font-size="12" fill="#e6edf3" text-anchor="middle">Open full city dialog   (Enter)</text>
+    <text x="104" y="846" font-size="9" fill="#6b7480">city_panel: 320 px wide at 1x, same logical size at 2x</text>
+  </g>
+
+  <!-- ================= unit bar (bottom, centred on the map) ================= -->
+  <g id="unit_bar">
+    <rect x="430" y="786" width="720" height="104" rx="6" fill="#141a21" fill-opacity="0.96" stroke="#2b3441"/>
+    <!-- portrait -->
+    <rect x="442" y="798" width="80" height="80" rx="4" fill="#1c2531"/>
+    <rect x="462" y="808" width="40" height="52" rx="4" fill="#3a7bd5"/>
+    <rect x="446" y="866" width="72" height="6" fill="#222"/><rect x="446" y="866" width="58" height="6" fill="#4caf50"/>
+    <text x="482" y="896" font-size="9" fill="#6b7480" text-anchor="middle">health bar</text>
+    <!-- name block -->
+    <text x="534" y="816" font-size="15" font-weight="bold" fill="#e6edf3">Warriors</text>
+    <text x="534" y="832" font-size="11" fill="#c9d1d9">veteran  (Lookton)</text>
+    <text x="534" y="852" font-size="12" fill="#e6edf3">str 1 / 1   moves 1 of 1   hp 8/10</text>
+    <text x="534" y="868" font-size="10" fill="#8b949e">fortified, upkeep 1 shield</text>
+    <!-- stack chips -->
+    <g>
+      <rect x="760" y="798" width="30" height="30" rx="4" fill="#3a7bd5" stroke="#ffffff" stroke-width="2"/>
+      <rect x="796" y="798" width="30" height="30" rx="4" fill="#3a7bd5"/>
+      <rect x="832" y="798" width="30" height="30" rx="4" fill="#8a7b5a"/>
+      <rect x="868" y="798" width="30" height="30" rx="4" fill="#2b3441"/><text x="883" y="818" font-size="10" fill="#e6edf3" text-anchor="middle">+2</text>
+      <text x="760" y="842" font-size="9" fill="#8b949e">stack chips: click switches, shift-click adds, [ ] cycle</text>
+    </g>
+    <!-- actions -->
+    <g font-size="9" fill="#8b949e" text-anchor="middle">
+      <rect x="760" y="850" width="36" height="36" rx="4" fill="#1c2531" stroke="#2b3441"/><text x="778" y="872" font-size="12" fill="#e6edf3">go</text><text x="789" y="884" fill="#ffd54a">G</text>
+      <rect x="802" y="850" width="36" height="36" rx="4" fill="#1c2531" stroke="#2b3441"/><text x="820" y="872" font-size="12" fill="#e6edf3">fort</text><text x="831" y="884" fill="#ffd54a">F</text>
+      <rect x="844" y="850" width="36" height="36" rx="4" fill="#1c2531" stroke="#2b3441"/><text x="862" y="872" font-size="12" fill="#e6edf3">sntr</text><text x="873" y="884" fill="#ffd54a">S</text>
+      <rect x="886" y="850" width="36" height="36" rx="4" fill="#1c2531" stroke="#2b3441"/><text x="904" y="872" font-size="12" fill="#e6edf3">bld</text><text x="915" y="884" fill="#ffd54a">B</text>
+      <rect x="928" y="850" width="36" height="36" rx="4" fill="#1c2531" stroke="#2b3441"/><text x="946" y="872" font-size="12" fill="#e6edf3">pil</text><text x="957" y="884" fill="#ffd54a">⇧P</text>
+      <rect x="970" y="850" width="36" height="36" rx="4" fill="#1c2531" stroke="#2b3441"/><text x="988" y="872" font-size="12" fill="#e6edf3">upg</text><text x="999" y="884" fill="#ffd54a">⇧U</text>
+      <rect x="1012" y="850" width="36" height="36" rx="4" fill="#1c2531" stroke="#2b3441"/><text x="1030" y="872" font-size="12" fill="#e6edf3">dis</text><text x="1041" y="884" fill="#ffd54a">⇧D</text>
+      <rect x="1054" y="850" width="36" height="36" rx="4" fill="#1c2531" stroke="#2b3441"/><text x="1072" y="872" font-size="12" fill="#e6edf3">skip</text><text x="1083" y="884" fill="#ffd54a">W</text>
+      <rect x="1096" y="850" width="36" height="36" rx="4" fill="#2e8b57" stroke="#2b3441"/><text x="1114" y="872" font-size="12" fill="#e6edf3">done</text><text x="1125" y="884" fill="#ffd54a">␣</text>
+    </g>
+    <text x="442" y="796" font-size="9" fill="#6b7480">unit_bar: 720 x 104 px at 1x, hidden when nothing is selected</text>
+  </g>
+
+  <!-- legend -->
+  <g font-size="10" fill="#9aa3ad">
+    <text x="1160" y="806">Hidden while the unit bar is on: hud_units.</text>
+    <text x="1160" y="820">Hidden while the city panel is open: info_tab</text>
+    <text x="1160" y="834">(chat) slides right; minimap stays.</text>
+    <text x="1160" y="854">Icons are placeholders (text); the real bar</text>
+    <text x="1160" y="868">uses the theme PNGs, later SVG.</text>
+  </g>
+</svg>
