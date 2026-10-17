@@ -1,0 +1,1315 @@
+From eec5fcbdc04b7ef1c77300798c7d3a034dd0aa3b Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Fri, 16 Oct 2026 19:51:28 -0500
+Subject: [PATCH] AI: let an outside chooser make named AI players' build and
+ research picks
+
+Off unless FREECIV_HARNESS_DIR and FREECIV_HARNESS_PLAYERS are set. For
+the named AI players the default AI asks before it changes a city's
+build or the research: it writes question.json in the harness directory
+(a status page and up to 8 numbered options, the AI's own pick first),
+waits up to FREECIV_HARNESS_TIMEOUT seconds (default 60) for answer.txt
+("ID CHOICE"), applies the choice and appends the decision to
+applied.jsonl. A timeout or a bad answer keeps the AI's pick.
+
+Between decisions the chooser's pick stays. A city is asked again when
+it is new, finishes a build or has its build changed by the game, and
+when it is in danger or has been on Coinage for 5 turns, if the AI
+would build something else. Research is asked again after each new tech
+or when something else changes it. Everything else (units, rates,
+government, diplomacy) stays with the AI.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ ai/default/Makefile.am  |    2 +
+ ai/default/aitech.c     |   24 +-
+ ai/default/daicity.c    |   12 +
+ ai/default/daiharness.c | 1105 +++++++++++++++++++++++++++++++++++++++
+ ai/default/daiharness.h |   37 ++
+ meson.build             |    1 +
+ 6 files changed, 1178 insertions(+), 3 deletions(-)
+ create mode 100644 ai/default/daiharness.c
+ create mode 100644 ai/default/daiharness.h
+
+diff --git a/ai/default/Makefile.am b/ai/default/Makefile.am
+index f0413f6..07b53cb 100644
+--- a/ai/default/Makefile.am
++++ b/ai/default/Makefile.am
+@@ -44,6 +44,8 @@ libdefaultai_la_SOURCES = \
+ 		daidomestic.h	\
+ 		daieffects.c	\
+ 		daieffects.h	\
++		daiharness.c	\
++		daiharness.h	\
+ 		dailog.c	\
+ 		dailog.h	\
+ 		daimilitary.c	\
+diff --git a/ai/default/aitech.c b/ai/default/aitech.c
+index 352bb42..a2e2099 100644
+--- a/ai/default/aitech.c
++++ b/ai/default/aitech.c
+@@ -40,6 +40,7 @@
+ #include "daicity.h"
+ #include "daidata.h"
+ #include "daieffects.h"
++#include "daiharness.h"
+ #include "dailog.h"
+ #include "daiplayer.h"
+ 
+@@ -70,7 +71,8 @@ struct ai_tech_choice {
+ static void dai_select_tech(struct ai_type *ait,
+                             struct player *pplayer, 
+                             struct ai_tech_choice *choice,
+-                            struct ai_tech_choice *goal)
++                            struct ai_tech_choice *goal,
++                            int *values_out)
+ {
+   struct research *presearch = research_get(pplayer);
+   Tech_type_id newtech, newgoal;
+@@ -131,6 +133,10 @@ static void dai_select_tech(struct ai_type *ait,
+     }
+   } advance_index_iterate_max_end;
+ 
++  if (values_out != NULL) {
++    memcpy(values_out, values, sizeof(values));
++  }
++
+   /* Fill in the values for the tech goals */
+   advance_index_iterate_max(A_FIRST, i, ac) {
+     if (valid_advance_by_number(i)) {
+@@ -336,6 +342,7 @@ void dai_manage_tech(struct ai_type *ait, struct player *pplayer)
+ {
+   struct ai_tech_choice choice, goal;
+   struct research *research = research_get(pplayer);
++  int values[MAX(A_ARRAY_SIZE, A_UNSET + 1)];
+   /* Penalty for switching research */
+   /* FIXME: get real penalty with game.server.techpenalty and multiresearch */
+   int penalty = research->bulbs_researched - research->free_bulbs;
+@@ -352,8 +359,19 @@ void dai_manage_tech(struct ai_type *ait, struct player *pplayer)
+     }
+   } research_players_iterate_end;
+ 
+-  dai_select_tech(ait, pplayer, &choice, &goal);
+-  if (choice.choice != research->researching) {
++  memset(values, 0, sizeof(values));
++  dai_select_tech(ait, pplayer, &choice, &goal, values);
++  if (dai_harness_player(pplayer)) {
++    /* The harness chooser picks the research, and only when it's due. */
++    if (dai_harness_research_due(pplayer)) {
++      Tech_type_id pick = dai_harness_choose_research(pplayer, choice.choice,
++                                                      values);
++
++      if (pick != A_UNSET) {
++        choose_tech(research, pick);
++      }
++    }
++  } else if (choice.choice != research->researching) {
+     /* changing */
+     if (choice.want - choice.current_want > penalty
+         && (penalty + research->bulbs_researched
+diff --git a/ai/default/daicity.c b/ai/default/daicity.c
+index 89990e2..d1ddcdb 100644
+--- a/ai/default/daicity.c
++++ b/ai/default/daicity.c
+@@ -59,6 +59,7 @@
+ #include "daidomestic.h"
+ #include "daimilitary.h"
+ #include "daieffects.h"
++#include "daiharness.h"
+ #include "daiplayer.h"
+ #include "daisettler.h"
+ 
+@@ -262,6 +263,12 @@ static void dai_city_choose_build(struct ai_type *ait, struct player *pplayer,
+     return;
+   }
+ 
++  if (dai_harness_player(pplayer)
++      && !dai_harness_build_due(pcity, city_data->urgency > 0)) {
++    /* Keep the build the harness chooser picked. */
++    return;
++  }
++
+   if (is_barbarian(pplayer)) {
+     dai_barbarian_choose_build(pplayer, pcity, &(city_data->choice));
+   } else {
+@@ -345,6 +352,11 @@ static void dai_city_choose_build(struct ai_type *ait, struct player *pplayer,
+       break;
+     };
+ 
++    if (dai_harness_player(pplayer)) {
++      dai_harness_choose_build(pplayer, pcity, city_data->urgency > 0,
++                               &build_new);
++    }
++
+     change_build_target(pplayer, pcity, &build_new, E_CITY_PRODUCTION_CHANGED);
+   }
+ }
+diff --git a/ai/default/daiharness.c b/ai/default/daiharness.c
+new file mode 100644
+index 0000000..8c3aed2
+--- /dev/null
++++ b/ai/default/daiharness.c
+@@ -0,0 +1,1105 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++
++/* utility */
++#include "astring.h"
++#include "log.h"
++#include "mem.h"
++#include "shared.h"
++#include "support.h"
++
++/* common */
++#include "actions.h"
++#include "calendar.h"
++#include "city.h"
++#include "game.h"
++#include "government.h"
++#include "improvement.h"
++#include "map.h"
++#include "movement.h"
++#include "nation.h"
++#include "player.h"
++#include "requirements.h"
++#include "research.h"
++#include "tech.h"
++#include "unit.h"
++#include "unitlist.h"
++#include "unittype.h"
++
++/* server/advisors */
++#include "infracache.h"
++
++#include "daiharness.h"
++
++#define HARNESS_MAX_OPTIONS 8
++#define HARNESS_DEFAULT_TIMEOUT 60      /* Seconds to wait for an answer */
++#define HARNESS_POLL_USEC 20000
++#define HARNESS_THREAT_RADIUS 3
++#define HARNESS_CONVERT_TURNS 5         /* Coinage turns before asking again */
++
++struct harness_option {
++  struct universal target;
++  char label[256];
++};
++
++/* The last build the chooser picked for a city, the turn it did, and the
++ * city's turn_last_built then. */
++struct harness_pick {
++  int city_id;
++  int turn;
++  int built;
++  struct universal target;
++};
++
++/* A player's research when the chooser last picked for it. */
++struct harness_research {
++  bool asked;
++  int techs;
++  Tech_type_id tech;
++};
++
++enum harness_reason {
++  HR_NONE,
++  HR_NEW,        /* No pick recorded for this city yet */
++  HR_FINISHED,   /* The city finished a build since the last pick */
++  HR_CHANGED,    /* Something else changed the city's build */
++  HR_DANGER,     /* The city is in danger */
++  HR_CONVERTING  /* The city has been on Coinage for a while */
++};
++
++static struct {
++  bool loaded;
++  bool active;
++  bool names_checked;
++  char dir[MAX_LEN_PATH];
++  char names[MAX_NUM_PLAYER_SLOTS][MAX_LEN_NAME];
++  int name_count;
++  int timeout;
++  int next_id;
++  struct harness_pick *picks;
++  int pick_count;
++  int pick_alloc;
++  struct harness_research research[MAX_NUM_PLAYER_SLOTS];
++} harness;
++
++/**********************************************************************//**
++  Full path of a file in the harness directory.
++**************************************************************************/
++static void harness_path(char *buf, size_t size, const char *name)
++{
++  fc_snprintf(buf, size, "%s/%s", harness.dir, name);
++}
++
++/**********************************************************************//**
++  Read the settings from the environment, once.
++**************************************************************************/
++static void harness_load(void)
++{
++  const char *dir, *names, *timeout, *p;
++  char path[MAX_LEN_PATH];
++  FILE *f;
++
++  if (harness.loaded) {
++    return;
++  }
++  harness.loaded = TRUE;
++  harness.timeout = HARNESS_DEFAULT_TIMEOUT;
++  harness.next_id = 1;
++
++  dir = getenv("FREECIV_HARNESS_DIR");
++  if (dir == NULL || dir[0] == '\0') {
++    return;
++  }
++  names = getenv("FREECIV_HARNESS_PLAYERS");
++  if (names == NULL || names[0] == '\0') {
++    log_error("harness: FREECIV_HARNESS_DIR is set but FREECIV_HARNESS_PLAYERS "
++              "is not, so the hook stays off.");
++    return;
++  }
++  timeout = getenv("FREECIV_HARNESS_TIMEOUT");
++  if (timeout != NULL && timeout[0] != '\0') {
++    harness.timeout = MAX(0, atoi(timeout));
++  }
++  fc_strlcpy(harness.dir, dir, sizeof(harness.dir));
++
++  /* Player names, separated by commas. */
++  p = names;
++  while (*p != '\0' && harness.name_count < MAX_NUM_PLAYER_SLOTS) {
++    const char *end = strchr(p, ',');
++    size_t len = (end != NULL) ? (size_t) (end - p) : strlen(p);
++    char name[MAX_LEN_NAME];
++
++    fc_strlcpy(name, p, MIN(len + 1, sizeof(name)));
++    remove_leading_trailing_spaces(name);
++    if (name[0] != '\0') {
++      fc_strlcpy(harness.names[harness.name_count++], name, MAX_LEN_NAME);
++    }
++    if (end == NULL) {
++      break;
++    }
++    p = end + 1;
++  }
++  if (harness.name_count == 0) {
++    log_error("harness: FREECIV_HARNESS_PLAYERS names no player, so the hook "
++              "stays off.");
++    return;
++  }
++
++  /* Leftovers from an earlier run would be read as this run's files. */
++  harness_path(path, sizeof(path), "question.json");
++  fc_remove(path);
++  harness_path(path, sizeof(path), "answer.txt");
++  fc_remove(path);
++
++  harness_path(path, sizeof(path), "applied.jsonl");
++  f = fc_fopen(path, "a");
++  if (f == NULL) {
++    log_error("harness: can't write in %s, so the hook stays off.",
++              harness.dir);
++    return;
++  }
++  fclose(f);
++
++  harness.active = TRUE;
++  log_normal("harness: on for %s; files in %s; an answer may take up to %d s.",
++             names, harness.dir, harness.timeout);
++}
++
++/**********************************************************************//**
++  Say once if a listed name isn't an AI player of this game.
++**************************************************************************/
++static void harness_check_names(void)
++{
++  int i;
++
++  if (harness.names_checked) {
++    return;
++  }
++  harness.names_checked = TRUE;
++
++  for (i = 0; i < harness.name_count; i++) {
++    struct player *pplayer = player_by_name(harness.names[i]);
++
++    if (pplayer == NULL) {
++      log_error("harness: there is no player named %s.", harness.names[i]);
++    } else if (!is_ai(pplayer)) {
++      log_error("harness: %s isn't AI-controlled, so it isn't asked.",
++                harness.names[i]);
++    }
++  }
++}
++
++/**********************************************************************//**
++  Whether the chooser makes this AI player's build and research choices.
++**************************************************************************/
++bool dai_harness_player(const struct player *pplayer)
++{
++  int i;
++
++  harness_load();
++  if (!harness.active || pplayer == NULL || !is_ai(pplayer)) {
++    return FALSE;
++  }
++  harness_check_names();
++
++  for (i = 0; i < harness.name_count; i++) {
++    if (fc_strcasecmp(harness.names[i], player_name(pplayer)) == 0) {
++      return TRUE;
++    }
++  }
++
++  return FALSE;
++}
++
++/**********************************************************************//**
++  Append s to out as a JSON string.
++**************************************************************************/
++static void harness_json_string(struct astring *out, const char *s)
++{
++  const char *run = s, *c;
++
++  /* Copy the text between escapes in runs: astr_add() checks that what it
++   * adds is UTF-8, so a byte at a time would drop every non-ASCII letter. */
++  astr_add(out, "\"");
++  for (c = s; *c != '\0'; c++) {
++    unsigned char ch = (unsigned char) *c;
++    char esc[8];
++
++    switch (ch) {
++    case '"':
++      fc_strlcpy(esc, "\\\"", sizeof(esc));
++      break;
++    case '\\':
++      fc_strlcpy(esc, "\\\\", sizeof(esc));
++      break;
++    case '\n':
++      fc_strlcpy(esc, "\\n", sizeof(esc));
++      break;
++    case '\r':
++      fc_strlcpy(esc, "\\r", sizeof(esc));
++      break;
++    case '\t':
++      fc_strlcpy(esc, "\\t", sizeof(esc));
++      break;
++    default:
++      if (ch >= 0x20) {
++        continue;
++      }
++      fc_snprintf(esc, sizeof(esc), "\\u%04x", ch);
++    }
++    astr_add(out, "%.*s%s", (int) (c - run), run, esc);
++    run = c + 1;
++  }
++  astr_add(out, "%s\"", run);
++}
++
++/**********************************************************************//**
++  "3 turns", or what to say when it never finishes.
++**************************************************************************/
++static void harness_turns_text(char *buf, size_t size, int turns)
++{
++  if (turns >= FC_INFINITY) {
++    fc_strlcpy(buf, "never at this rate", size);
++  } else {
++    fc_snprintf(buf, size, "%d %s", turns, turns == 1 ? "turn" : "turns");
++  }
++}
++
++/**********************************************************************//**
++  Enemy units that can attack, seen within a few tiles of the city.
++**************************************************************************/
++static int harness_threats(const struct player *pplayer,
++                           const struct city *pcity)
++{
++  const struct civ_map *nmap = &(wld.map);
++  int count = 0;
++
++  square_iterate(nmap, city_tile(pcity), HARNESS_THREAT_RADIUS, ptile) {
++    unit_list_iterate(ptile->units, punit) {
++      const struct player *owner = unit_owner(punit);
++
++      if (owner != pplayer && pplayers_at_war(pplayer, owner)
++          && unit_type_get(punit)->attack_strength > 0
++          && can_player_see_unit(pplayer, punit)) {
++        count++;
++      }
++    } unit_list_iterate_end;
++  } square_iterate_end;
++
++  return count;
++}
++
++/**********************************************************************//**
++  Whether the city's shields go into a convert build such as Coinage,
++  which never finishes.
++**************************************************************************/
++static bool harness_converting(const struct city *pcity)
++{
++  return (pcity->production.kind == VUT_IMPROVEMENT
++          && is_convert_improvement(pcity->production.value.building));
++}
++
++/**********************************************************************//**
++  The status page sent with every question.
++**************************************************************************/
++static void harness_status(struct astring *out, struct player *pplayer)
++{
++  const struct research *presearch = research_get(pplayer);
++  int counts[U_LAST];
++  int rivals = 0;
++  bool first = TRUE;
++
++  astr_add(out, "Turn %d (%s). You are %s, leader of the %s; government: "
++           "%s.\n", game.info.turn, calendar_text(), player_name(pplayer),
++           nation_plural_for_player(pplayer),
++           government_name_for_player(pplayer));
++  astr_add(out, "Gold %d (%+d a turn). Rates: tax %d%%, luxury %d%%, "
++           "science %d%%. Score %d.\n", pplayer->economic.gold,
++           player_get_expected_income(pplayer), pplayer->economic.tax,
++           pplayer->economic.luxury, pplayer->economic.science,
++           pplayer->score.game);
++  if (valid_advance_by_number(presearch->researching) != NULL) {
++    astr_add(out, "Research: %s, %d of %d bulbs; %d bulbs last turn. "
++             "%d techs known.\n",
++             research_advance_name_translation(presearch,
++                                               presearch->researching),
++             presearch->bulbs_researched,
++             research_total_bulbs_required(presearch, presearch->researching,
++                                           FALSE),
++             pplayer->server.bulbs_last_turn, presearch->techs_researched);
++  } else {
++    astr_add(out, "Research: nothing chosen; %d bulbs last turn. "
++             "%d techs known.\n", pplayer->server.bulbs_last_turn,
++             presearch->techs_researched);
++  }
++
++  astr_add(out, "\nCities (%d):\n", city_list_size(pplayer->cities));
++  city_list_iterate(pplayer->cities, pcity) {
++    char prod[128], when[32], building[256];
++    int enemies = harness_threats(pplayer, pcity);
++
++    universal_name_translation(&pcity->production, prod, sizeof(prod));
++    if (harness_converting(pcity)) {
++      fc_snprintf(building, sizeof(building),
++                  "shields go into %s, so nothing is built", prod);
++    } else {
++      harness_turns_text(when, sizeof(when),
++                         city_production_turns_to_build(pcity, TRUE));
++      fc_snprintf(building, sizeof(building),
++                  "building %s, %d of %d shields (%s)", prod,
++                  pcity->shield_stock,
++                  city_production_build_shield_cost(pcity), when);
++    }
++    astr_add(out, "- %s, size %d: food %+d, shields %+d, trade %+d; "
++             "%s; %d happy, %d content, %d unhappy, %d angry; "
++             "%d units here",
++             city_name_get(pcity), city_size_get(pcity),
++             pcity->surplus[O_FOOD], pcity->surplus[O_SHIELD],
++             pcity->surplus[O_TRADE], building,
++             pcity->feel[CITIZEN_HAPPY][FEELING_FINAL],
++             pcity->feel[CITIZEN_CONTENT][FEELING_FINAL],
++             pcity->feel[CITIZEN_UNHAPPY][FEELING_FINAL],
++             pcity->feel[CITIZEN_ANGRY][FEELING_FINAL],
++             unit_list_size(city_tile(pcity)->units));
++    if (enemies > 0) {
++      astr_add(out, "; %d enemy %s within %d tiles", enemies,
++               enemies == 1 ? "unit" : "units", HARNESS_THREAT_RADIUS);
++    }
++    astr_add(out, ".\n");
++  } city_list_iterate_end;
++
++  memset(counts, 0, sizeof(counts));
++  unit_list_iterate(pplayer->units, punit) {
++    counts[utype_index(unit_type_get(punit))]++;
++  } unit_list_iterate_end;
++  astr_add(out, "\nUnits (%d):", unit_list_size(pplayer->units));
++  unit_type_iterate(ptype) {
++    if (counts[utype_index(ptype)] > 0) {
++      astr_add(out, "%s %s %d", first ? "" : ",",
++               utype_name_translation(ptype), counts[utype_index(ptype)]);
++      first = FALSE;
++    }
++  } unit_type_iterate_end;
++  astr_add(out, "%s\n", first ? " none." : ".");
++
++  astr_add(out, "\nOther players:\n");
++  players_iterate_alive(aplayer) {
++    if (aplayer == pplayer || is_barbarian(aplayer)) {
++      continue;
++    }
++    astr_add(out, "- %s of the %s: %s.\n", player_name(aplayer),
++             nation_plural_for_player(aplayer),
++             diplstate_type_translated_name(
++               player_diplstate_get(pplayer, aplayer)->type));
++    rivals++;
++  } players_iterate_alive_end;
++  if (rivals == 0) {
++    astr_add(out, "- none.\n");
++  }
++}
++
++/**********************************************************************//**
++  Write the question, wait for the answer, and log the decision. Returns
++  the index of the chosen option; 0, the AI's own pick, on a fallback.
++**************************************************************************/
++static int harness_ask(struct player *pplayer, const struct city *pcity,
++                       const char *kind, const char *reason,
++                       const char *question,
++                       const struct harness_option *options, int count)
++{
++  struct astring json = ASTRING_INIT;
++  struct astring state = ASTRING_INIT;
++  char qpath[MAX_LEN_PATH], tmppath[MAX_LEN_PATH], apath[MAX_LEN_PATH];
++  char lpath[MAX_LEN_PATH];
++  const char *fallback = NULL;
++  int id = harness.next_id++;
++  int chosen = 0;
++  time_t start;
++  FILE *f;
++  int i;
++
++  harness_path(qpath, sizeof(qpath), "question.json");
++  harness_path(tmppath, sizeof(tmppath), "question.json.tmp");
++  harness_path(apath, sizeof(apath), "answer.txt");
++  harness_path(lpath, sizeof(lpath), "applied.jsonl");
++
++  harness_status(&state, pplayer);
++  astr_add(&json, "{\"id\": %d, \"game\": \"freeciv\", \"ruleset\": ", id);
++  harness_json_string(&json, game.control.name);
++  astr_add(&json, ", \"turn\": %d, \"year\": %d, \"player\": ",
++           game.info.turn, game.info.year);
++  harness_json_string(&json, player_name(pplayer));
++  astr_add(&json, ", \"kind\": \"%s\", \"reason\": \"%s\", \"city\": ",
++           kind, reason);
++  if (pcity != NULL) {
++    harness_json_string(&json, city_name_get(pcity));
++  } else {
++    astr_add(&json, "null");
++  }
++  astr_add(&json, ",\n \"question\": ");
++  harness_json_string(&json, question);
++  astr_add(&json, ",\n \"options\": [");
++  for (i = 0; i < count; i++) {
++    astr_add(&json, "%s\n  {\"n\": %d, \"label\": ", i > 0 ? "," : "",
++             i + 1);
++    harness_json_string(&json, options[i].label);
++    astr_add(&json, ", \"value\": ");
++    harness_json_string(&json, universal_rule_name(&options[i].target));
++    astr_add(&json, ", \"ai\": %s}", i == 0 ? "true" : "false");
++  }
++  astr_add(&json, "],\n \"state\": ");
++  harness_json_string(&json, astr_str(&state));
++  astr_add(&json, "}\n");
++  astr_free(&state);
++
++  /* Write it whole, then rename, so the chooser never reads half a file. */
++  f = fc_fopen(tmppath, "w");
++  if (f == NULL || fputs(astr_str(&json), f) == EOF) {
++    fallback = "can't write question.json";
++  }
++  if (f != NULL && fclose(f) != 0 && fallback == NULL) {
++    fallback = "can't write question.json";
++  }
++  astr_free(&json);
++  if (fallback == NULL && rename(tmppath, qpath) != 0) {
++    fallback = "can't write question.json";
++  }
++
++  start = time(NULL);
++  while (fallback == NULL) {
++    f = fc_fopen(apath, "r");
++    if (f != NULL) {
++      char line[128];
++      int answer_id = 0, answer = 0;
++      bool parsed = (fgets(line, sizeof(line), f) != NULL
++                     && sscanf(line, "%d %d", &answer_id, &answer) == 2);
++
++      fclose(f);
++      fc_remove(apath);
++      if (!parsed) {
++        fallback = "bad answer: not \"ID CHOICE\"";
++      } else if (answer_id != id) {
++        log_normal("harness: ignoring an answer to q%d while waiting for q%d.",
++                   answer_id, id);
++        continue;
++      } else if (answer < 1 || answer > count) {
++        fallback = "bad answer: no such option";
++      } else {
++        chosen = answer - 1;
++        break;
++      }
++    } else if (time(NULL) - start >= harness.timeout) {
++      fallback = "timeout";
++    } else {
++      fc_usleep(HARNESS_POLL_USEC);
++    }
++  }
++  fc_remove(qpath);
++
++  log_normal("harness: q%d turn %d %s %s%s%s: %d options, %s %d (%s)%s%s",
++             id, game.info.turn, player_name(pplayer), kind,
++             pcity != NULL ? " " : "",
++             pcity != NULL ? city_name_get(pcity) : "", count,
++             fallback != NULL ? "fallback to" : "answer", chosen + 1,
++             universal_rule_name(&options[chosen].target),
++             fallback != NULL ? ": " : "",
++             fallback != NULL ? fallback : "");
++
++  f = fc_fopen(lpath, "a");
++  if (f != NULL) {
++    struct astring line = ASTRING_INIT;
++
++    astr_add(&line, "{\"id\": %d, \"turn\": %d, \"player\": ", id,
++             game.info.turn);
++    harness_json_string(&line, player_name(pplayer));
++    astr_add(&line, ", \"kind\": \"%s\", \"reason\": \"%s\", \"city\": ",
++             kind, reason);
++    if (pcity != NULL) {
++      harness_json_string(&line, city_name_get(pcity));
++    } else {
++      astr_add(&line, "null");
++    }
++    astr_add(&line, ", \"options\": %d, \"choice\": %d, \"value\": ", count,
++             chosen + 1);
++    harness_json_string(&line, universal_rule_name(&options[chosen].target));
++    astr_add(&line, ", \"ai_value\": ");
++    harness_json_string(&line, universal_rule_name(&options[0].target));
++    astr_add(&line, ", \"fallback\": ");
++    if (fallback != NULL) {
++      harness_json_string(&line, fallback);
++    } else {
++      astr_add(&line, "null");
++    }
++    astr_add(&line, ", \"secs\": %d}\n", (int) (time(NULL) - start));
++    fputs(astr_str(&line), f);
++    fclose(f);
++    astr_free(&line);
++  }
++
++  return chosen;
++}
++
++/**********************************************************************//**
++  The chooser's last pick for this city, if any.
++**************************************************************************/
++static struct harness_pick *harness_pick_get(int city_id)
++{
++  int i;
++
++  for (i = 0; i < harness.pick_count; i++) {
++    if (harness.picks[i].city_id == city_id) {
++      return &harness.picks[i];
++    }
++  }
++
++  return NULL;
++}
++
++/**********************************************************************//**
++  Remember the build picked for this city.
++**************************************************************************/
++static void harness_pick_set(const struct city *pcity,
++                             const struct universal *target)
++{
++  struct harness_pick *pick = harness_pick_get(pcity->id);
++
++  if (pick == NULL) {
++    if (harness.pick_count == harness.pick_alloc) {
++      harness.pick_alloc = MAX(16, harness.pick_alloc * 2);
++      harness.picks = fc_realloc(harness.picks,
++                                 harness.pick_alloc * sizeof(*harness.picks));
++    }
++    pick = &harness.picks[harness.pick_count++];
++    pick->city_id = pcity->id;
++  }
++  pick->turn = game.info.turn;
++  pick->built = pcity->turn_last_built;
++  pick->target = *target;
++}
++
++/**********************************************************************//**
++  Why the city's build should be decided now, or HR_NONE.
++**************************************************************************/
++static enum harness_reason harness_build_reason(const struct city *pcity,
++                                                bool danger)
++{
++  const struct harness_pick *pick = harness_pick_get(pcity->id);
++
++  if (pick == NULL) {
++    return HR_NEW;
++  }
++  if (pcity->turn_last_built != pick->built) {
++    return HR_FINISHED;
++  }
++  if (!are_universals_equal(&pcity->production, &pick->target)) {
++    return HR_CHANGED;
++  }
++  if (danger) {
++    return HR_DANGER;
++  }
++  if (harness_converting(pcity)
++      && game.info.turn - pick->turn >= HARNESS_CONVERT_TURNS) {
++    /* Coinage never finishes, so ask again now and then. */
++    return HR_CONVERTING;
++  }
++
++  return HR_NONE;
++}
++
++/**********************************************************************//**
++  Whether the AI should decide this city's build now. Between decisions
++  the build the chooser picked stays.
++**************************************************************************/
++bool dai_harness_build_due(const struct city *pcity, bool danger)
++{
++  return harness_build_reason(pcity, danger) != HR_NONE;
++}
++
++/**********************************************************************//**
++  Label for a build option: name, kind, cost and turns.
++**************************************************************************/
++static void harness_build_label(char *buf, size_t size,
++                                const struct city *pcity,
++                                const struct universal *target)
++{
++  char when[32];
++
++  harness_turns_text(when, sizeof(when),
++                     city_turns_to_build(pcity, target, TRUE));
++  if (target->kind == VUT_UTYPE) {
++    const struct unit_type *ptype = target->value.utype;
++
++    fc_snprintf(buf, size, "%s (unit, %d shields, %s; attack %d, defence %d, "
++                "moves %d)", utype_name_translation(ptype),
++                universal_build_shield_cost(pcity, target), when,
++                ptype->attack_strength, ptype->defense_strength,
++                ptype->move_rate / SINGLE_MOVE);
++  } else if (target->kind == VUT_IMPROVEMENT
++             && is_convert_improvement(target->value.building)) {
++    fc_snprintf(buf, size, "%s (converts the city's shields; nothing is built)",
++                improvement_name_translation(target->value.building));
++  } else if (target->kind == VUT_IMPROVEMENT) {
++    const struct impr_type *pimprove = target->value.building;
++
++    fc_snprintf(buf, size, "%s (%s, %d shields, %s; upkeep %d gold)",
++                improvement_name_translation(pimprove),
++                pimprove->genus == IG_GREAT_WONDER ? "great wonder"
++                : pimprove->genus == IG_SMALL_WONDER ? "small wonder"
++                : "building",
++                universal_build_shield_cost(pcity, target), when,
++                city_improvement_upkeep(pcity, pimprove));
++  } else {
++    fc_strlcpy(buf, universal_rule_name(target), size);
++  }
++}
++
++/**********************************************************************//**
++  Add a build option if the city can build it now and it isn't listed.
++**************************************************************************/
++static void harness_add_build(struct harness_option *options, int *count,
++                              const struct city *pcity,
++                              const struct universal *target)
++{
++  int i;
++
++  if (*count >= HARNESS_MAX_OPTIONS
++      || (target->kind != VUT_UTYPE && target->kind != VUT_IMPROVEMENT)
++      || !can_city_build_now(&(wld.map), pcity, target)) {
++    return;
++  }
++  for (i = 0; i < *count; i++) {
++    if (are_universals_equal(&options[i].target, target)) {
++      return;
++    }
++  }
++  options[*count].target = *target;
++  harness_build_label(options[*count].label, sizeof(options[*count].label),
++                      pcity, target);
++  (*count)++;
++}
++
++/**********************************************************************//**
++  The unit the city can build with the most attack (or defence) strength,
++  counting hit points and firepower; the cheaper one on a tie.
++**************************************************************************/
++static struct unit_type *harness_best_unit(const struct city *pcity,
++                                           bool attack)
++{
++  struct unit_type *best = NULL;
++  int best_value = 0, best_cost = 0;
++
++  unit_type_iterate(ptype) {
++    int strength = attack ? ptype->attack_strength : ptype->defense_strength;
++    int value = strength * ptype->hp * ptype->firepower;
++    int cost;
++
++    if (strength <= 0 || !can_city_build_unit_now(&(wld.map), pcity, ptype)) {
++      continue;
++    }
++    cost = utype_build_shield_cost(pcity, NULL, ptype);
++    if (best == NULL || value > best_value
++        || (value == best_value && cost < best_cost)) {
++      best = ptype;
++      best_value = value;
++      best_cost = cost;
++    }
++  } unit_type_iterate_end;
++
++  return best;
++}
++
++/**********************************************************************//**
++  Add a unit option, if there is one.
++**************************************************************************/
++static void harness_add_unit(struct harness_option *options, int *count,
++                             const struct city *pcity,
++                             const struct unit_type *ptype)
++{
++  if (ptype != NULL) {
++    struct universal target = { .kind = VUT_UTYPE,
++                                .value = { .utype = ptype } };
++
++    harness_add_build(options, count, pcity, &target);
++  }
++}
++
++/**********************************************************************//**
++  The build menu: the AI's pick, the current build, the buildings the
++  advisor wants most, a defender, a city founder, a worker, an attacker,
++  then more buildings.
++**************************************************************************/
++static int harness_build_options(const struct city *pcity,
++                                 const struct universal *ai_pick,
++                                 struct harness_option *options)
++{
++  const struct impr_type *imprs[B_LAST];
++  int nimprs = 0, count = 0, i, j;
++
++  harness_add_build(options, &count, pcity, ai_pick);
++  if (count == 0) {
++    return 0;
++  }
++  harness_add_build(options, &count, pcity, &pcity->production);
++
++  /* Buildings the city can build, most wanted first. */
++  improvement_iterate(pimprove) {
++    if (can_city_build_improvement_now(pcity, pimprove)) {
++      imprs[nimprs++] = pimprove;
++    }
++  } improvement_iterate_end;
++  for (i = 1; i < nimprs; i++) {
++    const struct impr_type *pimprove = imprs[i];
++    adv_want want =
++      pcity->server.adv->building_want[improvement_index(pimprove)];
++
++    for (j = i;
++         j > 0 && pcity->server.adv->building_want[improvement_index(imprs[j - 1])]
++                  < want;
++         j--) {
++      imprs[j] = imprs[j - 1];
++    }
++    imprs[j] = pimprove;
++  }
++
++  for (i = 0; i < nimprs && i < 2; i++) {
++    if (pcity->server.adv->building_want[improvement_index(imprs[i])] > 0) {
++      struct universal target = { .kind = VUT_IMPROVEMENT,
++                                  .value = { .building = imprs[i] } };
++
++      harness_add_build(options, &count, pcity, &target);
++    }
++  }
++  harness_add_unit(options, &count, pcity, harness_best_unit(pcity, FALSE));
++  harness_add_unit(options, &count, pcity,
++                   best_role_unit(pcity,
++                                  action_id_get_role(ACTION_FOUND_CITY)));
++  harness_add_unit(options, &count, pcity,
++                   best_role_unit(pcity, UTYF_SETTLERS));
++  harness_add_unit(options, &count, pcity, harness_best_unit(pcity, TRUE));
++  for (i = 0; i < nimprs; i++) {
++    struct universal target = { .kind = VUT_IMPROVEMENT,
++                                .value = { .building = imprs[i] } };
++
++    harness_add_build(options, &count, pcity, &target);
++  }
++
++  return count;
++}
++
++/**********************************************************************//**
++  Words for why the build is being decided.
++**************************************************************************/
++static void harness_build_reason_text(char *buf, size_t size,
++                                      enum harness_reason reason,
++                                      const struct player *pplayer,
++                                      const struct city *pcity)
++{
++  int enemies;
++
++  switch (reason) {
++  case HR_NEW:
++    fc_strlcpy(buf, pcity->turn_founded >= game.info.turn - 1
++               ? "was just founded" : "is new to you", size);
++    return;
++  case HR_FINISHED:
++    fc_strlcpy(buf, "finished a build", size);
++    return;
++  case HR_CHANGED:
++    fc_strlcpy(buf, "had its build changed by the game", size);
++    return;
++  case HR_DANGER:
++    enemies = harness_threats(pplayer, pcity);
++    if (enemies > 0) {
++      fc_snprintf(buf, size, "is in danger, with %d enemy %s within %d tiles",
++                  enemies, enemies == 1 ? "unit" : "units",
++                  HARNESS_THREAT_RADIUS);
++    } else {
++      fc_strlcpy(buf, "is in danger", size);
++    }
++    return;
++  case HR_CONVERTING:
++    fc_snprintf(buf, size, "has been on %s for %d turns",
++                improvement_name_translation(pcity->production.value.building),
++                game.info.turn - harness_pick_get(pcity->id)->turn);
++    return;
++  case HR_NONE:
++    break;
++  }
++  buf[0] = '\0';
++}
++
++/**********************************************************************//**
++  Let the chooser pick the city's build. target holds the AI's pick, and
++  gets the chooser's.
++**************************************************************************/
++void dai_harness_choose_build(struct player *pplayer, struct city *pcity,
++                              bool danger, struct universal *target)
++{
++  static const char *reason_names[] = {
++    "none", "new", "finished", "changed", "danger", "converting"
++  };
++  struct harness_option options[HARNESS_MAX_OPTIONS];
++  enum harness_reason reason = harness_build_reason(pcity, danger);
++  char question[512], why[128], current[128];
++  int count, chosen = 0;
++
++  if (reason == HR_NONE
++      || ((reason == HR_DANGER || reason == HR_CONVERTING)
++          && are_universals_equal(target, &pcity->production))) {
++    /* Nothing to decide: the AI would keep the current build. */
++    return;
++  }
++
++  count = harness_build_options(pcity, target, options);
++  if (count == 0) {
++    /* The AI picked nothing the city can build now; leave it to the AI. */
++    return;
++  }
++
++  if (count > 1) {
++    harness_build_reason_text(why, sizeof(why), reason, pplayer, pcity);
++    universal_name_translation(&pcity->production, current, sizeof(current));
++    if (harness_converting(pcity)) {
++      fc_snprintf(question, sizeof(question), "%s (size %d) %s. Its shields "
++                  "go into %s, so nothing is being built. What should it "
++                  "build next?", city_name_get(pcity), city_size_get(pcity),
++                  why, current);
++    } else {
++      fc_snprintf(question, sizeof(question), "%s (size %d) %s. It is "
++                  "building %s, %d of %d shields. What should it build next?",
++                  city_name_get(pcity), city_size_get(pcity), why, current,
++                  pcity->shield_stock,
++                  city_production_build_shield_cost(pcity));
++    }
++    chosen = harness_ask(pplayer, pcity, "build", reason_names[reason],
++                         question, options, count);
++  }
++
++  *target = options[chosen].target;
++  harness_pick_set(pcity, target);
++}
++
++/**********************************************************************//**
++  Whether the research should be decided now: first time, after a new
++  tech, or when something else changed it. Between decisions the research
++  the chooser picked stays.
++**************************************************************************/
++bool dai_harness_research_due(const struct player *pplayer)
++{
++  const struct research *presearch = research_get(pplayer);
++  const struct harness_research *rec
++    = &harness.research[player_index(pplayer)];
++
++  return (!rec->asked || presearch->techs_researched != rec->techs
++          || presearch->researching != rec->tech);
++}
++
++/**********************************************************************//**
++  Names of what a tech leads to: units, buildings, then techs.
++**************************************************************************/
++static void harness_leads_to(char *buf, size_t size,
++                             const struct advance *padvance)
++{
++  int n = 0;
++
++  buf[0] = '\0';
++  unit_type_iterate(ptype) {
++    if (n < 4) {
++      requirement_vector_iterate(&ptype->build_reqs, preq) {
++        if (preq->present && preq->source.kind == VUT_ADVANCE
++            && preq->source.value.advance == padvance) {
++          fc_strlcat(buf, n++ > 0 ? ", " : "", size);
++          fc_strlcat(buf, utype_name_translation(ptype), size);
++          break;
++        }
++      } requirement_vector_iterate_end;
++    }
++  } unit_type_iterate_end;
++  improvement_iterate(pimprove) {
++    if (n < 4) {
++      requirement_vector_iterate(&pimprove->reqs, preq) {
++        if (preq->present && preq->source.kind == VUT_ADVANCE
++            && preq->source.value.advance == padvance) {
++          fc_strlcat(buf, n++ > 0 ? ", " : "", size);
++          fc_strlcat(buf, improvement_name_translation(pimprove), size);
++          break;
++        }
++      } requirement_vector_iterate_end;
++    }
++  } improvement_iterate_end;
++  advance_iterate(pnext) {
++    if (n < 4 && (advance_requires(pnext, AR_ONE) == padvance
++                  || advance_requires(pnext, AR_TWO) == padvance)) {
++      fc_strlcat(buf, n++ > 0 ? ", " : "", size);
++      fc_strlcat(buf, advance_name_translation(pnext), size);
++    }
++  } advance_iterate_end;
++}
++
++/**********************************************************************//**
++  Label for a research option: name, cost, turns, what it leads to.
++**************************************************************************/
++static void harness_research_label(char *buf, size_t size,
++                                   const struct player *pplayer,
++                                   Tech_type_id tech)
++{
++  const struct research *presearch = research_get(pplayer);
++  int cost = research_total_bulbs_required(presearch, tech, FALSE);
++  int have = (tech == presearch->researching
++              ? presearch->bulbs_researched : 0);
++  int rate = pplayer->server.bulbs_last_turn;
++  char when[48], leads[200];
++
++  /* With no bulbs last turn there is no rate to tell the turns by; the
++   * status page says so. */
++  when[0] = '\0';
++  if (rate > 0) {
++    int turns = MAX(1, (cost - have + rate - 1) / rate);
++
++    fc_snprintf(when, sizeof(when), ", about %d %s", turns,
++                turns == 1 ? "turn" : "turns");
++  }
++  harness_leads_to(leads, sizeof(leads), advance_by_number(tech));
++  fc_snprintf(buf, size, "%s (%d bulbs%s%s%s)",
++              research_advance_name_translation(presearch, tech), cost, when,
++              leads[0] != '\0' ? "; leads to " : "", leads);
++}
++
++/**********************************************************************//**
++  The research menu: the AI's pick, then the other techs that can be
++  researched now, most wanted by the AI first.
++**************************************************************************/
++static int harness_research_options(const struct player *pplayer,
++                                    Tech_type_id ai_pick, const int *values,
++                                    struct harness_option *options)
++{
++  const struct research *presearch = research_get(pplayer);
++  Tech_type_id techs[A_LAST];
++  Tech_type_id first = A_UNSET;
++  int ntechs = 0, count = 0, i, j;
++
++  advance_index_iterate(A_FIRST, tech) {
++    if (valid_advance_by_number(tech) != NULL
++        && research_invention_state(presearch, tech) == TECH_PREREQS_KNOWN) {
++      techs[ntechs++] = tech;
++    }
++  } advance_index_iterate_end;
++  if (ntechs == 0) {
++    return 0;
++  }
++
++  for (i = 1; i < ntechs; i++) {
++    Tech_type_id tech = techs[i];
++
++    for (j = i; j > 0 && values[techs[j - 1]] < values[tech]; j--) {
++      techs[j] = techs[j - 1];
++    }
++    techs[j] = tech;
++  }
++
++  /* What the AI would end up researching: its pick if it can be
++   * researched now, else the current research, else the most wanted. */
++  for (i = 0; i < ntechs; i++) {
++    if (techs[i] == ai_pick) {
++      first = ai_pick;
++    }
++  }
++  for (i = 0; i < ntechs && first == A_UNSET; i++) {
++    if (techs[i] == presearch->researching) {
++      first = presearch->researching;
++    }
++  }
++  if (first == A_UNSET) {
++    first = techs[0];
++  }
++
++  options[count].target.kind = VUT_ADVANCE;
++  options[count].target.value.advance = advance_by_number(first);
++  harness_research_label(options[count].label, sizeof(options[count].label),
++                         pplayer, first);
++  count++;
++  for (i = 0; i < ntechs && count < HARNESS_MAX_OPTIONS; i++) {
++    if (techs[i] != first) {
++      options[count].target.kind = VUT_ADVANCE;
++      options[count].target.value.advance = advance_by_number(techs[i]);
++      harness_research_label(options[count].label,
++                             sizeof(options[count].label), pplayer, techs[i]);
++      count++;
++    }
++  }
++
++  return count;
++}
++
++/**********************************************************************//**
++  Let the chooser pick the next research. values are the AI's wants per
++  tech. Returns the tech to research, or A_UNSET if there is nothing to
++  pick from.
++**************************************************************************/
++Tech_type_id dai_harness_choose_research(struct player *pplayer,
++                                         Tech_type_id ai_pick,
++                                         const int *values)
++{
++  struct harness_option options[HARNESS_MAX_OPTIONS];
++  const struct research *presearch = research_get(pplayer);
++  struct harness_research *rec = &harness.research[player_index(pplayer)];
++  char question[512];
++  const char *reason;
++  int count, chosen = 0;
++  Tech_type_id pick;
++
++  count = harness_research_options(pplayer, ai_pick, values, options);
++  if (count == 0) {
++    return A_UNSET;
++  }
++
++  reason = !rec->asked ? "first"
++    : presearch->techs_researched != rec->techs ? "discovery" : "changed";
++  if (count > 1) {
++    if (valid_advance_by_number(presearch->researching) != NULL) {
++      fc_snprintf(question, sizeof(question), "%s knows %d techs and is "
++                  "researching %s, %d of %d bulbs. What should it research "
++                  "next?", player_name(pplayer), presearch->techs_researched,
++                  research_advance_name_translation(presearch,
++                                                    presearch->researching),
++                  presearch->bulbs_researched,
++                  research_total_bulbs_required(presearch,
++                                                presearch->researching,
++                                                FALSE));
++    } else {
++      fc_snprintf(question, sizeof(question), "%s knows %d techs and is "
++                  "researching nothing. What should it research next?",
++                  player_name(pplayer), presearch->techs_researched);
++    }
++    chosen = harness_ask(pplayer, NULL, "research", reason, question,
++                         options, count);
++  }
++
++  pick = advance_number(options[chosen].target.value.advance);
++  /* Recorded before the caller switches, so a tech finished by the switch
++   * itself counts as a new discovery. */
++  rec->asked = TRUE;
++  rec->techs = presearch->techs_researched;
++  rec->tech = pick;
++
++  return pick;
++}
+diff --git a/ai/default/daiharness.h b/ai/default/daiharness.h
+new file mode 100644
+index 0000000..b0be0eb
+--- /dev/null
++++ b/ai/default/daiharness.h
+@@ -0,0 +1,37 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++#ifndef FC__DAIHARNESS_H
++#define FC__DAIHARNESS_H
++
++/* common */
++#include "fc_types.h"
++
++/* The harness hook lets an outside chooser make two of the AI's choices
++ * for named AI players: what a city builds, and what to research. At each
++ * of those decisions the AI writes question.json (a status page and a
++ * numbered menu, its own pick first) to FREECIV_HARNESS_DIR and waits for
++ * answer.txt. The hook is off unless FREECIV_HARNESS_DIR and
++ * FREECIV_HARNESS_PLAYERS are set. */
++
++bool dai_harness_player(const struct player *pplayer);
++
++bool dai_harness_build_due(const struct city *pcity, bool danger);
++void dai_harness_choose_build(struct player *pplayer, struct city *pcity,
++                              bool danger, struct universal *target);
++
++bool dai_harness_research_due(const struct player *pplayer);
++Tech_type_id dai_harness_choose_research(struct player *pplayer,
++                                         Tech_type_id ai_pick,
++                                         const int *values);
++
++#endif /* FC__DAIHARNESS_H */
+diff --git a/meson.build b/meson.build
+index bcefff5..d1721c2 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1478,6 +1478,7 @@ ais = static_library('fc_ai',
+   'ai/default/daidiplomacy.c',
+   'ai/default/daidomestic.c',
+   'ai/default/daieffects.c',
++  'ai/default/daiharness.c',
+   'ai/default/dailog.c',
+   'ai/default/daimilitary.c',
+   'ai/default/daiplayer.c',
+-- 
+2.56.0
+

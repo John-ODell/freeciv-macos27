@@ -25,6 +25,7 @@ Sources: four research reports, written by separate agents from public sources a
 | The one-unit-per-tile hex rules kept as `civ54` for the later engine game | PR 45; `scripts/civ54-rules-test.sh` 11/11 |
 | Slice 1: stacks, a square map seen from above that wraps east to west, only the defender dies (`killstack` off), cities work the 21-tile fat cross | PR 47; `scripts/civ45-rules-test.sh` 8/8, control run with killstack on fails; 100-turn autogame, `notes/civ45-planning.md` |
 | A first look in the bundled Qt client: trident is offered at pregame; declined, amplio2 draws the square map as diamonds | PR 56; `notes/freeciv45/client-look.md` |
+| A hook (patch 0007) that hands an AI player's builds and research to an outside chooser, so the play harness can play-test Freeciv45 | PR 63; `scripts/harness-test.sh`, all checks pass with a random chooser and with the AI's own pick; `notes/freeciv45/harness.md` |
 
 Open from slice 1: `test.sh` reads the installed ruleset unless told otherwise (#48), and the AI's stack use in
 later eras (#49). The client look (#50) found a stale line in the tileset dialog (#53) and a missing SVG plugin in
