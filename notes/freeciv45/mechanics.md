@@ -356,3 +356,110 @@ Project notes (public):
 
 - S100 notes/civ45-planning.md: https://github.com/John-ODell/freeciv-macos27/blob/main/notes/civ45-planning.md
 - S101 notes/game-directions.md: https://github.com/John-ODell/freeciv-macos27/blob/main/notes/game-directions.md
+
+## 6. Slice 2, Combat: what was built and what was seen (2026-10-17, patch 0008)
+
+Freeciv45's combat slice (plan roadmap row 2, PR for issue 75) in `data/civ45` of the fork, all ruleset, no Lua. Labels as
+in the plan: observed, derived, inferred. Line numbers are the fork's at commit `6777c85` (upstream S3_2 `44e6898` plus
+patches 0001 to 0008).
+
+### What the ruleset says now
+
+- **Siege collateral.** Catapult, Cannon, Artillery and Howitzer carry a new user flag `Collateral` (`units.ruleset:54`)
+  and a `bombard_rate` of 5, 10, 14 and 20 (`:1614,1657,1696,1734`). Four enablers for Freeciv's "Bombard 2" action
+  (`actions.ruleset:1279-1337`, shown to the player as "Bombard Stack", `:342`) copy the aircraft "Bombard" enablers with
+  that flag and one more target requirement, `"MaxUnitsOnTile", "1", "Tile", FALSE`: the tile must hold two or more
+  units. "Bombard 2" is non-lethal by definition (`doc/README.actions:785-792`): each unit on the tile is shot at
+  `bombard_rate` times and loses 1 hit point per hit, and a unit that would reach 0 keeps 1
+  (`server/unittools.c:381-392`). Every reachable unit on the tile is hit (`server/unithand.c:4545-4546`). Bombarding
+  spends the unit's whole turn (`effects.ruleset:4980`, as for aircraft). Against a lone unit the enabler is off and the
+  siege unit attacks as before; against a stack "Attack" stays legal too (`bombard_2_blocked_by` lists only "Capture
+  Units", `actions.ruleset:46`), so a human can choose. The rates are first guesses: against the defence values of their
+  own era they take roughly a third to a half of each unit's hit points on open ground (derived from the round odds
+  `attack / (attack + defence)`; not tuned).
+- **To the death.** `Combat_Rounds` is 0 (`effects.ruleset:549`): a fight runs until the attacker or the defender dies
+  (`server/unittools.c:329-332`; sandbox stopped every fight after 15 rounds, which between two 20-hit-point units
+  could never end in a death).
+- **Break-off for fast units.** A new user flag `Withdraws` (`units.ruleset:55`) on Horsemen, Chariot, Elephants,
+  Crusaders, Knights, Dragoons, Cavalry and Armor. Three effects (`effects.ruleset:553-576`) give such an attacker a cap
+  of 12 rounds, plus 12 at 11 or more hit points and 12 more at 21 or more (`MinHitPoints`, the unit's current hit
+  points, `common/requirements.c:4383`), so a full-health Knights breaks off after 12 rounds, Cavalry after 24, Armor
+  after 36, and a wounded one sooner. At the cap both units live.
+- **Bombard range 1.** `bombard_max_range` is back to 1 (`actions.ruleset:169`), as in sandbox.
+- README.civ45, the ruleset summary and the two flags' help texts say the same in the player's words.
+
+### What stock Freeciv 3.2 cannot express (observed in the source)
+
+| Wanted (reference game, spec 2.5 and 2.6) | Freeciv 3.2 | Where |
+|---|---|---|
+| Collateral hits a limited number of units (5 to 7) with a damage cap per unit (about half to 70 %) | Bombard hits every reachable unit on the tile with the same rate; the only floor is 1 hit point | `server/unithand.c:4545-4546`, `server/unittools.c:387-392` |
+| Siege units are immune to collateral | Whether a unit can be hit is its class's reachability, shared with "Attack"; nothing per action or per flag | `is_unit_reachable_at` at `server/unithand.c:4546`; `Unreachable` class flag, `units.ruleset` class section |
+| The siege unit fights the top defender and does collateral in the same attack | Bombard is its own action and ends the turn; the attack and the bombardment are two different actions on two turns | `Action_Success_Actor_Move_Cost` effect; `doc/README.actions:774-792` |
+| Withdrawal is a chance to escape the killing blow | `Combat_Rounds` is a fixed cap on rounds, read for the attacker only; a defender never withdraws | `server/unittools.c:329-332`, `doc/README.effects:324-326` |
+| The AI knows the odds change with the cap | `win_chance()` has no rounds parameter, so the AI's attack odds and Freeciv's defender choice assume a fight to the death | `common/combat.c:332,478` |
+| Lua could do the rest | Lua can cut hit points but not read them, so a script cannot keep damage non-lethal or make a withdrawal roll | `common/scriptcore/tolua_game.pkg:58-66`, `server/scripting/api_server_edit.c:592-598` |
+
+### Tests
+
+`scripts/civ45-rules-test.sh ~/freeciv-builds/qt --data port/freeciv/data` passes 18/18 on the new ruleset
+(`logs/civ45-rules-20261017-153316`): the eight slice 1 cases and ten new ones. A Howitzer bombards a three-unit animal
+stack and all three live, then a Warriors beats that stack's defender (so the stack was wounded; a Warriors against a
+full-health Warriors is a coin toss, against one at 1 hit point it wins about 99.9 % of fights); a Catapult may not
+bombard a lone unit; a Bomber two tiles away may not bombard while an adjacent one may, and its target lives; a
+Musketeers attacking a Musketeers leaves exactly one of them dead; a Knights attacking a Musketeers, which it cannot
+kill within 12 rounds, leaves both alive; and `effects.unit_bonus` reads `Combat_Rounds` 0, 12 and 24 for a
+Musketeers, a Knights and a Dragoons. The same test against the slice 1 ruleset (the installed copy,
+`--data ~/freeciv-builds/qt/share/freeciv`, `logs/civ45-rules-20261017-153441`) gives 11/18: the seven cases that
+depend on this slice fail, and in it the Warriors' attack on the unwounded stack ended undecided at 15 rounds with all
+three units still there. The actions go through the real enablers (`Unit:perform_action` refuses a disabled action,
+`server/scripting/api_server_edit.c:366-424`).
+
+### Autogames
+
+`scripts/test.sh` gained `--lua FILE` (a script loaded before the game starts) and `--extra CMD` (a server command in the
+setup), and `scripts/civ45-combat-log.lua` logs every attack-type action, unit lost and city taken;
+`scripts/civ45-combat-summary.py LOG` counts them. Four 200-turn games, 10 AIs, seeds 42/42, the slice 1 rules from the
+installed copy against the new rules from the fork:
+
+| | slice 1, peace allowed | slice 2, peace allowed | slice 1, diplomacy off | slice 2, diplomacy off |
+|---|---|---|---|---|
+| log | `logs/test-qt-20261017-153525` | `logs/test-qt-20261017-153528` | `logs/test-qt-20261017-153826` | `logs/test-qt-20261017-153829` |
+| ended | allied victory, turn 149 | allied victory, turn 149 | turn limit, 200 | turn limit, 200 |
+| attack-type actions | 8 Attack | 5 Attack, 5 Bombard 2 | 237 Attack, 1 Collect Ransom | 183 Attack, 1 Bombard 2, 1 Collect Ransom |
+| fights left undecided (no unit lost) | not counted | not counted | 81 of 237 (34 %) | 39 of 183 (21 %), all by Withdraws units |
+| attacks by Withdraws units | 0 | 0 | 50, 24 undecided | 66, 39 undecided |
+| attackers that died | 3 | 3 | 33 | 38 |
+| units killed in combat | 3 | 5 | 157 | 145 |
+| siege bombardments | 0 | 5, one barbarian Cannon, the same city, turns 144 to 148 | 0 | 1, a Cannon, turn 194, a field stack of two |
+| cities changing hands | 1 | 2 | 10 | 16 |
+| wall time | about 150 s | about 150 s | 122 s | 124 s |
+
+With diplomacy allowed both games ended at turn 149 by allied victory: the ten AIs had all allied, and in 150 turns the
+only fighting was barbarians against the Mayas and the Thai. That is a finding about the autogame, not the slice (issue
+below). In that little fighting the risk from the plan's table showed at once: in the slice 2 game a barbarian Cannon
+next to the Maya city Wak Kab'nal (two defenders) used "Bombard 2" on five consecutive turns, 144 to 148, and never
+attacked; in the slice 1 game the same barbarians sent Musketeers in to attack and die. The default AI takes a bombard
+action whenever one is enabled, before it considers "Attack" (`ai/default/aitools.c:855-864`, and
+`dai_select_tile_attack_action` tests `ACTRES_BOMBARD` before `ACTRES_ATTACK`, `ai/default/daiunit.c:459,495`), and
+nothing in it values the wounds it inflicts or sends another unit in afterwards (observed; the only bombard-aware
+code elsewhere is a "dummy" defence estimate, `ai/default/daimilitary.c:597`).
+
+With diplomacy off the ten AIs fought for 200 turns, and the to-the-death rule shows in the fights. In the slice 1 game
+81 of 237 attacks (34 %) ended with both units alive at the 15-round cap. In the slice 2 game 39 of 183 (21 %) did,
+every one of them an attack by a Withdraws unit (39 of the 66 such attacks), and no fight between other units was left
+undecided (observed: an attack during which no unit was lost, counted from the log). More attackers died (38 against
+33) and more cities changed hands (16 against 10), which fits attacks that always resolve (derived; one pair of games on
+the same seeds, so the difference is suggestive, not measured). The AIs built almost no siege: one Cannon did one
+"Bombard 2" (turn 194, a field stack of two) and two attacks on lone units, so in these games the risk did not bite;
+it will once the roster gives the AI siege lines to build (slice 10). Nothing in the four logs is a Lua error.
+
+### Open
+
+- The AI and siege (issue 83): the default AI bombards a stack every turn instead of attacking, and does not follow a
+  bombardment with an attack by another unit. Options, in order of cost: keep "Bombard 2" off the AI's menu (an
+  `"AI", ..., "Player"` requirement is not available for this; a Lua-free way is unknown), make the AI's attackers
+  prefer wounded stacks (engine, `ai/default`), or accept it and let the harness's chooser play the siege.
+- Tuning: the rates 5/10/14/20 and the 12-rounds-per-10-hit-points cap are placeholders until there is a roster (slice
+  10) and a one-strength number per unit (plan decision 7).
+- Allied victory ends an autogame around turn 150 on these seeds (issue 84); `--extra "set diplomacy DISABLED"` is the
+  workaround used here.

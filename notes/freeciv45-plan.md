@@ -26,17 +26,23 @@ Sources: four research reports, written by separate agents from public sources a
 | Slice 1: stacks, a square map seen from above that wraps east to west, only the defender dies (`killstack` off), cities work the 21-tile fat cross | PR 47; `scripts/civ45-rules-test.sh` 8/8, control run with killstack on fails; 100-turn autogame, `notes/civ45-planning.md` |
 | A first look in the bundled Qt client: trident is offered at pregame; declined, amplio2 draws the square map as diamonds | PR 56; `notes/freeciv45/client-look.md` |
 | A hook (patch 0007) that hands an AI player's builds and research to an outside chooser, so the play harness can play-test Freeciv45 | PR 63; `scripts/harness-test.sh`, all checks pass with a random chooser and with the AI's own pick; `notes/freeciv45/harness.md` |
+| Slice 2, Combat (patch 0008): siege units wound every unit of a stack of two or more and kill none ("Bombard 2" with a new `Collateral` flag), fights go to the death (`Combat_Rounds` 0) except for `Withdraws` attackers, which break off after 12 rounds per 10 hit points, and aircraft bombard at range 1 | PR 89 (issue 75); `scripts/civ45-rules-test.sh` 18/18, 11/18 on the slice 1 rules; four 200-turn autogames with `scripts/civ45-combat-log.lua`, `notes/freeciv45/mechanics.md` section 6 |
 
 Open from slice 1: `test.sh` reads the installed ruleset unless told otherwise (#48), and the AI's stack use in
 later eras (#49). The client look (#50) found a stale line in the tileset dialog (#53) and a missing SVG plugin in
 the bundle (#54, and #55 upstream).
+
+Open from slice 2: the default AI bombards a stack every turn instead of attacking it, and never follows a
+bombardment with an attack (#83); with diplomacy allowed the ten AIs all ally and an autogame ends by allied victory
+around turn 150, which `test.sh` reports as a failure (#84). The siege rates and the break-off cap are placeholders
+until the roster and the one-strength decision (7).
 
 ## Decisions for John
 
 | # | Question | Recommendation |
 |---|---|---|
 | 1 | Does Freeciv45 stay "rules and Lua on the stock Freeciv server", so it runs on any Freeciv 3.2 and its servers take stock clients, with our own work allowed in the Mac client? | Yes. Client patches don't change the rules or the network protocol (derived: the server sends the rules to each client, `notes/game-directions.md`). Engine-only systems go to civ54 or upstream. |
-| 2 | Combat: fights to the death, with a break-off for fast units; siege units damage whole stacks; bombard range back to 1 (2 was for fifth-game ranged units) | Yes, as the next slice. Stacks with no counter invite one huge stack (inferred). |
+| 2 | Combat: fights to the death, with a break-off for fast units; siege units damage whole stacks; bombard range back to 1 (2 was for fifth-game ranged units) | Yes, as the next slice. Stacks with no counter invite one huge stack (inferred). Built 2026-10-17 as slice 2, see "Where it stands". |
 | 3 | Map look until our art exists: trident (square, 30 px, dated) as now; amplio2 drawn on the square map (a diamond look, seen in #50); or the `ISO` topology (same rules, amplio2's look) | Keep square with trident for now. The client offers trident at pregame, and a player who declines gets amplio2's diamonds (`notes/freeciv45/client-look.md`). The target is our own 96 px square tileset. |
 | 4 | Art: 96 px tiles from 192 px masters; units with one facing in v1 (8 facings later); the proposed "gouache atlas" style; which image tool (OpenAI API, ChatGPT app, Gemini) | Yes to sizes and one facing. Style and tool are John's taste. |
 | 5 | Lock `killstack` and `topology` in the ruleset, or leave them as pregame choices? | Leave unlocked, as Freeciv's own webperimental does with killstack (`refs/freeciv-S3_2/data/webperimental/game.ruleset:724`). |

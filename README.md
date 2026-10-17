@@ -47,8 +47,10 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 ```
 
 `build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
-`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004 and 0006: sandbox
-plus stacks of units on a square map, see `port/freeciv/data/civ45/README.civ45` after applying the patches);
+`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004, 0006 and 0008: sandbox
+plus stacks of units on a square map, siege units that wound whole stacks and fights to the death, see
+`port/freeciv/data/civ45/README.civ45` after applying the patches); `--lua FILE` loads a script before the game starts,
+for example `scripts/civ45-combat-log.lua`, which logs every attack, bombardment, unit lost and city taken for counting;
 `test.sh` reads the installed data unless given `--data port/freeciv/data`, and its result line names the directory
 the ruleset came from. `--ruleset civ54` does the same for civ54, the copy of civ45's earlier one-unit-per-tile hex
 rules kept for the later Civ5-style game (patch 0005, `data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz`
@@ -56,8 +58,10 @@ counts units per tile in the saves an autogame leaves behind (add `--ruleset por
 exemptions for aircraft and ships in port, or `--report` for civ45, where stacks are the rule).
 `scripts/civ45-rules-test.sh ~/freeciv-builds/qt` checks Freeciv45's rules in a game with one human-controlled
 player: the map and stack settings, moving onto a friendly unit and into an occupied city, a three-unit stack that
-keeps two units when its defender loses, and a stack still together a turn later. `--extra "set killstack enabled"`
-is the control run, which must fail. `scripts/civ54-rules-test.sh ~/freeciv-builds/qt` checks civ54's rules
+keeps two units when its defender loses, a stack still together a turn later, and the combat rules: a siege unit's
+bombardment wounds a three-unit stack without killing (a Warriors then beats its defender) and is refused against a lone
+unit, a Bomber bombards at range 1 only, a duel of equals ends with one unit dead, and a Withdraws attacker breaks off.
+`--extra "set killstack enabled"` is the control run, which must fail. `scripts/civ54-rules-test.sh ~/freeciv-builds/qt` checks civ54's rules
 directly: it loads `scripts/civ54-rules-test.lua` into a civ54 game with one human-controlled player, moves a land
 unit, a fighter and destroyers at a coastal city at turn 12, runs the turn-start sweep, and exits 0 only if every case
 passes and the server log holds no Lua error.
