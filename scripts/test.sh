@@ -17,7 +17,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 P="$1"; shift
 BIN="$P"; [ -d "$P/bin" ] && BIN="$P/bin"
 TURNS=100; CLIENTS=1; PORT=5590; RULESET=""; DATA=""; LUA=""; EXTRA=""
-while [ $# -gt 0 ]; do case "$1" in --turns) TURNS="$2"; shift;; --no-client) CLIENTS=0;; --port) PORT="$2"; shift;; --ruleset) RULESET="$2"; shift;; --data) DATA="$2"; shift;; --lua) LUA="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift;; --extra) EXTRA="$EXTRA$2"$'\n'; shift;; *) echo "unknown $1"; exit 1;; esac; shift; done
+while [ $# -gt 0 ]; do case "$1" in --turns) TURNS="$2"; shift;; --no-client) CLIENTS=0;; --port) PORT="$2"; shift;; --ruleset) RULESET="$2"; shift;; --data) DATA="$2"; shift;; --lua) [ -f "$2" ] || { echo "no such file: $2"; exit 1; }; LUA="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift;; --extra) EXTRA="$EXTRA$2"$'\n'; shift;; *) echo "unknown $1"; exit 1;; esac; shift; done
 NAME="$(basename "$(cd "$BIN/.." && pwd)")"
 OUT="$ROOT/logs/test-$NAME-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$ROOT/logs"; mkdir "$OUT" 2>/dev/null || { OUT="$OUT-$$"; mkdir "$OUT"; }   # two runs in one second: mkdir is the atomic check

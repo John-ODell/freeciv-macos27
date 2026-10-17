@@ -25,7 +25,7 @@ def summarize(path):
                 last_turn = max(last_turn, int(turn))
                 key = act if ok == "ok" else act + " (failed)"
                 actions[key] += 1
-                utype = actor.split(" of ")[0]
+                utype = "(attacker died)" if actor == "dead" else actor.split(" of ")[0]
                 actors[act][utype] += 1
                 if city != "-": city_targets[act] += 1
                 continue
