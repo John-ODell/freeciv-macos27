@@ -53,9 +53,24 @@ grep "FC45TEST" "$OUT/server.log" | sed 's/^[0-9]*: //'
 RC=0
 # The victory keys Lua cannot read, checked in the ruleset file the server loaded.
 RS="$DATA/civ45/game.ruleset"
-for want in 'victory_min_points = 8000' 'victory_lead_pct   = 50' '"endturn", 475, FALSE' '"endspaceship", "ENABLED", FALSE'; do
+for want in 'victory_min_points = 8000' 'victory_lead_pct   = 50' '"endturn", 475, FALSE' '"endspaceship", "ENABLED", FALSE' \
+            'upgrade_veteran_loss     = 0' 'autoupgrade_veteran_loss = 0'; do
   if grep -qF "$want" "$RS"; then echo "FC45TEST PASS game.ruleset has $want"; else echo "FC45TEST FAIL game.ruleset lacks $want"; RC=1; fi
 done
+# The draft units cost a citizen (units.ruleset; Lua has no pop_cost getter).
+for u in levy militia conscripts; do
+  if sed -n "/^\[unit_$u\]/,/^\[unit_/p" "$DATA/civ45/units.ruleset" | grep -q '^pop_cost      = 1'; then
+    echo "FC45TEST PASS units.ruleset: $u costs one citizen"; else echo "FC45TEST FAIL units.ruleset: $u lacks pop_cost 1"; RC=1; fi
+done
+# The 30 shields a disbanded Levy gave Testerburg, in the first autosave written after the test (the server
+# autosaves right after a turn's start, so that save holds the test's actions but not yet the city's own
+# production or a finished build, which would reset the count).
+if grep -q "FC45TEST expect disbanded shields" "$OUT/server.log"; then
+  T=$(awk '/FC45TEST expect disbanded shields/{f=1} f && /^Game saved as .*auto\.sav\.gz/{print $4; exit}' "$OUT/server.log")
+  GOT=$(python3 -I "$ROOT/scripts/civ45-draft-summary.py" --city Testerburg disbanded_shields "$T" 2>/dev/null)
+  if [ "$GOT" = 30 ]; then echo "FC45TEST PASS the disbanded Levy put 30 shields into Testerburg's build ($(basename "$T"))"
+  else echo "FC45TEST FAIL Testerburg's disbanded_shields is '${GOT:-missing}' in ${T:-no autosave}"; RC=1; fi
+fi
 if EXP=$(sed -n 's/.*FC45TEST expect victory to the \(.*\) (score.*/\1/p' "$OUT/server.log" | head -1) && [ -n "$EXP" ]; then
   if grep -q "Scenario victory to the $EXP\." "$OUT/server.log"; then echo "FC45TEST PASS the highest score, the $EXP, won at the last turn"
   else echo "FC45TEST FAIL no 'Scenario victory to the $EXP' in $OUT/server.log"; RC=1; fi

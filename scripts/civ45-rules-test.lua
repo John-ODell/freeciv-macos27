@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
--- Freeciv45 (civ45) stack, map, combat and victory rules test. Load it into a civ45 server before the game starts with
+-- Freeciv45 (civ45) stack, map, combat, victory and draft rules test. Load it into a civ45 server before the game starts with
 --   lua file scripts/civ45-rules-test.lua
 -- (scripts/civ45-rules-test.sh does that; an autogame reads no console input once it runs). It runs at the
 -- first turn start from turn 5 on, checks one more thing a turn later, and prints
@@ -152,6 +152,77 @@ function fc45_rules_test_run()
 
   if tester ~= nil and animals ~= nil then fc45_combat_test_run(tester, animals, used) end
   fc45_victory_test_run()
+  if tester ~= nil then fc45_draft_test_run(tester, used) end
+end
+
+-- Slice 3, upgrades and the draft. The Tester gets a city of its own (it has none: nothing moved its
+-- Settlers), the techs and the gold, and acts through the real "Upgrade Unit" and "Disband Unit Recover"
+-- enablers. Lua cannot read a city's shield stock or build a unit, so the 30 shields of a disbanded draft unit
+-- are read by the runner from the next autosave (the city is named for that), and a draft unit's citizen
+-- cost is seen in the autogame's city_size_change signal, not here.
+function fc45_draft_test_run(tester, used)
+  local levy, militia, conscripts = find.unit_type("Levy"), find.unit_type("Militia"), find.unit_type("Conscripts")
+  if levy == nil or militia == nil or conscripts == nil then
+    check("the ruleset has the Levy, Militia and Conscripts draft units", false)
+    return
+  end
+  check("the three draft units carry the Draft flag",
+        levy:has_flag("Draft") and militia:has_flag("Draft") and conscripts:has_flag("Draft"))
+  local before = tester:can_build_direct(militia)
+  edit.give_tech(tester, find.tech_type("Bronze Working"), 0, false, "test")
+  edit.give_tech(tester, find.tech_type("Gunpowder"), 0, false, "test")
+  check("a Levy can be raised with Bronze Working and a Militia only once Gunpowder is known",
+        tester:can_build_direct(levy) and not before and tester:can_build_direct(militia))
+
+  -- A free tile that takes a city: grassland or plains (the map's free rows are glacier, which refuses
+  -- cities), and no city within citymindist (3: none in the 5-by-5 square around it).
+  local spot, city
+  for t in whole_map_iterate() do
+    local terrain = t.terrain:rule_name()
+    if (terrain == "Grassland" or terrain == "Plains") and free(t) and not used[t.id] then
+      local near = false
+      for a in t:circle_iterate(8) do if a:city() ~= nil then near = true end end
+      if not near then
+        used[t.id] = true
+        spot = t
+        if edit.create_city(tester, t, "Testerburg") then city = t:city() end
+        break
+      end
+    end
+  end
+  if spot == nil then
+    log.normal("FC45TEST SKIP no free grassland or plains for the Tester's city")
+    return
+  end
+  if city == nil then
+    check("the Tester founds Testerburg on free land", false)
+    return
+  end
+  log.normal("FC45TEST Testerburg is city %d at tile %d on turn %d", city.id, spot.id, game.turn())
+
+  -- A hardened (level 2) Phalanx upgraded in its city keeps its level. "Upgrade Unit" goes to the newest type
+  -- the chain reaches, Musketeers here since Gunpowder is known (Phalanx, Pikemen, Musketeers), and costs
+  -- 2 * missing + missing^2 / 20 gold, where missing is the Musketeers' 40 shields less half the Phalanx's 20
+  -- (Unit_Shield_Value_Pct -50 for the price): 105.
+  edit.give_tech(tester, find.tech_type("Feudalism"), 0, false, "test")
+  edit.change_gold(tester, 1000)
+  local gold = tester:gold()
+  local ph = edit.create_unit(tester, spot, find.unit_type("Phalanx"), 2, city, -1)
+  local upgraded = ph:perform_action(find.action("Upgrade Unit"), city)
+  local after = nil
+  for u in spot:units_iterate() do if u.id == ph.id then after = u end end
+  log.normal("FC45TEST upgrade: performed %s, now %s, veteran %s, gold %d -> %d", tostring(upgraded),
+             after and after.utype:rule_name() or "gone", after and tostring(after.veteran) or "-", gold, tester:gold())
+  check("a hardened Phalanx upgraded in its city is a Musketeers that is still hardened, for 105 gold",
+        upgraded and after ~= nil and after.utype:rule_name() == "Musketeers" and after.veteran == 2
+        and tester:gold() == gold - 105)
+
+  -- A Levy disbanded into the city's build is gone; the runner checks the 30 shields in the autosave.
+  local lv = edit.create_unit(tester, spot, levy, 0, city, -1)
+  local n = spot:num_units()
+  local whipped = lv:perform_action(find.action("Disband Unit Recover"), city)
+  check("a Levy disbands into Testerburg's build and is gone", whipped and spot:num_units() == n - 1)
+  log.normal("FC45TEST expect disbanded shields 30 in Testerburg")
 end
 
 -- Victory rules: the settings the server exposes, and the domination script's counting and decision with

@@ -524,3 +524,77 @@ Logs: `logs/test-qt-20261017-155025` and `logs/test-qt-20261017-155028` (final s
   culture 8000 and a 50 % lead now, before the culture slice changes the pace; and whether the score winner should be
   announced through Lua at all.
 - Culture and domination numbers are untuned (see the autogame); re-tune with roadmap row 8 and after slice 10.
+
+## 8. Slice 3, upgrades and the draft: what was built and what was seen (2026-10-17, patch 0010)
+
+Built from `notes/freeciv45/design/units-and-upgrades.md` section 1 (the upgrade rule and the three draft units) and
+`notes/freeciv45/in-freeciv.md` 4.2 (the draft and whip workarounds) as issue 106. Line numbers are the fork's at
+commit `c499bd2` (upstream S3_2 `44e6898` plus patches 0001 to 0010).
+
+### What the ruleset says now
+
+| Rule | Freeciv form | Where |
+|---|---|---|
+| Upgrades keep veteran levels | `upgrade_veteran_loss` 0 and `autoupgrade_veteran_loss` 0 (sandbox: 1 each). The server passes them to `transform_unit` | `data/civ45/game.ruleset:132,135`; `server/unithand.c:264`, `server/unittools.c:451` |
+| Upgrade price unchanged | `2 * missing + missing^2 / 20`, missing = new cost less half the old unit's cost (`Unit_Shield_Value_Pct` -50 for "Upgrade Unit"), halved after Invention | `common/unittype.c:1731`; `effects.ruleset:5458-5464,579-586` |
+| Draft units | Levy (Bronze Working, 2/2, 10 shields, 10 hp), Militia (Gunpowder, 8/8, 20, 20 hp), Conscripts (Conscription, 14/14, 25, 20 hp): `pop_cost 1`, a new `Draft` user flag, `obsolete_by "None"`, no roles, and four negated `Gov` reqs (Anarchy, Republic, Democracy, Federation), so they are raised under Tribal, Despotism, Monarchy, Communism or Fundamentalism | `units.ruleset:56,1181-1318` |
+| The whip | Three `Unit_Shield_Value_Pct` rows (+250, +100, +70) on top of sandbox's -50 for "Disband Unit Recover", so a disbanded Levy, Militia or Conscripts is worth 30 shields whatever it cost: a citizen and the unit's shields become 30 shields in the build | `effects.ruleset:5450-5492`; `common/unit.c:222` (the value), `server/unithand.c:5745` (added whole to `shield_stock`) |
+
+The draft units use one strength for attack and defence, as the design note's roster will (decision 7); the
+rest of civ45 still has two values. No unhappiness follows a draft or a whip (in-freeciv.md 4.2, "Draft anger",
+is not built); see "Open".
+
+### What stock Freeciv cannot express
+
+- Lua cannot build a unit or shrink a city (`tolua_server.pkg:117-254`), so the citizen cost of a draft is seen only
+  through the server's own build path, in the autogame's `city_size_change` signal (reason `unit_built`), and the
+  whip's 30 shields are read from a save (`disbanded_shields`, reset when a build completes, `server/cityturn.c:3545`).
+- The whip still takes a turn: the city builds the Levy at the turn's end, and the player disbands it next turn.
+  Sandbox's instant buy is gold only. A draft unit the city cannot afford (size 1) is refused at build time
+  (`server/cityturn.c:2873-2881`).
+- Nothing limits drafts per turn or per empire; the spec's 1 to 5 a turn and "keep 5 citizens" wait for a Lua
+  `unit_built` handler that can at least report, not refuse.
+
+### Tests
+
+`scripts/civ45-rules-test.sh ~/freeciv-builds/qt --data port/freeciv/data`: 28/28 Lua cases and ten shell checks
+(`logs/civ45-rules-20261017-162002`). New: the three draft units carry the flag; a Levy can be raised with Bronze
+Working and a Militia only once Gunpowder is known (`Player:can_build_direct`, which reads the `Gov` reqs too); the
+Tester founds a city of its own on free grassland or plains (`edit.create_city` refuses glacier, the map's free
+rows, and any tile within `citymindist` of a city), upgrades a hardened Phalanx there through "Upgrade Unit" to a
+Musketeers (the chain's end with Gunpowder known) that is still hardened, for exactly 105 gold (2 × 30 + 900 / 20,
+missing 40 − 10); and a Levy disbanded into the build is gone, with the runner reading 30 `disbanded_shields` from
+the first autosave after the test. The runner also greps the two veteran keys and the three `pop_cost` lines.
+On the installed slice 1 copy (the control) 13/21 Lua cases pass: the draft cases stop at "the ruleset has the Levy, Militia and Conscripts draft units", the victory cases skip, and all nine ruleset greps fail, so the runner exits 1 as it should (`logs/civ45-rules-20261017-162442`). `scripts/harness-test.sh`: passes (`logs/harness-civ45-20261017-162245`), nothing in it changed.
+
+### Autogame
+
+One 300-turn game, 10 AIs, seeds 42/42, diplomacy off, with `scripts/civ45-draft-log.lua`
+(`logs/test-qt-20261017-162434`); the slice 2 war game (`logs/test-qt-20261017-153829`, same seeds, 200 turns) is
+the control. Observed:
+
+| What | Count |
+|---|---|
+| Draft units built | 129 (106 Militia, 23 Conscripts, no Levy), the first at turn 152, by seven of the ten AIs (39 by one) |
+| City size after the draft | 2: 37, 3: 35, 4: 18, 5: 26, 6 to 9: 13 |
+| Draft units disbanded into a build by the AI | 12 Militia (beside 129 Phalanxes and 10 others it recycled on its own) |
+| Draft units alive at turn 300 | 59 |
+| Cities at turn 200 | 87, mean size 3.9, 21 % at size 1 or 2; control 87, 3.9, 20 % |
+| Cities at turn 300 | 93, mean size 4.5, 19 % at size 1 or 2 |
+
+Inferred: the AI never raises a Levy because it prices a citizen as the food to grow it back
+(`ai/default/daicity.c:712-735`), which dwarfs 10 shields; a Militia at 8/8 for 20 shields is worth a citizen to it
+from the turn Gunpowder arrives. It drafts from cities of size 3 to 5 as often as from size 2, and the city-size
+profile at turn 200 is the control's, so "the AI drafts its cities small" (the roadmap's risk) did not show in 300
+turns. The 12 Militia it disbanded into builds got the 30 shields each, by the AI's ordinary habit of recycling
+units it no longer wants, not as a whip. The game ended at turn 300 with "Scenario victory to the Hittites": the
+runner sets `endturn` 300, so the victory slice's score winner fired, as designed.
+
+### Open
+
+- The design note's question 1 (three draft units spanning the eras, or one per era) and the government list are
+  decision 9 in the plan. The governments stand in for a civic until roadmap row 8.
+- Draft anger and a draft limit (spec 2.4, in-freeciv.md 4.2) are not built: issue 107.
+- The AI's use is as the autogame shows; nothing in the default AI knows what a draft is for (it treats a Levy as a
+  cheap unit that happens to cost a citizen: `ai/default/daicity.c:712-735` prices the citizen in food, `:790` refuses
+  it when the city is too small).
