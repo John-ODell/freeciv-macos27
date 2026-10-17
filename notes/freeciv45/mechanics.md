@@ -463,3 +463,64 @@ it will once the roster gives the AI siege lines to build (slice 10). Nothing in
   10) and a one-strength number per unit (plan decision 7).
 - Allied victory ends an autogame around turn 150 on these seeds (issue 84); `--extra "set diplomacy DISABLED"` is the
   workaround used here.
+
+
+## 7. Victory slice: six ways to win (2026-10-17, patch 0009)
+
+Built from `notes/freeciv45/design/victory.md` (PR 77) as issue 92. Line numbers are the fork's at commit `be05401`
+(upstream S3_2 `44e6898` plus patches 0001 to 0009).
+
+### What the ruleset says now
+
+| Win | Rule | Where |
+|---|---|---|
+| Conquest | Every rival dead or surrendered: the server's own rule, nothing set | `server/srv_main.c:524-546` |
+| Domination | Hold 60 % of the land tiles and 50 % of all citizens for 3 turns running, checked from turn 100; Lua on `turn_begin` walks the map and the cities and calls `edit.player_victory` | `data/civ45/script.lua`, `fc45_domination_check` (the constants `FC45_DOM_*` at its top) |
+| Culture | `victory_min_points` 8000 and `victory_lead_pct` 50 (sandbox 20000 and 100, which no player reached, design note 2.3) | `data/civ45/game.ruleset:390-397` |
+| Space | `victories` keeps SPACERACE and `endspaceship` is written out as ENABLED: the ship must arrive | `game.ruleset:930-932` |
+| Alliance | `victories` keeps ALLIED: the last alliance standing wins together (a vote waits for later slices, design note 2.5) | `game.ruleset:930` |
+| Score | `endturn` 475; at the start of that turn Lua names the living civ with the highest `civilization_score` the winner, so the game ends with "Scenario victory to the X" instead of the turn-limit notice. The first civ found wins a tie | `game.ruleset:932`; `script.lua`, `fc45_score_winner` |
+
+The domination run counters are one scalar global per player (`fc45_dom_run_<id>`), which the server saves with the
+game; the test reads them back through `_G`. Barbarians and animals never count (`fc45_is_civ`).
+
+### What stock Freeciv cannot express
+
+- No requirement or setting reads a land or citizen share (`doc/README.effects:58-119`, design note 2.2), hence the Lua
+  walk, which costs one pass over the map and all cities per turn from turn 100: measured on the turn-400 save of the war game below (1,275 land tiles, 493 citizens, 11 civs), a server run that performs the count 100 times took 0.31 s longer than one that performs it 0 times, so about 3 ms per turn (`logs/walk/`, the minimum of two runs each; Freeciv's Lua has no `os.clock`, so the server's wall time is the only clock). The war game itself averaged 1.2 s per turn, so the walk is below the noise.
+- Lua cannot see alliances or the AI's attitude (no diplstate getter in `common/scriptcore/tolua_game.pkg` or
+  `server/scripting/tolua_server.pkg`, design note 2.5), so domination is per player (allies do not pool) and a
+  diplomatic vote is not written.
+- The server's score winner at `endturn` is only a ranking (`server/score.c:417-429`, written with `--ranklog`), so
+  the named winner is Lua's; there is no `endvictory` setting in 3.2.
+
+### Tests
+
+`scripts/civ45-rules-test.sh ~/freeciv-builds/qt --data port/freeciv/data`: 24/24 Lua cases plus four shell checks
+(`logs/civ45-rules-20261017-154955`): the settings strings, every living civ qualifies at thresholds 0 and none at
+60/50 on turn 5, the script's land count equals an independent count of non-oceanic tiles, a real check leaves every run
+counter at 0, and the four `game.ruleset` keys. With `--extra "set endturn 6"` (the test runs at turn 5 and ends at
+turn 6, not turn 12 as the design note assumed) the test logs the civ with the best score and the server's
+"Scenario victory to the Mayas." names the same one (`logs/civ45-rules-20261017-155506`).
+`scripts/harness-test.sh` still passes (`logs/harness-civ45-20261017-155025`); its control check and `scripts/test.sh`
+now accept a game that ends by any victory line, not only the turn limit (issue 84's first point).
+
+### Autogames
+
+Two games to turn 475, 10 AIs, seeds 42/42, data from the fork:
+
+| Game | `test.sh` flags | End | Leader's land and culture at the end |
+|---|---|---|---|
+| Default rules | none | Turn 152, allied victory to all ten living AIs (as in slice 2, issue 84); 5.5 minutes | Mursilis, 224 land tiles of about 1,275 (18 %), culture 1,985 |
+| Diplomacy off | `--extra "set diplomacy DISABLED"` | Turn 437 (year 2011), "Game ended in cultural domination victory for Mursilis"; 8.9 minutes | Mursilis, 322 land tiles (25 %), culture 12,900 against 7,397 for the next civ |
+
+Logs: `logs/test-qt-20261017-155025` and `logs/test-qt-20261017-155028` (final saves; land is the save's `landarea` divided by 1,000, the total from the test's land count). Observed: no AI came near the 60 % land threshold, so the domination rule never fired, and with diplomacy off the culture win arrived 38 turns before the score would have decided it; the two leaders' `history` values stood at 2,100, the top of the ten. Inferred: 8000 points with a 50 % lead is reachable by the strongest AI in a 10-player game by the early 2000s, which is about the pace the design note asked for; whether it is right for a human game is untested. The turn-limit path (score winner at 475) has only been seen in the rules test with `endturn` 6.
+
+### Open
+
+- The design note's five questions for John, built here with its recommended values: the domination thresholds
+  (60 % land, 50 % citizens, 3 turns) against the spec's "about 65 % plus a population lead"; whether allies should
+  win domination jointly (needs an engine getter or the `DiplRel` trick); `endturn` 475 as the shipped default;
+  culture 8000 and a 50 % lead now, before the culture slice changes the pace; and whether the score winner should be
+  announced through Lua at all.
+- Culture and domination numbers are untuned (see the autogame); re-tune with roadmap row 8 and after slice 10.

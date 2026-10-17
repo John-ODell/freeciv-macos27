@@ -67,8 +67,11 @@ while kill -0 $SPID 2>/dev/null; do
 done
 wait $SPID; SRC=$?
 exec 3>&-; rm -f "$OUT/fifo"
-if [ $SRC = 0 ] && grep -q "Game ended as the turn limit" "$OUT/autogame.log"; then
-  echo "autogame: ok, $TURNS turns, 10 AIs, $(( $(date +%s) - START )) s"
+# The game ends at the turn limit or, earlier, by a victory (allied, conquest, culture, spaceship, or a
+# ruleset script's "Scenario victory"); either is a finished game.
+END=$(grep -oE "Game ended as the turn limit was exceeded|Game ended in [a-z ]*victory for .*|(Scenario|Allied|Team) victory to .*" "$OUT/autogame.log" | head -1)
+if [ $SRC = 0 ] && [ -n "$END" ]; then
+  echo "autogame: ok, up to $TURNS turns, 10 AIs, $(( $(date +%s) - START )) s; $END"
 else
   echo "autogame: FAILED (exit $SRC; see $OUT/autogame.log)"; grep -E "Starting game|rror|Turn" "$OUT/autogame.log" | tail -3; FAIL=1
 fi

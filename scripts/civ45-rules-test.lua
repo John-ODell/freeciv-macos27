@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
--- Freeciv45 (civ45) stack, map and combat rules test. Load it into a civ45 server before the game starts with
+-- Freeciv45 (civ45) stack, map, combat and victory rules test. Load it into a civ45 server before the game starts with
 --   lua file scripts/civ45-rules-test.lua
 -- (scripts/civ45-rules-test.sh does that; an autogame reads no console input once it runs). It runs at the
 -- first turn start from turn 5 on, checks one more thing a turn later, and prints
@@ -151,6 +151,42 @@ function fc45_rules_test_run()
   end
 
   if tester ~= nil and animals ~= nil then fc45_combat_test_run(tester, animals, used) end
+  fc45_victory_test_run()
+end
+
+-- Victory rules: the settings the server exposes, and the domination script's counting and decision with
+-- the thresholds overridden (the real ones cannot be met at turn 5, when the test runs). The keys Lua cannot read
+-- (victory_min_points, victory_lead_pct, endturn, endspaceship in game.ruleset) are checked by the runner.
+function fc45_victory_test_run()
+  local function setting(name) return string.upper(server.setting.get(name) or "?") end
+  check("victories are the space race, the last alliance standing and culture",
+        setting("victories") == "SPACERACE|ALLIED|CULTURE")
+  check("the game ends when a spaceship arrives (endspaceship enabled)", setting("endspaceship") == "ENABLED")
+  if fc45_domination_qualifiers == nil then
+    log.normal("FC45TEST SKIP no domination script loaded")
+    return
+  end
+  local civs = 0
+  for p in players_iterate() do if fc45_is_civ(p) then civs = civs + 1 end end
+  local q, land, pop = fc45_domination_qualifiers(0, 0)
+  check("every living civ qualifies for domination at thresholds of 0", #q == civs and civs > 0 and pop > 0)
+  local q2 = fc45_domination_qualifiers(60, 50)
+  check("no civ qualifies at 60% of the land and 50% of the citizens at turn 5", #q2 == 0)
+  local mine = 0
+  for t in whole_map_iterate() do if t.terrain:class_name() ~= "Oceanic" then mine = mine + 1 end end
+  check("the domination land count equals the map's non-oceanic tiles", land == mine)
+  local from = FC45_DOM_FROM_TURN
+  FC45_DOM_FROM_TURN = 0
+  fc45_domination_check(game.turn(), 0)
+  FC45_DOM_FROM_TURN = from
+  local zero, seen = true, 0
+  for p in players_iterate() do
+    if fc45_is_civ(p) then
+      seen = seen + 1
+      if _G[string.format("fc45_dom_run_%d", p.id)] ~= 0 then zero = false end
+    end
+  end
+  check("a domination check at 60/50 leaves every civ's run counter at 0", zero and seen == civs)
 end
 
 -- Slice 2, combat. Units of the Tester and of the Animal Kingdom are created next to each other on free land
@@ -276,6 +312,14 @@ function fc45_rules_test_turn(turn, year)
     fc45_rules_test_run()
   elseif fc45_test.stack_turn ~= nil and turn > fc45_test.stack_turn and fc45_test.done == nil then
     fc45_test.done = true
+    -- Run with --extra "set endturn <this turn>": the ruleset names the best score the winner at the
+    -- start of the last turn, and the runner checks the server's victory line against this one.
+    if fc45_best_score ~= nil and tonumber(server.setting.get("endturn")) == turn then
+      local best, score = fc45_best_score()
+      if best ~= nil then
+        log.normal("FC45TEST expect victory to the %s (score %d)", best.nation:plural_translation(), score)
+      end
+    end
     local tile = find.tile(fc45_test.stack_tile)
     check("a stack of three Tester units is still together a turn later", tile ~= nil and tile:num_units() == 3)
     log.normal("FC45TEST DONE %d/%d", fc45_test.passed, fc45_test.total)

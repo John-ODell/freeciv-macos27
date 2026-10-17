@@ -149,7 +149,7 @@ python3 "$ROOT/scripts/harness-check.py" "$OUT/game" --player "$PLAYER" --turns 
   --control "$OUT/control" || FAIL=1
 # The control game must not mention the harness at all.
 N="$(grep -c "harness: " "$OUT/control/server.log")"
-if [ "$N" = 0 ] && grep -q "Game ended" "$OUT/control/server.log"; then echo "control: ok, $TURNS turns, no harness lines"
+if [ "$N" = 0 ] && grep -qE "Game ended|victory to" "$OUT/control/server.log"; then echo "control: ok, $TURNS turns, no harness lines"
 else echo "control: FAILED, $N harness lines or no game end (see $OUT/control/server.log)"; FAIL=1; fi
 
 echo "== result: $([ $FAIL = 0 ] && echo PASS || echo FAIL) ($OUT)"
