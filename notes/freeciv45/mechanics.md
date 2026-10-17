@@ -757,3 +757,83 @@ diplomacy game).
   (Grenadiers, Mechanized Infantry, Gunship, Machine Gunners) were checked only by the loader.
 - The AI's choice of attackers under one strength (decision 7), and the Catapult's negative row.
 - Horses, Copper, Aluminium and Uranium gating waits for the resources slice (4).
+
+## 11. Great people slice: seven kinds, residents, deeds, golden ages and the AI rule (2026-10-17, patch 0013)
+
+Built from `notes/freeciv45/design/great-people.md` (PR 101) as issue 113, the last of the five rules slices the
+design session specified. Line numbers are the fork's at the slice's commit (upstream S3_2 `44e6898` plus patches
+0001 to 0013). The ruleset data was generated from the design's tables by a script kept outside the repo.
+
+### What the ruleset says now
+
+| Rule | Freeciv form | Where |
+|---|---|---|
+| Seven kinds | Unit types Great Sage, Builder, Magnate, Virtuoso, Oracle, Commander, Spymaster: class Land, cost 240, `pop_cost` 1, strength 0, 10 hit points, 2 moves, no upkeep, no reqs, flags `NonMil`, `NoVeteran`, `NoBuild`, `Unbribable`, `AddToCity`, `GreatPerson` (the Builder adds `HelpWonder`, the Spymaster `Diplomat`); art borrowed from Diplomat, Engineers, Caravan, Leader and Spy until `u.great_*` are drawn | `units.ruleset:65` (the flag, 36 of 50 used), `:3687-3952` |
+| Points | `User_Effect_3` per building at `City` range: 1 for Temple, Library, Marketplace, Colosseum (shown as Amphitheater), Courthouse; 2 for University, Bank, Cathedral, Factory, Police Station; 3 for Research Lab, Stock Exchange, Mfg. Plant; 2 for each of 29 wonders and each Resident. `User_Effect_4` 100 under a golden age. `scripts/gp-points-check.py` diffs the 49 rows with `script.lua`'s table | `effects.ruleset:5742-6133` |
+| Pool and birth | Each turn every city adds its points times (100 + percent) / 100 to `fc45_gp_pool_<city id>`; at 150 + 75 × the player's births so far, one great person is born on the city tile, its kind drawn in proportion to the city's sources, and the pool resets. The first player to research Philosophy, Theology, Economics or Electricity gets a Sage, Oracle, Magnate or Builder in the capital | `script.lua:635-792`, `:879-892` |
+| Settling | "Join City" by a great person needs no Resident of its kind in the city (seven enablers with a `target_reqs` row; the stock enabler excludes `GreatPerson`); the `pop_cost` citizen is the server's, the Resident building Lua's | `actions.ruleset:1391-1491`; `script.lua:800-809` |
+| Residents | Seven `Improvement` buildings with `MinYear 9999 World` so nobody builds them (`edit.create_building` ignores reqs): Sage +25 % science, Builder +3 shields on the centre, Magnate +3 trade on the centre and +25 % gold, Virtuoso `History` 3 and +25 % luxury, Oracle `Make_Content` 2, Commander `Veteran_Build` 1, Spymaster `Spy_Resistant` 50 and `Incite_Cost_Pct` 100; each gives 2 points | `buildings.ruleset:2504-2664`; `effects.ruleset:6134-6220` |
+| Deeds | "User Action 3" (Great Deed, target Self, consumes the actor): Sage `edit.give_tech(owner, nil, 0, true, ...)` (the cheapest tech, `free_tech_method`); Magnate 100 + 30 × city size gold, doubled in a foreign city; Virtuoso `edit.add_city_history(city, 400)`; Oracle founds the Sanctum (`SmallWonder`, `Make_Content` 1 at Player range, `History` 3), moved from any city that had it; Commander `Unit:transform(type, -1)` on every own unit on the tile, one level up. Enablers: Sage, Virtuoso and Oracle in a city whose tile is not foreign (`DiplRelTile`), the Magnate in any city, the Commander anywhere. Builders use the native "Help Wonder" (240 shields), Spymasters the diplomat actions (the `UnitFlag Diplomat` embassy enabler already exists at `actions.ruleset:651`, so the design's extra row was not needed). Great people are kept out of "Disband Unit Recover" | `actions.ruleset:496-506`, `:1150`, `:1163`, `:3075-3113`; `effects.ruleset:6221-6236` (the Sanctum); `script.lua:811-857` |
+| Golden age | "User Action 4" (Pledge a Golden Age, Self, consumes): pledges count per player; at 1 + the ages so far the "Golden Age" small wonder is created in the capital (else the first city) for 10 turns: `Output_Inc_Tile` 1 shield and 1 trade at Player range, `User_Effect_4` 100, `No_Anarchy`. `turn_begin` removes it when `fc45_golden_until_<player>` is reached | `buildings.ruleset:2688`; `effects.ruleset:6237-6270`; `script.lua:859-877` |
+| AI | Each `turn_begin`, for every AI civ: pledge with as many great people as the next age needs when none runs; Sage, Virtuoso and Magnate do their deed where they stand; Oracle and Commander settle where no Resident of their kind is, else deed; Builders after 10 turns and Spymasters after 20 settle; a refused deed falls through to settling. All through `edit.perform_action`, so the same enablers as a human | `script.lua:894-940` |
+| Persistence | Every counter is a scalar global named by an integer id (`fc45_gp_key` formats it with `%d`), so the saved script state, which is Lua source, parses back | `script.lua:706-711` |
+
+### What stock Freeciv cannot express
+
+- Nothing the design needed was missing. Two things the design did not say: ids reach Lua as floats, so a global
+  named `fc45_gp_pool_187.0` was written to the first saves and would not have loaded back (fixed by formatting
+  the id; the runner now checks the autosave); and `game.turn()` inside a `turn_begin(n)` handler is n − 1, so the
+  golden age's end is stored from that value and compared with the handler's turn.
+- A great person's native uses are not logged by the script: whether an AI Builder ever did "Help Wonder" in the
+  autogames is unknown (the log shows its Builders pledging or settling).
+
+### Tests
+
+`scripts/civ45-rules-test.sh ~/freeciv-builds/qt --data port/freeciv/data`: 50/50 Lua cases and fifteen shell checks
+(`logs/civ45-rules-20261017-173438`). New, in Testerburg at turn 5: a Library gives 1 point and a University 3;
+a Sage's deed adds one known tech, a Magnate's 100 + 30 × size gold, a Virtuoso's 400 culture, an Oracle's the
+Sanctum and one more content citizen; a Commander on a free tile drills two green Warriors to level 1; one pledge
+starts a golden age in the capital until turn + 10 with `User_Effect_4` 100, a second pledge counts 1 of 2. A turn
+later: a pool set to 148 bears a Great Sage and resets, the age ends when its turn comes, the Sage settles (size +1,
+Resident Sage), a second Sage is refused by the enabler but does its deed. The runner diffs the points table with the
+effect rows and finds `fc45_golden_count_0=1` in the first autosave after the pledge. On the installed slice 1 copy
+(the control) the great people cases are skipped with Testerburg and the runner exits 1 (`logs/civ45-rules-20261017-173612`).
+`scripts/harness-test.sh` passes (`logs/harness-civ45-20261017-172311`).
+
+### Autogame
+
+Two 400-turn games, 10 AIs, seeds 42/42, the ruleset's own `FC45GP` log lines read by `scripts/civ45-gp-summary.py`:
+diplomacy allowed (`logs/test-qt-20261017-172633`) and off (`logs/test-qt-20261017-172633-75950`), both to the score
+winner at turn 400, no Lua errors.
+
+| | Diplomacy allowed | Diplomacy off |
+|---|---|---|
+| great people born (first at turn) | 74 (130) | 49 (124) |
+| from points / first to a tech | 70 / 4 | 45 / 4 |
+| by kind | Oracle 17, Magnate 17, Virtuoso 15, Spymaster 15, Sage 6, Builder 3, Commander 1 | Oracle 16, Spymaster 14, Sage 9, Magnate 5, Virtuoso 4, Builder 1 |
+| used by the AI | 67 (7 born in the last turns unused) | 43 (6 unused) |
+| how | deed 36, settle 11, pledge 20 | deed 21, settle 10, pledge 12 |
+| turns from birth to use | median 1, 63 of 67 within 20, longest 44 | median 1, 42 of 43 within 20, longest 50 |
+| golden ages begun | 15 (four civs reached their second) | 11 (one second) |
+| deeds seen | 16 trade missions of 280 to 490 gold, 8 masterworks, 6 Sanctums, 6 techs (Archery twice, Printing, ...) | 7 Sanctums, 4 masterworks, 6 techs (The Corporation, Sanitation, Railroad, Economics, Compass, ...), 4 missions |
+| counters in the final save | 185 globals, the 4 first-to-tech keys | 131, 4 |
+
+Observed: the pace is 5 to 7 great people per civ in 400 turns, inside the design's 3 to 6 without wonders and 8 to
+12 with them; the first arrives around turn 125. Oracles and Spymasters dominate because temples and courthouses
+are what the AI builds first; Builders and Commanders are rare (factories come late, Statue of Zeus and Sun Tzu are
+their only early sources). The AI rule spends almost everything the turn after birth; the long waits are Spymasters
+the native diplomat code walked out of their city, which settle only when back in one. Every civ's first great
+person becomes a golden age (the rule pledges whenever none runs and the next age needs no more people than are
+at hand), which is the first thing to tune.
+
+### Open
+
+- The design note's five questions for John are decision 12 in the plan: the point values held twice (kept, with the
+  checker); Residents lost on capture like other buildings; great people out of "Disband Unit Recover"; pledges of
+  any kind; the Spymaster without a deed of its own.
+- The AI's first great person always pledges; a rule that keeps the first Sage or Magnate for its deed may serve it
+  better (section 6 of the design note, order 1).
+- Sprites for civ45-tileset: `u.great_sage`, `u.great_builder`, `u.great_magnate`, `u.great_virtuoso`,
+  `u.great_oracle`, `u.great_commander`, `u.great_spymaster`, `b.resident_*` (seven), `b.sanctum`, `b.golden_age`.
+- Points from specialists (design note section 1) stay out until Lua can count them; the Commander from combat
+  waits for slice 6.

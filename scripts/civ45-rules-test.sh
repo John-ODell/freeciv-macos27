@@ -67,17 +67,30 @@ for u in levy militia conscripts; do
   if sed -n "/^\[unit_$u\]/,/^\[unit_/p" "$DATA/civ45/units.ruleset" | grep -q '^pop_cost      = 1'; then
     echo "FC45TEST PASS units.ruleset: $u costs one citizen"; else echo "FC45TEST FAIL units.ruleset: $u lacks pop_cost 1"; RC=1; fi
 done
-# The roster's shape (units.ruleset): 76 unit types, one strength number for attack and defence unless one of
+# The roster's shape (units.ruleset): 83 unit types (76 of the roster and 7 great people), one strength number for attack and defence unless one of
 # them is 0, firepower 1 everywhere, and City Walls keyed on the attacker's class flag rather than the Ground class.
 UR="$DATA/civ45/units.ruleset"
 NU=$(grep -c '^\[unit_' "$UR")
 UNEVEN=$(awk '/^\[unit_/{n=$0} /^attack  *=/{a=$3} /^defense  *=/{d=$3} /^firepower  *=/{if ((a!=0 && d!=0 && a!=d) || $3!=1) print n}' "$UR" | tr '\n' ' ')
-if [ "$NU" = 76 ] && [ -z "$UNEVEN" ]; then echo "FC45TEST PASS units.ruleset: 76 unit types, one strength each, firepower 1"
+if [ "$NU" = 83 ] && [ -z "$UNEVEN" ]; then echo "FC45TEST PASS units.ruleset: 83 unit types, one strength each, firepower 1"
 else echo "FC45TEST FAIL units.ruleset: $NU unit types, uneven or firepower not 1: $UNEVEN"; RC=1; fi
 NW=$(grep -c '^\[effect_city_walls_\(melee\|archer\|mounted\|siege\)\]' "$DATA/civ45/effects.ruleset")
 if [ "$NW" = 4 ] && ! grep -q '^\[effect_city_walls_0\]' "$DATA/civ45/effects.ruleset"; then
   echo "FC45TEST PASS effects.ruleset: City Walls are keyed on the attacker's class flag"
 else echo "FC45TEST FAIL effects.ruleset: City Walls are not keyed on the attacker's class flag"; RC=1; fi
+# Great people: the points table in script.lua mirrors the User_Effect_3 rows, and the counters are saved
+# (scalar globals in the first autosave after the pledge case, written right after the test's first turn; the
+# save after the second turn may not be written before the runner stops the server).
+if python3 -I "$ROOT/scripts/gp-points-check.py" "$DATA/civ45" >/dev/null 2>&1; then
+  echo "FC45TEST PASS script.lua's great-person sources match the User_Effect_3 rows"
+else echo "FC45TEST FAIL script.lua's great-person sources differ from the User_Effect_3 rows"; RC=1; fi
+if grep -q "FC45TEST golden age:" "$OUT/server.log"; then
+  T=$(awk '/FC45TEST golden age:/{f=1} f && /^Game saved as .*auto\.sav\.gz/{print $4; exit}' "$OUT/server.log")
+  # grep -c, not -q: with pipefail, -q's early exit would fail the pipeline through gzip's SIGPIPE.
+  if [ -n "$T" ] && [ "$(gzip -dc "$T" 2>/dev/null | grep -c '^fc45_golden_count_[0-9]*=1')" -gt 0 ]; then
+    echo "FC45TEST PASS the great-person counters are in the autosave ($(basename "$T"))"
+  else echo "FC45TEST FAIL no great-person counter in the autosave after the test"; RC=1; fi
+fi
 # The 30 shields a disbanded Levy gave Testerburg, in the first autosave written after the test (the server
 # autosaves right after a turn's start, so that save holds the test's actions but not yet the city's own
 # production or a finished build, which would reset the count).

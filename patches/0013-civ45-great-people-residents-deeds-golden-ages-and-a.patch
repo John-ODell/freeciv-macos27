@@ -1,0 +1,1622 @@
+From 47219011ff8308124c904aee605d97e189bf808b Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 17:36:56 -0500
+Subject: [PATCH] civ45: great people, residents, deeds, golden ages and an AI
+ rule that spends them
+
+Implements notes/freeciv45/design/great-people.md on the civ45 ruleset:
+
+- Seven great-person unit types (Great Sage, Builder, Magnate, Virtuoso,
+  Oracle, Commander, Spymaster) with the user flag GreatPerson: cost 240,
+  pop_cost 1, strength 0, NonMil, NoVeteran, NoBuild, Unbribable, AddToCity;
+  the Builder has HelpWonder, the Spymaster Diplomat. Art borrowed until the
+  tileset draws u.great_*.
+- Great-person points as User_Effect_3 rows per building (1 to 3 for city
+  improvements by tier, 2 per wonder and per Resident), User_Effect_4 as the
+  golden age multiplier; seven Resident buildings, the Sanctum and the Golden
+  Age small wonder with their effects (buildings nobody can build: MinYear
+  9999).
+- actions.ruleset: User Action 3 (Great Deed) and User Action 4 (Pledge a
+  Golden Age), both self-targeted and consuming; deed enablers for a Sage,
+  Virtuoso or Oracle in a city of their own, the Magnate in any city and the
+  Commander anywhere; one Join City enabler per kind that needs no Resident
+  of that kind in the city, the stock one excluding great people; great
+  people kept out of Disband Unit Recover.
+- script.lua: pools per city (150 + 75 per birth), births drawn by the
+  city's sources, a free great person for the first to Philosophy, Theology,
+  Economics or Electricity, the Resident on Join City, the deeds (a tech,
+  gold, 400 history, the Sanctum, a veteran level for the stack), pledges
+  and the timed golden age, and a turn_begin rule that spends every AI
+  great person through the same actions. Counters are scalar globals named
+  by integer ids so the saved script state loads back.
+---
+ data/civ45/README.civ45      |  16 ++
+ data/civ45/actions.ruleset   | 153 ++++++++++
+ data/civ45/buildings.ruleset | 207 ++++++++++++++
+ data/civ45/effects.ruleset   | 533 +++++++++++++++++++++++++++++++++++
+ data/civ45/script.lua        | 308 ++++++++++++++++++++
+ data/civ45/units.ruleset     | 267 ++++++++++++++++++
+ 6 files changed, 1484 insertions(+)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index fd3a33c..adfafdc 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -94,6 +94,22 @@ Differences from sandbox
+   AEGIS Cruiser Missile Cruiser, SSBN Missile Submarine, ICBM Nuclear
+   Missile), so saves and scripts load. Jaguar Warrior, Immortal, Alpine
+   Troops, Crusaders and Mechanic are gone (Engineers heal vehicles).
++- Great people (notes/freeciv45/design/great-people.md): every city
++  collects great-person points from its temples, libraries, markets,
++  theatres, courts and their successors (1 to 3 a turn), from wonders
++  and settled great people (2); at 150 points, plus 75 for every great
++  person the player had before, one of seven kinds is born (Great Sage,
++  Builder, Magnate, Virtuoso, Oracle, Commander, Spymaster), drawn by the
++  city's sources. Each settles (Join City founds a Resident building:
++  +25% science, +3 shields, +3 trade and +25% gold, +3 history and +25%
++  luxury, two content, Veteran_Build, spy resistance), does a deed once
++  (a free tech, 240 shields into a wonder, a trade mission, 400 history,
++  the Sanctum, a veteran level for the stack, or the diplomat actions)
++  or pledges a golden age: ten turns of +1 shield and +1 trade on
++  working tiles, double points and no anarchy, for one pledge, then two,
++  then three. The first to Philosophy, Theology, Economics or
++  Electricity gets one free. script.lua runs it, and spends the AI's
++  great people for it each turn through the same actions.
+ - Strategic resources: Swordsmen, Macebearers, Crossbowmen, Knights,
+   Cannon, Ship of the Line and Ironclad need Iron (Ironclad Coal too),
+   War Elephants Ivory, and armour, aircraft and modern warships Oil,
+diff --git a/data/civ45/actions.ruleset b/data/civ45/actions.ruleset
+index 0bda9fb..eac5dcc 100644
+--- a/data/civ45/actions.ruleset
++++ b/data/civ45/actions.ruleset
+@@ -491,6 +491,20 @@ user_action_2_min_range              = 1
+ user_action_2_max_range              = "unlimited"
+ user_action_2_actor_consuming_always = FALSE
+ 
++; Freeciv45 great people: the deed of a Sage, Magnate, Virtuoso, Oracle or Commander (script.lua does it),
++; and the pledge of a golden age by any great person.
++ui_name_user_action_3                = _("%sGreat Deed%s")
++user_action_3_target_kind            = "Self"
++user_action_3_min_range              = 0
++user_action_3_max_range              = 0
++user_action_3_actor_consuming_always = TRUE
++
++ui_name_user_action_4                = _("%sPledge a Golden Age%s")
++user_action_4_target_kind            = "Self"
++user_action_4_min_range              = 0
++user_action_4_max_range              = 0
++user_action_4_actor_consuming_always = TRUE
++
+ ; Some actions have a action dice roll before the action starts where it can
+ ; fail. The initial probability of success is 100% unless the action appears
+ ; in the following list. Then the initial probability comes from the setting
+@@ -1133,6 +1147,7 @@ actor_reqs    =
+     { "type",   "name", "range", "present"
+       "UnitFlag", "EvacuateFirst", "Local", FALSE
+       "UnitFlag", "Consensus",     "Local", FALSE
++      "UnitFlag", "GreatPerson",   "Local", FALSE
+       "DiplRel",  "War",        "Local", FALSE
+       "DiplRel",  "Cease-fire", "Local", FALSE
+       "DiplRel",  "Armistice",  "Local", FALSE
+@@ -1145,6 +1160,7 @@ actor_reqs    =
+     { "type",     "name",          "range",  "present"
+       "UnitFlag", "EvacuateFirst", "Local",  FALSE
+       "UnitFlag", "Consensus",     "Local",  TRUE
++      "UnitFlag", "GreatPerson",   "Local",  FALSE
+       "Gov",      "Communism",     "Player", FALSE
+       "Gov",      "Democracy",     "Player", FALSE
+       "Gov",      "Republic",      "Player", FALSE
+@@ -1377,9 +1393,103 @@ action = "Join City"
+ actor_reqs    =
+     { "type",   "name", "range", "present"
+       "UnitFlag", "AddToCity", "Local", TRUE
++      "UnitFlag", "GreatPerson", "Local", FALSE
++      "DiplRel", "Foreign", "Local", FALSE
++      "MinMoveFrags", "1", "Local", TRUE
++    }
++
++; A great person settles in a city that has no Resident of its kind yet (script.lua founds the Resident).
++[actionenabler_join_city_great_sage]
++action = "Join City"
++actor_reqs    =
++    { "type",   "name", "range", "present"
++      "UnitType", "Great Sage", "Local", TRUE
++      "DiplRel", "Foreign", "Local", FALSE
++      "MinMoveFrags", "1", "Local", TRUE
++    }
++target_reqs   =
++    { "type",   "name", "range", "present"
++      "Building", "Resident Sage", "City", FALSE
++    }
++
++[actionenabler_join_city_great_builder]
++action = "Join City"
++actor_reqs    =
++    { "type",   "name", "range", "present"
++      "UnitType", "Great Builder", "Local", TRUE
++      "DiplRel", "Foreign", "Local", FALSE
++      "MinMoveFrags", "1", "Local", TRUE
++    }
++target_reqs   =
++    { "type",   "name", "range", "present"
++      "Building", "Resident Builder", "City", FALSE
++    }
++
++[actionenabler_join_city_great_magnate]
++action = "Join City"
++actor_reqs    =
++    { "type",   "name", "range", "present"
++      "UnitType", "Great Magnate", "Local", TRUE
++      "DiplRel", "Foreign", "Local", FALSE
++      "MinMoveFrags", "1", "Local", TRUE
++    }
++target_reqs   =
++    { "type",   "name", "range", "present"
++      "Building", "Resident Magnate", "City", FALSE
++    }
++
++[actionenabler_join_city_great_virtuoso]
++action = "Join City"
++actor_reqs    =
++    { "type",   "name", "range", "present"
++      "UnitType", "Great Virtuoso", "Local", TRUE
++      "DiplRel", "Foreign", "Local", FALSE
++      "MinMoveFrags", "1", "Local", TRUE
++    }
++target_reqs   =
++    { "type",   "name", "range", "present"
++      "Building", "Resident Virtuoso", "City", FALSE
++    }
++
++[actionenabler_join_city_great_oracle]
++action = "Join City"
++actor_reqs    =
++    { "type",   "name", "range", "present"
++      "UnitType", "Great Oracle", "Local", TRUE
++      "DiplRel", "Foreign", "Local", FALSE
++      "MinMoveFrags", "1", "Local", TRUE
++    }
++target_reqs   =
++    { "type",   "name", "range", "present"
++      "Building", "Resident Oracle", "City", FALSE
++    }
++
++[actionenabler_join_city_great_commander]
++action = "Join City"
++actor_reqs    =
++    { "type",   "name", "range", "present"
++      "UnitType", "Great Commander", "Local", TRUE
+       "DiplRel", "Foreign", "Local", FALSE
+       "MinMoveFrags", "1", "Local", TRUE
+     }
++target_reqs   =
++    { "type",   "name", "range", "present"
++      "Building", "Resident Commander", "City", FALSE
++    }
++
++[actionenabler_join_city_great_spymaster]
++action = "Join City"
++actor_reqs    =
++    { "type",   "name", "range", "present"
++      "UnitType", "Great Spymaster", "Local", TRUE
++      "DiplRel", "Foreign", "Local", FALSE
++      "MinMoveFrags", "1", "Local", TRUE
++    }
++target_reqs   =
++    { "type",   "name", "range", "present"
++      "Building", "Resident Spymaster", "City", FALSE
++    }
++
+ 
+ [actionenabler_border_police]
+ action = "Expel Unit"
+@@ -2958,3 +3068,46 @@ actor_reqs    =
+       "CityTile",       "Center",       "Tile",  FALSE
+       "UnitClassFlag",  "HutFrighten",  "Local", TRUE
+     }
++
++; Freeciv45 great deeds (User Action 3): Sage, Virtuoso and Oracle in a city of their own; the Magnate in any
++; city (a foreign one pays double); the Commander anywhere. The Builder's deed is Help Wonder and the
++; Spymaster's are the diplomat actions, both native.
++[actionenabler_great_deed_own_city]
++action        = "User Action 3"
++actor_reqs    =
++    { "type",        "name",            "range", "present"
++      "UnitFlag",    "GreatPerson",     "Local", TRUE
++      "UnitType",    "Great Builder",   "Local", FALSE
++      "UnitType",    "Great Magnate",   "Local", FALSE
++      "UnitType",    "Great Commander", "Local", FALSE
++      "UnitType",    "Great Spymaster", "Local", FALSE
++      "CityTile",    "Center",          "Tile",  TRUE
++      "DiplRelTile", "Foreign",         "Local", FALSE
++      "MinMoveFrags", "1",              "Local", TRUE
++    }
++
++[actionenabler_great_deed_magnate]
++action        = "User Action 3"
++actor_reqs    =
++    { "type",        "name",          "range", "present"
++      "UnitType",    "Great Magnate", "Local", TRUE
++      "CityTile",    "Center",        "Tile",  TRUE
++      "MinMoveFrags", "1",            "Local", TRUE
++    }
++
++[actionenabler_great_deed_commander]
++action        = "User Action 3"
++actor_reqs    =
++    { "type",        "name",            "range", "present"
++      "UnitType",    "Great Commander", "Local", TRUE
++      "MinMoveFrags", "1",              "Local", TRUE
++    }
++
++; Pledge a golden age (User Action 4): any great person, anywhere.
++[actionenabler_golden_pledge]
++action        = "User Action 4"
++actor_reqs    =
++    { "type",        "name",        "range", "present"
++      "UnitFlag",    "GreatPerson", "Local", TRUE
++      "MinMoveFrags", "1",          "Local", TRUE
++    }
+diff --git a/data/civ45/buildings.ruleset b/data/civ45/buildings.ruleset
+index 4b6d151..95af226 100644
+--- a/data/civ45/buildings.ruleset
++++ b/data/civ45/buildings.ruleset
+@@ -2501,6 +2501,213 @@ halves the unhappiness caused by military units (reducing it to the \
+ same level as a Republic).\
+ ")
+ 
++[building_resident_sage]
++name		= _("Resident Sage")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.resident_sage"
++graphic_alt     = "b.library"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_resident_sage"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A settled Great Sage: +25% science here and 2 great-person points a turn towards the next Sage. It cannot be built or bought; a Great Sage joining the city founds it, one per city.\
++")
++
++[building_resident_builder]
++name		= _("Resident Builder")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.resident_builder"
++graphic_alt     = "b.factory"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_resident_builder"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A settled Great Builder: +3 shields on the city centre and 2 great-person points a turn towards the next Builder. It cannot be built or bought; a Great Builder joining the city founds it, one per city.\
++")
++
++[building_resident_magnate]
++name		= _("Resident Magnate")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.resident_magnate"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_resident_magnate"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A settled Great Magnate: +3 trade on the city centre, +25% gold here and 2 great-person points a turn towards the next Magnate. It cannot be built or bought; a Great Magnate joining the city founds it, one per city.\
++")
++
++[building_resident_virtuoso]
++name		= _("Resident Virtuoso")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.resident_virtuoso"
++graphic_alt     = "b.amphitheater"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_resident_virtuoso"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A settled Great Virtuoso: +3 history a turn, +25% luxury here and 2 great-person points a turn towards the next Virtuoso. It cannot be built or bought; a Great Virtuoso joining the city founds it, one per city.\
++")
++
++[building_resident_oracle]
++name		= _("Resident Oracle")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.resident_oracle"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_resident_oracle"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A settled Great Oracle: two unhappy citizens made content and 2 great-person points a turn towards the next Oracle. It cannot be built or bought; a Great Oracle joining the city founds it, one per city.\
++")
++
++[building_resident_commander]
++name		= _("Resident Commander")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.resident_commander"
++graphic_alt     = "b.barracks"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_resident_commander"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A settled Great Commander: units built here start one veteran level higher, and 2 great-person points a turn towards the next Commander. It cannot be built or bought; a Great Commander joining the city founds it, one per city.\
++")
++
++[building_resident_spymaster]
++name		= _("Resident Spymaster")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.resident_spymaster"
++graphic_alt     = "b.courthouse"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_resident_spymaster"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A settled Great Spymaster: enemy spies are resisted, inciting the city costs twice as much, and 2 great-person points a turn towards the next Spymaster. It cannot be built or bought; a Great Spymaster joining the city founds it, one per city.\
++")
++
++[building_sanctum]
++name		= _("Sanctum")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.sanctum"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_sanctum"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Founded by a Great Oracle, one per civilization: one unhappy citizen made content in every city you own, and 3 history a turn here. A later Oracle moves it.\
++")
++
++[building_golden_age]
++name		= _("Golden Age")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.golden_age"
++graphic_alt     = "b.palace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_golden_age"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++A golden age is running: for ten turns every worked tile that yields a shield yields one more, every tile that yields trade yields one more, great-person points are doubled and a change of government costs no anarchy. Great people pledge it: one for the first age, two for the second, three for the third.\
++")
++
+ [building_capitalization]
+ name		= _("Coinage")
+ genus		= "Convert"
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index aeba722..5a763f9 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -5735,3 +5735,536 @@ reqs    =
+       "Building", "Bazaar", "City"
+       "OutputType", "Gold", "Local"
+     }
++
++; Freeciv45 great people (notes/freeciv45/design/great-people.md): great-person points per city as
++; User_Effect_3 (read by script.lua each turn; scripts/gp-points-check.py keeps its table equal to these rows),
++; the golden age multiplier as User_Effect_4, and the Resident, Sanctum and Golden Age effects.
++[effect_gp_points_temple]
++type    = "User_Effect_3"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple", "City"
++    }
++
++[effect_gp_points_library]
++type    = "User_Effect_3"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Library", "City"
++    }
++
++[effect_gp_points_marketplace]
++type    = "User_Effect_3"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Marketplace", "City"
++    }
++
++[effect_gp_points_colosseum]
++type    = "User_Effect_3"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Colosseum", "City"
++    }
++
++[effect_gp_points_courthouse]
++type    = "User_Effect_3"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Courthouse", "City"
++    }
++
++[effect_gp_points_university]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "University", "City"
++    }
++
++[effect_gp_points_bank]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Bank", "City"
++    }
++
++[effect_gp_points_cathedral]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Cathedral", "City"
++    }
++
++[effect_gp_points_factory]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Factory", "City"
++    }
++
++[effect_gp_points_police_station]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Police Station", "City"
++    }
++
++[effect_gp_points_research_lab]
++type    = "User_Effect_3"
++value   = 3
++reqs    =
++    { "type", "name", "range"
++      "Building", "Research Lab", "City"
++    }
++
++[effect_gp_points_stock_exchange]
++type    = "User_Effect_3"
++value   = 3
++reqs    =
++    { "type", "name", "range"
++      "Building", "Stock Exchange", "City"
++    }
++
++[effect_gp_points_mfg_plant]
++type    = "User_Effect_3"
++value   = 3
++reqs    =
++    { "type", "name", "range"
++      "Building", "Mfg. Plant", "City"
++    }
++
++[effect_gp_points_great_library]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Great Library", "City"
++    }
++
++[effect_gp_points_copernicus_observatory]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Copernicus' Observatory", "City"
++    }
++
++[effect_gp_points_isaac_newton_s_college]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Isaac Newton's College", "City"
++    }
++
++[effect_gp_points_darwin_s_voyage]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Darwin's Voyage", "City"
++    }
++
++[effect_gp_points_internet]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Internet", "City"
++    }
++
++[effect_gp_points_pyramids]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Pyramids", "City"
++    }
++
++[effect_gp_points_great_wall]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Great Wall", "City"
++    }
++
++[effect_gp_points_king_richard_s_crusade]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "King Richard's Crusade", "City"
++    }
++
++[effect_gp_points_leonardo_s_workshop]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Leonardo's Workshop", "City"
++    }
++
++[effect_gp_points_hoover_dam]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Hoover Dam", "City"
++    }
++
++[effect_gp_points_apollo_program]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Apollo Program", "City"
++    }
++
++[effect_gp_points_manhattan_project]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Manhattan Project", "City"
++    }
++
++[effect_gp_points_colossus]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Colossus", "City"
++    }
++
++[effect_gp_points_marco_polo_s_embassy]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Marco Polo's Embassy", "City"
++    }
++
++[effect_gp_points_a_smith_s_trading_co]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "A.Smith's Trading Co.", "City"
++    }
++
++[effect_gp_points_magellan_s_expedition]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Magellan's Expedition", "City"
++    }
++
++[effect_gp_points_shakespeare_s_theatre]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Shakespeare's Theatre", "City"
++    }
++
++[effect_gp_points_mausoleum_of_mausolos]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Mausoleum of Mausolos", "City"
++    }
++
++[effect_gp_points_eiffel_tower]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Eiffel Tower", "City"
++    }
++
++[effect_gp_points_guidestones]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Guidestones", "City"
++    }
++
++[effect_gp_points_temple_of_artemis]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple of Artemis", "City"
++    }
++
++[effect_gp_points_michelangelo_s_chapel]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Michelangelo's Chapel", "City"
++    }
++
++[effect_gp_points_j_s_bach_s_cathedral]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "J.S. Bach's Cathedral", "City"
++    }
++
++[effect_gp_points_altar_to_the_divine_ruler]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Altar to The Divine Ruler", "City"
++    }
++
++[effect_gp_points_statue_of_zeus]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Statue of Zeus", "City"
++    }
++
++[effect_gp_points_sun_tzu_s_war_academy]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Sun Tzu's War Academy", "City"
++    }
++
++[effect_gp_points_statue_of_liberty]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Statue of Liberty", "City"
++    }
++
++[effect_gp_points_women_s_suffrage]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Women's Suffrage", "City"
++    }
++
++[effect_gp_points_united_nations]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "United Nations", "City"
++    }
++
++[effect_gp_points_resident_sage]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Sage", "City"
++    }
++
++[effect_gp_points_resident_builder]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Builder", "City"
++    }
++
++[effect_gp_points_resident_magnate]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Magnate", "City"
++    }
++
++[effect_gp_points_resident_virtuoso]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Virtuoso", "City"
++    }
++
++[effect_gp_points_resident_oracle]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Oracle", "City"
++    }
++
++[effect_gp_points_resident_commander]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Commander", "City"
++    }
++
++[effect_gp_points_resident_spymaster]
++type    = "User_Effect_3"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Spymaster", "City"
++    }
++
++[effect_resident_sage_science]
++type    = "Output_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Sage", "City"
++      "OutputType", "Science", "Local"
++    }
++
++[effect_resident_builder_shields]
++type    = "Output_Inc_Tile"
++value   = 3
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Builder", "City"
++      "CityTile", "Center", "Tile"
++      "OutputType", "Shield", "Local"
++    }
++
++[effect_resident_magnate_trade]
++type    = "Output_Inc_Tile"
++value   = 3
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Magnate", "City"
++      "CityTile", "Center", "Tile"
++      "OutputType", "Trade", "Local"
++    }
++
++[effect_resident_magnate_gold]
++type    = "Output_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Magnate", "City"
++      "OutputType", "Gold", "Local"
++    }
++
++[effect_resident_virtuoso_history]
++type    = "History"
++value   = 3
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Virtuoso", "City"
++    }
++
++[effect_resident_virtuoso_luxury]
++type    = "Output_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Virtuoso", "City"
++      "OutputType", "Luxury", "Local"
++    }
++
++[effect_resident_oracle_content]
++type    = "Make_Content"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Oracle", "City"
++    }
++
++[effect_resident_commander_veterans]
++type    = "Veteran_Build"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Commander", "City"
++    }
++
++[effect_resident_spymaster_resist]
++type    = "Spy_Resistant"
++value   = 50
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Spymaster", "City"
++    }
++
++[effect_resident_spymaster_incite]
++type    = "Incite_Cost_Pct"
++value   = 100
++reqs    =
++    { "type", "name", "range"
++      "Building", "Resident Spymaster", "City"
++    }
++
++[effect_sanctum_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Sanctum", "Player"
++    }
++
++[effect_sanctum_history]
++type    = "History"
++value   = 3
++reqs    =
++    { "type", "name", "range"
++      "Building", "Sanctum", "City"
++    }
++
++[effect_golden_age_shields]
++type    = "Output_Inc_Tile"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Golden Age", "Player"
++      "OutputType", "Shield", "Local"
++    }
++
++[effect_golden_age_trade]
++type    = "Output_Inc_Tile"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Golden Age", "Player"
++      "OutputType", "Trade", "Local"
++    }
++
++[effect_golden_age_points]
++type    = "User_Effect_4"
++value   = 100
++reqs    =
++    { "type", "name", "range"
++      "Building", "Golden Age", "Player"
++    }
++
++[effect_golden_age_no_anarchy]
++type    = "No_Anarchy"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Golden Age", "Player"
++    }
++
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index 172a234..d7e5742 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -630,3 +630,311 @@ function fc45_victory_turn_begin(turn, year)
+   fc45_score_winner(turn, year)
+ end
+ signal.connect("turn_begin", "fc45_victory_turn_begin")
++
++
++-- Freeciv45 great people and golden ages (notes/freeciv45/design/great-people.md). Every city collects
++-- great-person points each turn (User_Effect_3 of its buildings, times 1 + User_Effect_4 / 100, which a
++-- golden age sets to 100); at FC45_GP_BASE + FC45_GP_STEP per great person the player already had, one is
++-- born of a kind drawn in proportion to the city's sources. A great person settles ("Join City" founds the
++-- Resident building of its kind), does its deed once ("User Action 3") or pledges a golden age ("User Action
++-- 4"); the first player to Philosophy, Theology, Economics or Electricity gets one free. The AI never picks
++-- these actions, so fc45_gp_ai() spends its great people through the same enablers each turn. Every counter
++-- is a scalar global named by a city, player or unit id, so it survives a save (only scalars do).
++FC45_GP_BASE = 150
++FC45_GP_STEP = 75
++FC45_GOLDEN_TURNS = 10
++
++-- Building rule name -> kind, points a turn. Must match the User_Effect_3 rows in effects.ruleset
++-- (scripts/gp-points-check.py diffs them).
++fc45_gp_sources = {
++  ["Temple"] = { "Oracle", 1 },
++  ["Library"] = { "Sage", 1 },
++  ["Marketplace"] = { "Magnate", 1 },
++  ["Colosseum"] = { "Virtuoso", 1 },
++  ["Courthouse"] = { "Spymaster", 1 },
++  ["University"] = { "Sage", 2 },
++  ["Bank"] = { "Magnate", 2 },
++  ["Cathedral"] = { "Oracle", 2 },
++  ["Factory"] = { "Builder", 2 },
++  ["Police Station"] = { "Spymaster", 2 },
++  ["Research Lab"] = { "Sage", 3 },
++  ["Stock Exchange"] = { "Magnate", 3 },
++  ["Mfg. Plant"] = { "Builder", 3 },
++  ["Great Library"] = { "Sage", 2 },
++  ["Copernicus' Observatory"] = { "Sage", 2 },
++  ["Isaac Newton's College"] = { "Sage", 2 },
++  ["Darwin's Voyage"] = { "Sage", 2 },
++  ["Internet"] = { "Sage", 2 },
++  ["Pyramids"] = { "Builder", 2 },
++  ["Great Wall"] = { "Builder", 2 },
++  ["King Richard's Crusade"] = { "Builder", 2 },
++  ["Leonardo's Workshop"] = { "Builder", 2 },
++  ["Hoover Dam"] = { "Builder", 2 },
++  ["Apollo Program"] = { "Builder", 2 },
++  ["Manhattan Project"] = { "Builder", 2 },
++  ["Colossus"] = { "Magnate", 2 },
++  ["Marco Polo's Embassy"] = { "Magnate", 2 },
++  ["A.Smith's Trading Co."] = { "Magnate", 2 },
++  ["Magellan's Expedition"] = { "Magnate", 2 },
++  ["Shakespeare's Theatre"] = { "Virtuoso", 2 },
++  ["Mausoleum of Mausolos"] = { "Virtuoso", 2 },
++  ["Eiffel Tower"] = { "Virtuoso", 2 },
++  ["Guidestones"] = { "Virtuoso", 2 },
++  ["Temple of Artemis"] = { "Oracle", 2 },
++  ["Michelangelo's Chapel"] = { "Oracle", 2 },
++  ["J.S. Bach's Cathedral"] = { "Oracle", 2 },
++  ["Altar to The Divine Ruler"] = { "Oracle", 2 },
++  ["Statue of Zeus"] = { "Commander", 2 },
++  ["Sun Tzu's War Academy"] = { "Commander", 2 },
++  ["Statue of Liberty"] = { "Spymaster", 2 },
++  ["Women's Suffrage"] = { "Spymaster", 2 },
++  ["United Nations"] = { "Spymaster", 2 },
++  ["Resident Sage"] = { "Sage", 2 },
++  ["Resident Builder"] = { "Builder", 2 },
++  ["Resident Magnate"] = { "Magnate", 2 },
++  ["Resident Virtuoso"] = { "Virtuoso", 2 },
++  ["Resident Oracle"] = { "Oracle", 2 },
++  ["Resident Commander"] = { "Commander", 2 },
++  ["Resident Spymaster"] = { "Spymaster", 2 },
++}
++
++fc45_gp_kind_of_unit = { ["Great Sage"] = "Sage", ["Great Builder"] = "Builder", ["Great Magnate"] = "Magnate",
++                         ["Great Virtuoso"] = "Virtuoso", ["Great Oracle"] = "Oracle",
++                         ["Great Commander"] = "Commander", ["Great Spymaster"] = "Spymaster" }
++fc45_gp_tech_gift = { ["Philosophy"] = "Sage", ["Theology"] = "Oracle", ["Economics"] = "Magnate",
++                      ["Electricity"] = "Builder" }
++
++-- Global names carry a city, player or unit id; the id is formatted as an integer, since the saved
++-- script state is Lua source and a float id would not parse back.
++function fc45_gp_key(prefix, id) return prefix .. string.format("%d", id) end
++function fc45_gp_get(name) return rawget(_G, name) or 0 end
++function fc45_gp_set(name, value) rawset(_G, name, value) end
++
++-- The city a free great person appears in: the capital, else the first city.
++function fc45_gp_home(player)
++  local home = nil
++  for c in player:cities_iterate() do
++    if home == nil or c:is_capital() then home = c end
++    if c:is_capital() then break end
++  end
++  return home
++end
++
++function fc45_gp_rate(city)
++  return effects.city_bonus(city, "User_Effect_3"), effects.city_bonus(city, "User_Effect_4")
++end
++
++-- One kind, drawn with probability equal to its share of the city's points.
++function fc45_gp_draw_kind(city)
++  local weights, total = {}, 0
++  for name, src in pairs(fc45_gp_sources) do
++    local b = find.building_type(name)
++    if b ~= nil and city:has_building(b) then
++      weights[src[1]] = (weights[src[1]] or 0) + src[2]
++      total = total + src[2]
++    end
++  end
++  if total == 0 then return "Sage" end
++  local r = random(1, total)
++  for kind, w in pairs(weights) do
++    if r <= w then return kind end
++    r = r - w
++  end
++  return "Sage"
++end
++
++function fc45_gp_birth(city, kind, why)
++  local owner = city.owner
++  local utype = find.unit_type("Great " .. kind)
++  if utype == nil then return nil end
++  local u = edit.create_unit(owner, city.tile, utype, 0, city, -1)
++  if u == nil then return nil end
++  fc45_gp_set(fc45_gp_key("fc45_gp_born_", owner.id), fc45_gp_get(fc45_gp_key("fc45_gp_born_", owner.id)) + 1)
++  fc45_gp_set(fc45_gp_key("fc45_gp_born_turn_", u.id), game.turn())
++  notify.event(owner, city.tile, E.UNIT_BUILT, _("A %s has arisen in %s."), utype:name_translation(), city.name)
++  log.normal("FC45GP turn %d born %s of %s in %s by %s unit %d", game.turn(), utype:rule_name(), owner.name, city.name, why, u.id)
++  return u
++end
++
++-- Points, births, golden age expiry and the AI's use of its great people, every turn.
++function fc45_gp_turn(turn, year)
++  local golden = find.building_type("Golden Age")
++  for p in players_iterate() do
++    if fc45_is_civ(p) then
++      local until_key = fc45_gp_key("fc45_golden_until_", p.id)
++      local until_turn = rawget(_G, until_key)
++      if until_turn ~= nil and turn >= until_turn then
++        for c in p:cities_iterate() do
++          if c:has_building(golden) then edit.remove_building(c, golden) end
++        end
++        fc45_gp_set(until_key, nil)
++        notify.event(p, nil, E.WONDER_OBSOLETE, _("Your golden age has ended."))
++        log.normal("FC45GP turn %d golden age of %s ended", turn, p.name)
++      end
++      for c in p:cities_iterate() do
++        local rate, pct = fc45_gp_rate(c)
++        if rate > 0 then
++          local key = fc45_gp_key("fc45_gp_pool_", c.id)
++          local pool = fc45_gp_get(key) + (rate * (100 + pct)) // 100
++          local need = FC45_GP_BASE + FC45_GP_STEP * fc45_gp_get(fc45_gp_key("fc45_gp_born_", p.id))
++          if pool >= need then
++            fc45_gp_set(key, 0)
++            fc45_gp_birth(c, fc45_gp_draw_kind(c), "points")
++          else
++            fc45_gp_set(key, pool)
++          end
++        end
++      end
++      if not p:is_human() then fc45_gp_ai(p, turn) end
++    end
++  end
++end
++signal.connect("turn_begin", "fc45_gp_turn")
++
++function fc45_gp_city_destroyed(city, loser, destroyer)
++  fc45_gp_set(fc45_gp_key("fc45_gp_pool_", city.id), nil)
++end
++signal.connect("city_destroyed", "fc45_gp_city_destroyed")
++
++-- Settling: "Join City" adds the citizen; the Resident building is founded here.
++function fc45_gp_join(action, actor, city)
++  if action:rule_name() ~= "Join City" then return end
++  local kind = fc45_gp_kind_of_unit[actor.utype:rule_name()]
++  if kind == nil then return end
++  local b = find.building_type("Resident " .. kind)
++  if b ~= nil and not city:has_building(b) then edit.create_building(city, b) end
++  log.normal("FC45GP turn %d settled %s of %s in %s unit %d", game.turn(), actor.utype:rule_name(), actor.owner.name, city.name, actor.id)
++end
++signal.connect("action_started_unit_city", "fc45_gp_join")
++
++-- The deeds and the pledge. Both actions consume the actor.
++function fc45_gp_deed(action, actor)
++  local name = action:rule_name()
++  if name == "User Action 4" then
++    fc45_gp_pledge(actor)
++    return
++  end
++  if name ~= "User Action 3" then return end
++  local kind = fc45_gp_kind_of_unit[actor.utype:rule_name()]
++  local owner, city = actor.owner, actor.tile:city()
++  local what = "nothing"
++  if kind == "Sage" then
++    local tech = edit.give_tech(owner, nil, 0, true, "fc45_great_sage")
++    what = tech and tech:rule_name() or "no tech"
++  elseif kind == "Magnate" and city ~= nil then
++    local gold = 100 + 30 * city.size
++    if city.owner.id ~= owner.id then gold = gold * 2 end
++    edit.change_gold(owner, gold)
++    notify.event(owner, city.tile, E.SCRIPT, _("The trade mission of your Great Magnate to %s brings %d gold."), city.name, gold)
++    what = gold .. " gold"
++  elseif kind == "Virtuoso" and city ~= nil then
++    edit.add_city_history(city, 400)
++    notify.event(owner, city.tile, E.SCRIPT, _("The masterwork of your Great Virtuoso brings %s 400 history points."), city.name)
++    what = "400 history"
++  elseif kind == "Oracle" and city ~= nil then
++    local s = find.building_type("Sanctum")
++    for c in owner:cities_iterate() do
++      if c:has_building(s) then edit.remove_building(c, s) end
++    end
++    edit.create_building(city, s)
++    notify.event(owner, city.tile, E.WONDER_BUILD, _("Your Great Oracle founds the Sanctum in %s."), city.name)
++    what = "Sanctum"
++  elseif kind == "Commander" then
++    local n = 0
++    for u in actor.tile:units_iterate() do
++      if u.id ~= actor.id and u.owner.id == owner.id and not u.utype:has_flag("NoVeteran") then
++        if u:transform(u.utype, -1) then n = n + 1 end
++      end
++    end
++    notify.event(owner, actor.tile, E.SCRIPT, _("Your Great Commander drills %d units."), n)
++    what = n .. " units drilled"
++  end
++  log.normal("FC45GP turn %d deed %s of %s in %s: %s unit %d", game.turn(), actor.utype:rule_name(), owner.name,
++             city and city.name or "the field", what, actor.id)
++end
++signal.connect("action_started_unit_self", "fc45_gp_deed")
++
++-- A pledge counts towards the next age: the first age costs one great person, the second two, and so on.
++-- The age is the "Golden Age" small wonder in the capital for FC45_GOLDEN_TURNS turns.
++function fc45_gp_pledge(actor)
++  local p = actor.owner
++  local key_pl, key_ct = fc45_gp_key("fc45_golden_pledges_", p.id), fc45_gp_key("fc45_golden_count_", p.id)
++  local pledges, need = fc45_gp_get(key_pl) + 1, 1 + fc45_gp_get(key_ct)
++  local home = fc45_gp_home(p)
++  if pledges < need or home == nil then
++    fc45_gp_set(key_pl, pledges)
++    notify.event(p, actor.tile, E.SCRIPT, _("%d of %d great people have pledged your next golden age."), pledges, need)
++    log.normal("FC45GP turn %d pledge %d of %d by %s of %s unit %d", game.turn(), pledges, need, actor.utype:rule_name(), p.name, actor.id)
++    return
++  end
++  fc45_gp_set(key_pl, 0)
++  fc45_gp_set(key_ct, need)
++  fc45_gp_set(fc45_gp_key("fc45_golden_until_", p.id), game.turn() + FC45_GOLDEN_TURNS)
++  edit.create_building(home, find.building_type("Golden Age"))
++  notify.event(p, home.tile, E.WONDER_BUILD, _("A golden age begins: %d turns of plenty."), FC45_GOLDEN_TURNS)
++  log.normal("FC45GP turn %d golden age %d of %s begins for %d turns", game.turn(), need, p.name, FC45_GOLDEN_TURNS)
++end
++
++-- The first player to research one of four techs gets a great person in the capital.
++function fc45_gp_tech(tech, player, reason)
++  local kind = fc45_gp_tech_gift[tech:rule_name()]
++  if kind == nil or reason ~= "researched" or not fc45_is_civ(player) then return end
++  local key = fc45_gp_key("fc45_gp_first_", tech.id)
++  if rawget(_G, key) ~= nil then return end
++  fc45_gp_set(key, player.id)
++  local home = fc45_gp_home(player)
++  if home ~= nil then fc45_gp_birth(home, kind, "first to " .. tech:rule_name()) end
++end
++signal.connect("tech_researched", "fc45_gp_tech")
++
++-- The AI's rule (design note section 6): pledge when enough great people are at hand and no age runs;
++-- Sage, Virtuoso and Magnate do their deed where they stand; Oracle and Commander settle where no Resident
++-- of their kind is, else deed; the Builder is left to the native AI (Help Wonder) for 10 turns and the
++-- Spymaster (diplomat actions) for 20, then they settle. A deed an enabler refuses falls through to settling.
++function fc45_gp_ai(p, turn)
++  local deed, pledge, join = find.action("User Action 3"), find.action("User Action 4"), find.action("Join City")
++  local people = {}
++  for u in p:units_iterate() do
++    if u.utype:has_flag("GreatPerson") then people[#people + 1] = u end
++  end
++  if #people == 0 then return end
++  local running = rawget(_G, fc45_gp_key("fc45_golden_until_", p.id)) ~= nil
++  local need = 1 + fc45_gp_get(fc45_gp_key("fc45_golden_count_", p.id)) - fc45_gp_get(fc45_gp_key("fc45_golden_pledges_", p.id))
++  if not running and #people >= need then
++    for i = 1, need do
++      local u = people[i]
++      local uid, uname = u.id, u.utype:rule_name()
++      if edit.perform_action(u, pledge) then
++        log.normal("FC45GP turn %d ai pledge by %s of %s unit %d", turn, uname, p.name, uid)
++      end
++    end
++    people = {}
++    for u in p:units_iterate() do
++      if u.utype:has_flag("GreatPerson") then people[#people + 1] = u end
++    end
++  end
++  for _, u in ipairs(people) do
++    local kind = fc45_gp_kind_of_unit[u.utype:rule_name()]
++    local city = u.tile:city()
++    local age = turn - fc45_gp_get(fc45_gp_key("fc45_gp_born_turn_", u.id))
++    local resident = find.building_type("Resident " .. kind)
++    local done, how = false, "deed"
++    local uid = u.id
++    if kind == "Sage" or kind == "Virtuoso" or kind == "Magnate" then
++      done = edit.perform_action(u, deed)
++    elseif kind == "Oracle" or kind == "Commander" then
++      if city ~= nil and not city:has_building(resident) then
++        done, how = edit.perform_action(u, join, city), "settle"
++      end
++      if not done then done, how = edit.perform_action(u, deed), "deed" end
++    elseif (kind == "Builder" and age >= 10) or (kind == "Spymaster" and age >= 20) then
++      if city ~= nil then done, how = edit.perform_action(u, join, city), "settle" end
++    end
++    if not done and city ~= nil and (kind == "Sage" or kind == "Virtuoso" or kind == "Magnate") then
++      done, how = edit.perform_action(u, join, city), "settle"
++    end
++    if done then
++      log.normal("FC45GP turn %d ai %s by Great %s of %s unit %d", turn, how, kind, p.name, uid)
++    end
++  end
++end
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 715f6fd..82592f2 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -62,6 +62,7 @@ flags =
+     _("Armour"), _("An armoured fighting vehicle.")
+     _("Naval"), _("A warship or transport.")
+     _("Recon"), _("A scout: it sees far and cannot fight.")
++    _("GreatPerson"), _("A great person, born from a city's great-person points: it settles in a city, does its deed once, or pledges a golden age.")
+   }
+ 
+ ; Names for custom unit class flags. There can be up to 25 of these.
+@@ -3683,6 +3684,272 @@ This is you. If you lose this unit, you lose the game. So don't.\
+ Won't unleash barbarians from huts.\
+ ")
+ 
++[unit_great_sage]
++name          = _("Great Sage")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++  }
++obsolete_by   = "None"
++graphic       = "u.great_sage"
++graphic_alt   = "u.diplomat"
++sound_move    = "m_great_sage"
++sound_move_alt = "m_generic"
++sound_fight   = "f_great_sage"
++sound_fight_alt = "f_generic"
++build_cost    = 240
++pop_cost      = 1
++attack        = 0
++defense       = 0
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 0
++uk_food       = 0
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "NonMil", "NoVeteran", "NoBuild", "Unbribable", "AddToCity", "GreatPerson"
++roles         = ""
++helptext      = _("\
++A great person, a scholar: discovers the cheapest tech available to you as a deed, or settles as a Resident Sage (+25% science). Great people are born\
++ from a city's great-person points (temples, libraries, markets and the like give 1 to 3 a turn, wonders and\
++ settled great people 2); each needs 150 points plus 75 for every great person born to you before. Any great\
++ person can instead pledge a golden age: ten turns of an extra shield and trade on every working tile and double\
++ great-person points, the first for one pledge, the next for two, and so on.\
++")
++
++[unit_great_builder]
++name          = _("Great Builder")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++  }
++obsolete_by   = "None"
++graphic       = "u.great_builder"
++graphic_alt   = "u.engineers"
++sound_move    = "m_great_builder"
++sound_move_alt = "m_generic"
++sound_fight   = "f_great_builder"
++sound_fight_alt = "f_generic"
++build_cost    = 240
++pop_cost      = 1
++attack        = 0
++defense       = 0
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 0
++uk_food       = 0
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "NonMil", "NoVeteran", "NoBuild", "Unbribable", "AddToCity", "GreatPerson", "HelpWonder"
++roles         = ""
++helptext      = _("\
++A great person, an engineer: pours 240 shields into a great wonder with Help Wonder, or settles as a Resident Builder (+3 shields on the city centre). Great people are born\
++ from a city's great-person points (temples, libraries, markets and the like give 1 to 3 a turn, wonders and\
++ settled great people 2); each needs 150 points plus 75 for every great person born to you before. Any great\
++ person can instead pledge a golden age: ten turns of an extra shield and trade on every working tile and double\
++ great-person points, the first for one pledge, the next for two, and so on.\
++")
++
++[unit_great_magnate]
++name          = _("Great Magnate")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++  }
++obsolete_by   = "None"
++graphic       = "u.great_magnate"
++graphic_alt   = "u.caravan"
++sound_move    = "m_great_magnate"
++sound_move_alt = "m_generic"
++sound_fight   = "f_great_magnate"
++sound_fight_alt = "f_generic"
++build_cost    = 240
++pop_cost      = 1
++attack        = 0
++defense       = 0
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 0
++uk_food       = 0
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "NonMil", "NoVeteran", "NoBuild", "Unbribable", "AddToCity", "GreatPerson"
++roles         = ""
++helptext      = _("\
++A great person, a merchant: a trade mission in a city brings 100 gold plus 30 per citizen, twice that in a foreign city, or settles as a Resident Magnate (+3 trade on the centre, +25% gold). Great people are born\
++ from a city's great-person points (temples, libraries, markets and the like give 1 to 3 a turn, wonders and\
++ settled great people 2); each needs 150 points plus 75 for every great person born to you before. Any great\
++ person can instead pledge a golden age: ten turns of an extra shield and trade on every working tile and double\
++ great-person points, the first for one pledge, the next for two, and so on.\
++")
++
++[unit_great_virtuoso]
++name          = _("Great Virtuoso")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++  }
++obsolete_by   = "None"
++graphic       = "u.great_virtuoso"
++graphic_alt   = "u.diplomat"
++sound_move    = "m_great_virtuoso"
++sound_move_alt = "m_generic"
++sound_fight   = "f_great_virtuoso"
++sound_fight_alt = "f_generic"
++build_cost    = 240
++pop_cost      = 1
++attack        = 0
++defense       = 0
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 0
++uk_food       = 0
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "NonMil", "NoVeteran", "NoBuild", "Unbribable", "AddToCity", "GreatPerson"
++roles         = ""
++helptext      = _("\
++A great person, an artist: a masterwork gives the city 400 history points, or settles as a Resident Virtuoso (+3 history, +25% luxury). Great people are born\
++ from a city's great-person points (temples, libraries, markets and the like give 1 to 3 a turn, wonders and\
++ settled great people 2); each needs 150 points plus 75 for every great person born to you before. Any great\
++ person can instead pledge a golden age: ten turns of an extra shield and trade on every working tile and double\
++ great-person points, the first for one pledge, the next for two, and so on.\
++")
++
++[unit_great_oracle]
++name          = _("Great Oracle")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++  }
++obsolete_by   = "None"
++graphic       = "u.great_oracle"
++graphic_alt   = "u.diplomat"
++sound_move    = "m_great_oracle"
++sound_move_alt = "m_generic"
++sound_fight   = "f_great_oracle"
++sound_fight_alt = "f_generic"
++build_cost    = 240
++pop_cost      = 1
++attack        = 0
++defense       = 0
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 0
++uk_food       = 0
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "NonMil", "NoVeteran", "NoBuild", "Unbribable", "AddToCity", "GreatPerson"
++roles         = ""
++helptext      = _("\
++A great person, a prophet: founds the Sanctum, one per civilization, which makes one citizen content in every city, or settles as a Resident Oracle (two unhappy citizens made content). Great people are born\
++ from a city's great-person points (temples, libraries, markets and the like give 1 to 3 a turn, wonders and\
++ settled great people 2); each needs 150 points plus 75 for every great person born to you before. Any great\
++ person can instead pledge a golden age: ten turns of an extra shield and trade on every working tile and double\
++ great-person points, the first for one pledge, the next for two, and so on.\
++")
++
++[unit_great_commander]
++name          = _("Great Commander")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++  }
++obsolete_by   = "None"
++graphic       = "u.great_commander"
++graphic_alt   = "u.leader"
++sound_move    = "m_great_commander"
++sound_move_alt = "m_generic"
++sound_fight   = "f_great_commander"
++sound_fight_alt = "f_generic"
++build_cost    = 240
++pop_cost      = 1
++attack        = 0
++defense       = 0
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 0
++uk_food       = 0
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "NonMil", "NoVeteran", "NoBuild", "Unbribable", "AddToCity", "GreatPerson"
++roles         = ""
++helptext      = _("\
++A great person, a general: drills every unit of yours on its tile one veteran level, or settles as a Resident Commander (units built in the city start a level higher). Great people are born\
++ from a city's great-person points (temples, libraries, markets and the like give 1 to 3 a turn, wonders and\
++ settled great people 2); each needs 150 points plus 75 for every great person born to you before. Any great\
++ person can instead pledge a golden age: ten turns of an extra shield and trade on every working tile and double\
++ great-person points, the first for one pledge, the next for two, and so on.\
++")
++
++[unit_great_spymaster]
++name          = _("Great Spymaster")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++  }
++obsolete_by   = "None"
++graphic       = "u.great_spymaster"
++graphic_alt   = "u.spy"
++sound_move    = "m_great_spymaster"
++sound_move_alt = "m_generic"
++sound_fight   = "f_great_spymaster"
++sound_fight_alt = "f_generic"
++build_cost    = 240
++pop_cost      = 1
++attack        = 0
++defense       = 0
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 0
++uk_food       = 0
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "NonMil", "NoVeteran", "NoBuild", "Unbribable", "AddToCity", "GreatPerson", "Diplomat"
++roles         = ""
++helptext      = _("\
++A great person, a spy: a strong diplomat (embassies, investigation, incitement), or settles as a Resident Spymaster (spies resisted, incitement twice as dear). Great people are born\
++ from a city's great-person points (temples, libraries, markets and the like give 1 to 3 a turn, wonders and\
++ settled great people 2); each needs 150 points plus 75 for every great person born to you before. Any great\
++ person can instead pledge a golden age: ten turns of an extra shield and trade on every working tile and double\
++ great-person points, the first for one pledge, the next for two, and so on.\
++")
++
+ [unit_barbarian_leader]
+ name          = _("Barbarian Leader")
+ class         = "Land"
+-- 
+2.56.0
+
