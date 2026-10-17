@@ -27,6 +27,7 @@ Sources: four research reports, written by separate agents from public sources a
 | A first look in the bundled Qt client: trident is offered at pregame; declined, amplio2 draws the square map as diamonds | PR 56; `notes/freeciv45/client-look.md` |
 | A hook (patch 0007) that hands an AI player's builds and research to an outside chooser, so the play harness can play-test Freeciv45 | PR 63; `scripts/harness-test.sh`, all checks pass with a random chooser and with the AI's own pick; `notes/freeciv45/harness.md` |
 | Slice 2, Combat (patch 0008): siege units wound every unit of a stack of two or more and kill none ("Bombard 2" with a new `Collateral` flag), fights go to the death (`Combat_Rounds` 0) except for `Withdraws` attackers, which break off after 12 rounds per 10 hit points, and aircraft bombard at range 1 | PR 89 (issue 75); `scripts/civ45-rules-test.sh` 18/18, 11/18 on the slice 1 rules; four 200-turn autogames with `scripts/civ45-combat-log.lua`, `notes/freeciv45/mechanics.md` section 6 |
+| Six ways to win (patch 0009): conquest, domination (Lua: 60 % of the land and 50 % of the citizens for 3 turns, from turn 100), culture at 8000 points with a 50 % lead, the spaceship's arrival, the allied win, and the best score at turn 475 (Lua names the winner) | PR 100 (issue 92); `scripts/civ45-rules-test.sh` 24/24 and the score winner with `--extra "set endturn 6"`; two 475-turn autogames (allied victory at 152, cultural victory at 437), `notes/freeciv45/mechanics.md` section 7 |
 
 Open from slice 1: `test.sh` reads the installed ruleset unless told otherwise (#48), and the AI's stack use in
 later eras (#49). The client look (#50) found a stale line in the tileset dialog (#53) and a missing SVG plugin in
@@ -36,6 +37,9 @@ Open from slice 2: the default AI bombards a stack every turn instead of attacki
 bombardment with an attack (#83); with diplomacy allowed the ten AIs all ally and an autogame ends by allied victory
 around turn 150, which `test.sh` reports as a failure (#84). The siege rates and the break-off cap are placeholders
 until the roster and the one-strength decision (7).
+
+Open from the victory slice: the design note's five questions (decision 8), and no AI came near the domination
+thresholds in 437 turns, so that rule is untested in play.
 
 ## Decisions for John
 
@@ -47,6 +51,7 @@ until the roster and the one-strength decision (7).
 | 4 | Art: 96 px tiles from 192 px masters; units with one facing in v1 (8 facings later); the proposed "gouache atlas" style; which image tool (OpenAI API, ChatGPT app, Gemini) | Yes to sizes and one facing. Style and tool are John's taste. |
 | 5 | Lock `killstack` and `topology` in the ruleset, or leave them as pregame choices? | Leave unlocked, as Freeciv's own webperimental does with killstack (`refs/freeciv-S3_2/data/webperimental/game.ruleset:724`). |
 | 6 | Public name "Freeciv45" | Fine as a working name. It follows the "Freeciv21" fork's pattern and avoids "Civilization"/"Civ" (inferred; Freeciv's naming guidance not checked). |
+| 8 | Victory numbers: domination at 60 % of the land and 50 % of the citizens for 3 turns (the spec says about 65 % plus a population lead); allies do not pool for it (Lua cannot see alliances); `endturn` 475 as the shipped default; culture 8000 with a 50 % lead before the culture slice; the score winner announced by Lua | Built with these values 2026-10-17 (PR 100). Keep them until the culture and roster slices, then re-tune from autogames. |
 | 7 | One strength number per unit, for attack and defence alike, as in the reference game (spec 2.5, rated MUST), or Freeciv's separate attack and defence values? | One strength, brought in with slice 2 and the roster (slice 10), with an autogame before and after. Freeciv already decides each round by strength share; only the damage per round stays fixed (spec 2.5). |
 
 ## Roadmap

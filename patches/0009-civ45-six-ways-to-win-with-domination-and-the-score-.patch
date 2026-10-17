@@ -1,0 +1,215 @@
+From be05401a945c869504314d4db8e76aee7a4a1ee1 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 15:51:37 -0500
+Subject: [PATCH] civ45: six ways to win, with domination and the score winner
+ at the last turn in Lua
+
+game.ruleset writes out endspaceship (the ship must arrive), sets
+endturn 475 (the year 2050 on this calendar) and lowers the culture win
+to 8000 points with a 50% lead over the runner-up (sandbox: 20000 and
+double, which no player reached). script.lua adds two rules on
+turn_begin: domination, for a player who holds 60% of the land tiles
+and 50% of all citizens for three turns running (checked from turn
+100), and the score winner, named at the start of the last turn so the
+game ends with a victor rather than a turn-limit notice. Both call
+edit.player_victory; the thresholds are globals so a test can override
+them. README.civ45 and the summary list the six wins. Conquest, the
+allied win and culture are the server's own rules.
+---
+ data/civ45/README.civ45 |  10 ++++
+ data/civ45/game.ruleset |  24 +++++++---
+ data/civ45/script.lua   | 103 ++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 130 insertions(+), 7 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 2940126..571c17f 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -43,6 +43,16 @@ Differences from sandbox
+   usual, and against a stack the player may still choose to attack.
+ - Bombard range is 1 for aircraft (sandbox's value; the first slices had
+   2 for ranged units of a different game).
++- Six ways to win. Conquest: every rival is dead or has surrendered.
++  Domination: hold 60 percent of the land tiles and 50 percent of the
++  world's citizens for three turns running, checked from turn 100 by the
++  ruleset's script. Culture: 8000 culture points and half again as much
++  as the runner-up (sandbox asks 20000 and double). Space: a spaceship
++  that arrives (endspaceship enabled). Alliance: the last alliance
++  standing wins together. Score: the game ends after turn 475 (the year
++  2050) and at the start of that turn the living player with the highest
++  score is named the winner, so the game ends with a victor rather than a
++  turn-limit notice. The thresholds are first values, untuned.
+ - Strategic resources: Legion needs Iron and Armor needs Oil somewhere in
+   the city's radius.
+ - Nation-unique units and buildings: Aztec Jaguar Warrior (replaces
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index de75771..9541728 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -46,8 +46,13 @@ break off after a number of rounds. Siege units (Catapult to Howitzer) \
+ can bombard a stack of two or more units, wounding every unit in it \
+ and killing none. The map is a square grid seen from above that wraps \
+ east to west, and each city works 21 tiles. \
+-Also: cultural victory, strategic resources (Legion needs Iron, Armor \
+-needs Oil) and a few nation-unique units and buildings.\
++Six ways to win: conquest; domination (hold 60 percent of the land \
++and half the world's people for three turns); culture (8000 points \
++and half again as much as the runner-up); a spaceship that arrives; \
++the last alliance standing; or the highest score when the game ends \
++after turn 475. \
++Also: strategic resources (Legion needs Iron, Armor needs Oil) and a \
++few nation-unique units and buildings.\
+ \n\n\
+ Experimental: an early slice of Freeciv45, not balanced yet.\
+ ")
+@@ -383,11 +388,13 @@ tech_upkeep_divider = 6000
+ free_tech_method = "Cheapest"
+ 
+ [culture]
+-; Minimum culture points for cultural domination victory
+-victory_min_points = 20000
++; Minimum culture points for cultural domination victory. Freeciv45: 8000 (sandbox 20000),
++; reachable near turn 350 to 400 at the current culture pace; re-tune with the culture slice.
++victory_min_points = 8000
+ 
+-; How big lead relative to second best player is needed for victory
+-victory_lead_pct   = 100
++; How big lead relative to second best player is needed for victory. Freeciv45: half again
++; as much as the runner-up (sandbox: double).
++victory_lead_pct   = 50
+ 
+ ; How much existing history grows each turn. This makes older history
+ ; of the same original value more valuable as newer history, as it has
+@@ -912,7 +919,8 @@ colorlist =
+ 
+ [settings]
+ ; freeciv game settings for civ45 (Freeciv45): overhead square map wrapping east to west,
+-; only the defender dies when a stack loses, cultural victory enabled
++; only the defender dies when a stack loses, cultural victory enabled, the game ends when a
++; spaceship arrives, and it ends after turn 475 (the year 2050) on score (script.lua names the winner)
+ ;
+ set =
+     { "name", "value", "lock"
+@@ -920,6 +928,8 @@ set =
+       "generator", "FRACTAL", FALSE
+       "topology", "", FALSE
+       "victories", "SPACERACE|ALLIED|CULTURE", FALSE
++      "endspaceship", "ENABLED", FALSE
++      "endturn", 475, FALSE
+       "wrap", "WRAPX", FALSE
+       "killstack", "DISABLED", FALSE
+       "mapsize", "PLAYER", FALSE
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index 55c602d..172a234 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -527,3 +527,106 @@ end
+ 
+ signal.connect("action_started_unit_tile",
+ "action_started_unit_tile_callback")
++
++
++-- Freeciv45 ways to win (notes/freeciv45/design/victory.md). Conquest, culture, space and the allied
++-- win are the server's own rules, set in game.ruleset. The two below are not:
++-- Domination: a player who holds FC45_DOM_LAND_PCT percent of the land tiles and FC45_DOM_POP_PCT percent
++-- of all citizens for FC45_DOM_TURNS turns in a row wins. The check starts at turn FC45_DOM_FROM_TURN,
++-- because nobody can qualify earlier and the map walk costs time.
++-- Score: at the start of the last turn (the endturn setting) the living player with the highest score
++-- is named the winner, so the game ends with a victor instead of a bare turn-limit notice.
++FC45_DOM_LAND_PCT = 60
++FC45_DOM_POP_PCT = 50
++FC45_DOM_TURNS = 3
++FC45_DOM_FROM_TURN = 100
++
++-- A living player who is neither the barbarians nor the animals.
++function fc45_is_civ(p)
++  local n = p.nation:rule_name()
++  return p.is_alive and n ~= "Barbarian" and n ~= "Animal Kingdom"
++end
++
++-- Land tiles, the land tiles each player holds, all citizens, and each civ's citizens.
++function fc45_domination_count()
++  local land, held, pop, pops = 0, {}, 0, {}
++  for tile in whole_map_iterate() do
++    if tile.terrain:class_name() == "Land" then
++      land = land + 1
++      local o = tile.owner
++      if o ~= nil then held[o.id] = (held[o.id] or 0) + 1 end
++    end
++  end
++  for p in players_iterate() do
++    if fc45_is_civ(p) then
++      local s = 0
++      for c in p:cities_iterate() do s = s + c.size end
++      pops[p.id] = s
++      pop = pop + s
++    end
++  end
++  return land, held, pop, pops
++end
++
++-- The civs that pass the two thresholds right now; changes nothing. Also returns the land and
++-- citizen totals.
++function fc45_domination_qualifiers(land_pct, pop_pct)
++  local land, held, pop, pops = fc45_domination_count()
++  local q = {}
++  for p in players_iterate() do
++    if fc45_is_civ(p) and land > 0 and pop > 0
++       and (held[p.id] or 0) * 100 >= land * land_pct
++       and (pops[p.id] or 0) * 100 >= pop * pop_pct then
++      q[#q + 1] = p
++    end
++  end
++  return q, land, pop
++end
++
++function fc45_domination_check(turn, year)
++  if turn < FC45_DOM_FROM_TURN then return end
++  local q = fc45_domination_qualifiers(FC45_DOM_LAND_PCT, FC45_DOM_POP_PCT)
++  local passed = {}
++  for i, p in ipairs(q) do passed[p.id] = true end
++  for p in players_iterate() do
++    if fc45_is_civ(p) then
++      -- One scalar global per player: scalars are saved with the game, tables are not.
++      local key = string.format("fc45_dom_run_%d", p.id)
++      if passed[p.id] then _G[key] = (_G[key] or 0) + 1 else _G[key] = 0 end
++      if _G[key] >= FC45_DOM_TURNS then
++        notify.all(_("The %s hold %d%% of the land and %d%% of the world's people: they rule the known world."),
++                   p.nation:plural_translation(), FC45_DOM_LAND_PCT, FC45_DOM_POP_PCT)
++        edit.player_victory(p)
++      end
++    end
++  end
++end
++
++-- The living civ with the highest score; the first found wins a tie.
++function fc45_best_score()
++  local best, score = nil, -1
++  for p in players_iterate() do
++    if fc45_is_civ(p) then
++      local s = p:civilization_score()
++      if s > score then best, score = p, s end
++    end
++  end
++  return best, score
++end
++
++function fc45_score_winner(turn, year)
++  local last = tonumber(server.setting.get("endturn"))
++  if last == nil or turn ~= last then return end
++  local best, score = fc45_best_score()
++  if best ~= nil then
++    notify.all(_("Turn %d is the last. The %s have the highest score, %d, and win."),
++               turn, best.nation:plural_translation(), score)
++    edit.player_victory(best)
++  end
++end
++
++function fc45_victory_turn_begin(turn, year)
++  fc45_domination_check(turn, year)
++  fc45_score_winner(turn, year)
++end
++signal.connect("turn_begin", "fc45_victory_turn_begin")
+-- 
+2.56.0
+

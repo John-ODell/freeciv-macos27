@@ -6,7 +6,7 @@
 # Usage: scripts/civ45-rules-test.sh <prefix-or-bin-dir> [--data DIR] [--port P] [--extra CMD]...
 #   --data   Freeciv data dir holding civ45 (default: port/freeciv/data, the source tree)
 #   --extra  a server command added after the setup, e.g. --extra "set killstack enabled" for a control
-#            run that must fail
+#            run that must fail, or --extra "set endturn 6" to see the score winner named at the last turn (the test ends at turn 6)
 set -uo pipefail
 [ $# -ge 1 ] || { sed -n '2,8p' "$0"; exit 2; }
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,10 +42,24 @@ for _ in $(seq 1 180); do
   kill -0 $SPID 2>/dev/null || break
   sleep 1
 done
+# With endturn set to the turn the test finishes on, the game ends that turn with the ruleset's score
+# winner: wait for the server's victory line before quitting.
+if grep -q "FC45TEST expect victory" "$OUT/server.log"; then
+  for _ in $(seq 1 90); do grep -q "victory to" "$OUT/server.log" && break; kill -0 $SPID 2>/dev/null || break; sleep 1; done
+fi
 kill -0 $SPID 2>/dev/null && echo quit >&3; exec 3>&-
 wait $SPID 2>/dev/null; rm -f "$OUT/fifo"
 grep "FC45TEST" "$OUT/server.log" | sed 's/^[0-9]*: //'
 RC=0
+# The victory keys Lua cannot read, checked in the ruleset file the server loaded.
+RS="$DATA/civ45/game.ruleset"
+for want in 'victory_min_points = 8000' 'victory_lead_pct   = 50' '"endturn", 475, FALSE' '"endspaceship", "ENABLED", FALSE'; do
+  if grep -qF "$want" "$RS"; then echo "FC45TEST PASS game.ruleset has $want"; else echo "FC45TEST FAIL game.ruleset lacks $want"; RC=1; fi
+done
+if EXP=$(sed -n 's/.*FC45TEST expect victory to the \(.*\) (score.*/\1/p' "$OUT/server.log" | head -1) && [ -n "$EXP" ]; then
+  if grep -q "Scenario victory to the $EXP\." "$OUT/server.log"; then echo "FC45TEST PASS the highest score, the $EXP, won at the last turn"
+  else echo "FC45TEST FAIL no 'Scenario victory to the $EXP' in $OUT/server.log"; RC=1; fi
+fi
 grep -q "FC45TEST DONE" "$OUT/server.log" || { echo "civ45-rules-test: no result (see $OUT/server.log)"; RC=1; }
 grep -q "FC45TEST FAIL\|FC45TEST SKIP" "$OUT/server.log" && RC=1
 if grep -q "lua error" "$OUT/server.log"; then

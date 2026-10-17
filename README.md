@@ -47,8 +47,8 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 ```
 
 `build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
-`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004, 0006 and 0008: sandbox
-plus stacks of units on a square map, siege units that wound whole stacks and fights to the death, see
+`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004, 0006, 0008 and 0009: sandbox
+plus stacks of units on a square map, siege units that wound whole stacks, fights to the death and six ways to win, see
 `port/freeciv/data/civ45/README.civ45` after applying the patches); `--lua FILE` loads a script before the game starts,
 for example `scripts/civ45-combat-log.lua`, which logs every attack, bombardment, unit lost and city taken for counting;
 `test.sh` reads the installed data unless given `--data port/freeciv/data`, and its result line names the directory
@@ -60,7 +60,9 @@ exemptions for aircraft and ships in port, or `--report` for civ45, where stacks
 player: the map and stack settings, moving onto a friendly unit and into an occupied city, a three-unit stack that
 keeps two units when its defender loses, a stack still together a turn later, and the combat rules: a siege unit's
 bombardment wounds a three-unit stack without killing (a Warriors then beats its defender) and is refused against a lone
-unit, a Bomber bombards at range 1 only, a duel of equals ends with one unit dead, and a Withdraws attacker breaks off.
+unit, a Bomber bombards at range 1 only, a duel of equals ends with one unit dead, and a Withdraws attacker breaks off;
+and the ways to win: the victory settings, the domination script's counting and decision, and with
+`--extra "set endturn 6"` the score winner the ruleset names at the last turn.
 `--extra "set killstack enabled"` is the control run, which must fail. `scripts/civ54-rules-test.sh ~/freeciv-builds/qt` checks civ54's rules
 directly: it loads `scripts/civ54-rules-test.lua` into a civ54 game with one human-controlled player, moves a land
 unit, a fighter and destroyers at a coastal city at turn 12, runs the turn-start sweep, and exits 0 only if every case
