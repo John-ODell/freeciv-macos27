@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
--- Freeciv45 (civ45) stack, map, combat, victory, draft and tech rules test. Load it into a civ45 server before the game starts with
+-- Freeciv45 (civ45) stack, map, combat, victory, draft, tech and roster rules test. Load it into a civ45 server before the game starts with
 --   lua file scripts/civ45-rules-test.lua
 -- (scripts/civ45-rules-test.sh does that; an autogame reads no console input once it runs). It runs at the
 -- first turn start from turn 5 on, checks one more thing a turn later, and prints
@@ -154,6 +154,7 @@ function fc45_rules_test_run()
   fc45_victory_test_run()
   if tester ~= nil then fc45_draft_test_run(tester, used) end
   if tester ~= nil then fc45_tech_test_run(tester) end
+  if tester ~= nil and animals ~= nil then fc45_roster_test_run(tester, animals, used) end
 end
 
 -- The tech tree: the six new techs exist and the three dropped ones do not, and the cost of a tech is what
@@ -226,10 +227,10 @@ function fc45_draft_test_run(tester, used)
   end
   log.normal("FC45TEST Testerburg is city %d at tile %d on turn %d", city.id, spot.id, game.turn())
 
-  -- A hardened (level 2) Phalanx upgraded in its city keeps its level. "Upgrade Unit" goes to the newest type
-  -- the chain reaches, Musketeers here since Gunpowder is known (Phalanx, Pikemen, Musketeers), and costs
-  -- 2 * missing + missing^2 / 20 gold, where missing is the Musketeers' 40 shields less half the Phalanx's 20
-  -- (Unit_Shield_Value_Pct -50 for the price): 105.
+  -- A hardened (level 2) Spearmen (rule name Phalanx) upgraded in its city keeps its level. "Upgrade Unit"
+  -- goes to the newest type the chain reaches, Musketeers here since Gunpowder is known (Spearmen, Pikemen,
+  -- Musketeers), and costs 2 * missing + missing^2 / 20 gold, where missing is the Musketeers' 60 shields
+  -- less half the Spearmen's 20 (Unit_Shield_Value_Pct -50 for the price): 50, so 225 gold.
   edit.give_tech(tester, find.tech_type("Feudalism"), 0, false, "test")
   edit.change_gold(tester, 1000)
   local gold = tester:gold()
@@ -239,9 +240,9 @@ function fc45_draft_test_run(tester, used)
   for u in spot:units_iterate() do if u.id == ph.id then after = u end end
   log.normal("FC45TEST upgrade: performed %s, now %s, veteran %s, gold %d -> %d", tostring(upgraded),
              after and after.utype:rule_name() or "gone", after and tostring(after.veteran) or "-", gold, tester:gold())
-  check("a hardened Phalanx upgraded in its city is a Musketeers that is still hardened, for 105 gold",
+  check("a hardened Spearmen upgraded in its city is a Musketeers that is still hardened, for 225 gold",
         upgraded and after ~= nil and after.utype:rule_name() == "Musketeers" and after.veteran == 2
-        and tester:gold() == gold - 105)
+        and tester:gold() == gold - 225)
 
   -- A Levy disbanded into the city's build is gone; the runner checks the 30 shields in the autosave.
   local lv = edit.create_unit(tester, spot, levy, 0, city, -1)
@@ -249,6 +250,104 @@ function fc45_draft_test_run(tester, used)
   local whipped = lv:perform_action(find.action("Disband Unit Recover"), city)
   check("a Levy disbands into Testerburg's build and is gone", whipped and spot:num_units() == n - 1)
   log.normal("FC45TEST expect disbanded shields 30 in Testerburg")
+  fc45_test.city = city
+end
+
+-- The roster (slice 10, notes/freeciv45/design/units-and-upgrades.md): the renamed units keep their rule
+-- names, the dropped ones are gone, the new ones exist, the counters work through the bonuses rows, and
+-- City Walls are keyed on the attacker's class flag.
+function fc45_roster_test_run(tester, animals, used)
+  local renamed = { Phalanx = "Spearmen", Legion = "Swordsmen", Elephants = "War Elephants", Armor = "Tank",
+                    Nuclear = "Atom Bomb", ["Mech. Inf."] = "Mechanized Infantry", Helicopter = "Gunship",
+                    AWACS = "Radar Plane", ["AEGIS Cruiser"] = "Missile Cruiser", SSBN = "Missile Submarine",
+                    ICBM = "Nuclear Missile" }
+  local ok = true
+  for rule, shown in pairs(renamed) do
+    local ut = find.unit_type(rule)
+    if ut == nil or ut:name_translation() ~= shown then
+      ok = false
+      log.normal("FC45TEST rename: %s shows as %s", rule, ut and ut:name_translation() or "nil")
+    end
+  end
+  check("the eleven renamed units keep their rule names and show the new ones", ok)
+  ok = true
+  for _, name in ipairs({ "Jaguar Warrior", "Immortal", "Alpine Troops", "Crusaders", "Mechanic" }) do
+    if find.unit_type(name) ~= nil then ok = false end
+  end
+  check("Jaguar Warrior, Immortal, Alpine Troops, Crusaders and Mechanic are gone", ok)
+  ok = true
+  for _, name in ipairs({ "Scout", "Axemen", "Horse Bowmen", "War Galley", "Macebearers", "Longbowmen",
+                          "Crossbowmen", "Trebuchet", "Grenadiers", "Ship of the Line", "Infantry",
+                          "Machine Gunners", "Armoured Cars", "Main Battle Tank", "Air Defence Infantry",
+                          "Jet Fighter" }) do
+    if find.unit_type(name) == nil then ok = false; log.normal("FC45TEST missing unit %s", name) end
+  end
+  check("the sixteen new units exist", ok)
+  check("Spearmen and Pikemen carry Melee, Horsemen Mounted, Musketeers Gun, Catapult Siege, Tank Armour",
+        find.unit_type("Phalanx"):has_flag("Melee") and find.unit_type("Pikemen"):has_flag("Melee")
+        and find.unit_type("Horsemen"):has_flag("Mounted") and find.unit_type("Musketeers"):has_flag("Gun")
+        and find.unit_type("Catapult"):has_flag("Siege") and find.unit_type("Armor"):has_flag("Armour"))
+
+  -- The Spear counter: War Elephants (strength 8, Mounted, no Withdraws, so the fight is to the death)
+  -- attack Pikemen (strength 6, doubled against Mounted to 12) on open grassland or plains twenty times.
+  -- The Pikemen win a round with 12/20 and the fight (ten rounds before losing ten, 10 hit points each,
+  -- firepower 1) with 0.81, so they win 11 or more of 20 with 0.998; without the counter (8 against 6)
+  -- they win a fight with 0.26 and 11 of 20 with 0.006. A river on the spot would raise both.
+  local attack = find.action("Attack")
+  local spot, side
+  for t in whole_map_iterate() do
+    local terrain = t.terrain:rule_name()
+    if (terrain == "Grassland" or terrain == "Plains") and free(t) and not used[t.id] and not t:has_extra("River") then
+      for a in t:circle_iterate(2) do
+        if a.id ~= t.id and free(a) and not used[a.id] and find.unit_type("Elephants"):can_exist_at_tile(a) then
+          spot, side = t, a; break
+        end
+      end
+      if spot ~= nil then used[spot.id] = true; used[side.id] = true; break end
+    end
+  end
+  if spot == nil then
+    log.normal("FC45TEST SKIP no open grassland or plains for the counter case")
+  else
+    local wins, fights = 0, 0
+    for _ = 1, 20 do
+      local pk = edit.create_unit(animals, spot, find.unit_type("Pikemen"), 0, nil, -1)
+      local el = edit.create_unit(tester, side, find.unit_type("Elephants"), 0, nil, -1)
+      local pid = pk.id
+      if el:perform_action(attack, spot) then
+        fights = fights + 1
+        if find.unit(animals, pid) ~= nil then wins = wins + 1 end
+      end
+      for u in spot:units_iterate() do u:kill("disbanded", nil) end
+      for u in side:units_iterate() do u:kill("disbanded", nil) end
+    end
+    log.normal("FC45TEST counter: Pikemen won %d of %d fights against War Elephants on %s", wins, fights,
+               spot.terrain:rule_name())
+    check("Pikemen beat attacking War Elephants in at least 11 of 20 fights (the Spear counter doubles them)",
+          fights == 20 and wins >= 11)
+  end
+
+  -- City Walls (Defend_Bonus 100) apply to a Melee or Siege attacker and not to a Gun one or the Howitzer.
+  -- effects.unit_bonus evaluates the effect with the unit's type and the city on its tile, so a unit standing
+  -- in Testerburg stands in for an attacker of its type; the walls' share is the rise when they are built
+  -- (every city already gives 50 against Ground attackers, effect_city_defense_0).
+  local city = fc45_test.city
+  if city == nil then
+    log.normal("FC45TEST SKIP no Testerburg for the walls case")
+  else
+    local units, before, after = {}, {}, {}
+    for i, name in ipairs({ "Warriors", "Musketeers", "Catapult", "Howitzer" }) do
+      units[i] = edit.create_unit(tester, city.tile, find.unit_type(name), 0, city, -1)
+      before[i] = effects.unit_bonus(units[i], nil, "Defend_Bonus")
+    end
+    city:create_building(find.building_type("City Walls"))
+    for i = 1, 4 do after[i] = effects.unit_bonus(units[i], nil, "Defend_Bonus") end
+    log.normal("FC45TEST walls: Defend_Bonus without and with City Walls: Warriors %d %d, Musketeers %d %d, Catapult %d %d, Howitzer %d %d",
+               before[1], after[1], before[2], after[2], before[3], after[3], before[4], after[4])
+    check("City Walls add Defend_Bonus 100 against Melee and Siege attackers and nothing against Gun and the Howitzer",
+          after[1] - before[1] == 100 and after[3] - before[3] == 100 and after[2] == before[2] and after[4] == before[4])
+    for _, u in ipairs(units) do u:kill("disbanded", nil) end
+  end
 end
 
 -- Victory rules: the settings the server exposes, and the domination script's counting and decision with
@@ -371,8 +470,8 @@ function fc45_combat_test_run(tester, animals, used)
   end
 
   -- Withdraws: a Knights (10 hit points, cap 12 rounds) attacking a Musketeers (20 hit points) can never
-  -- kill it, and dies only if it loses 10 of at most 12 rounds (about 1 fight in 200 at attack 4 against
-  -- defence 3), so both are alive afterwards; two tries make a false failure negligible. Without the cap
+  -- kill it, and dies only if it loses 10 of at most 12 rounds (about 1 fight in 90 at strength 10 against
+  -- 9), so both are alive afterwards; two tries make a false failure negligible. Without the cap
   -- (or with Combat_Rounds 0 for everyone) one of the two always dies.
   local both = nil
   for try = 1, 2 do

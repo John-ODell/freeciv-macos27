@@ -1,0 +1,2648 @@
+From c89dbfeb97c2f6155de548fad9ce8554f7b6fd99 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 17:03:24 -0500
+Subject: [PATCH] civ45: the unit roster, 76 types in seven eras with one
+ strength and class counters
+
+Implements notes/freeciv45/design/units-and-upgrades.md section 1 (the roster)
+on the civ45 ruleset:
+
+- 16 new units (Scout, Axemen, Horse Bowmen, War Galley, Macebearers,
+  Longbowmen, Crossbowmen, Trebuchet, Grenadiers, Ship of the Line, Infantry,
+  Machine Gunners, Armoured Cars, Main Battle Tank, Air Defence Infantry, Jet
+  Fighter), each with the graphic tag u.<name> and the template unit's graphic
+  as graphic_alt until the tileset has sprites.
+- 11 units renamed in the shown name only, keeping rule_name so saves, effects
+  and scripts load: Phalanx (Spearmen), Legion (Swordsmen), Elephants (War
+  Elephants), Armor (Tank), Nuclear (Atom Bomb), Mech. Inf. (Mechanized
+  Infantry), Helicopter (Gunship), AWACS (Radar Plane), AEGIS Cruiser (Missile
+  Cruiser), SSBN (Missile Submarine), ICBM (Nuclear Missile).
+- Jaguar Warrior, Immortal, Alpine Troops, Crusaders and Mechanic removed;
+  Engineers take over the Heal Unit enabler.
+- One strength number for attack and defence (0 attack where the design says
+  so), hit points 10 in eras I-III, 20 in IV-VI, 30 for armour, capital ships
+  and era VII, firepower 1 everywhere; costs, moves, cargo, fuel and
+  bombard_rate from the design tables; tech and resource requirements from
+  the design, resources limited to the extras the map has (Iron, Coal, Ivory,
+  Oil).
+- Eight class flags (Melee, Archer, Mounted, Gun, Siege, Armour, Naval, Recon)
+  and the counters as bonuses rows on the unit that has one, keyed on the
+  target class: DefenseMultiplierPct when that class attacks it and
+  DefenseDividerPct when it attacks that class (common/combat.c
+  defense_multiplication reads the defender's rows against the attacker's
+  flags and the attacker's rows against the defender's flags).
+- effects.ruleset: Attack_Bonus against cities for twelve types, Armoured
+  Cars' open-field bonus, Fortify_Defense_Bonus for Archers and Longbowmen in
+  cities and Longbowmen and Partisans on rough ground, and City Walls keyed on
+  the attacker's Melee, Archer, Mounted or Siege flag (not the Howitzer)
+  instead of the Ground class.
+- Caravel carries one Small Land unit and is no longer a barbarian boat (the
+  server wants room for a leader and one man); Trireme keeps that role.
+---
+ data/civ45/README.civ45    |   38 +-
+ data/civ45/actions.ruleset |    2 +-
+ data/civ45/effects.ruleset |  205 +++++-
+ data/civ45/units.ruleset   | 1227 +++++++++++++++++++++++++-----------
+ 4 files changed, 1093 insertions(+), 379 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index d50a3a5..fd3a33c 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -30,8 +30,8 @@ Differences from sandbox
+ - Cultural victory is enabled alongside spacerace and allied victory.
+ - Combat is to the death: a fight lasts until the attacker or the
+   defender dies (sandbox stops every fight after 15 rounds). Units with
+-  the Withdraws flag (Horsemen, Chariot, Elephants, Crusaders, Knights,
+-  Dragoons, Cavalry, Armor) break off their own attacks instead, after
++  the Withdraws flag (Horsemen, Chariot, Horse Bowmen, Knights, Dragoons,
++  Cavalry, Armoured Cars) break off their own attacks instead, after
+   12 rounds for every 10 hit points they have left; when attacked they
+   fight to the death like everyone else.
+ - Siege collateral: Catapult, Cannon, Artillery and Howitzer (flag
+@@ -71,11 +71,35 @@ Differences from sandbox
+   the whip too: disbanded in a city ("Disband recovering production")
+   each puts 30 shields into the build, whatever it cost, so a citizen
+   becomes 30 shields. No unhappiness follows a draft yet.
+-- Strategic resources: Legion needs Iron and Armor needs Oil somewhere in
+-  the city's radius.
+-- Nation-unique units and buildings: Aztec Jaguar Warrior (replaces
+-  Warriors, attack 2, ignores terrain), Persian Immortal (replaces Legion,
+-  defence 3, no Iron needed), Arab Bazaar (built on a Marketplace, +50%
++- The roster: 76 unit types over seven eras (notes/freeciv45/design/
++  units-and-upgrades.md), with one strength number for attack and
++  defence (0 attack for scouts, transports, machine gunners, air
++  defence and the radar plane), 10 hit points in the first three eras,
++  20 in the next three and 30 for armour, capital ships and the last
++  era, firepower 1 throughout. Class flags (Melee, Archer, Mounted, Gun,
++  Siege, Armour, Naval, Recon) key the counters, two bonuses rows on
++  the unit that has one (DefenseMultiplierPct when that class attacks
++  it, DefenseDividerPct when it attacks that class): Spearmen and
++  Pikemen are twice as strong against mounted units, Axemen,
++  Macebearers and Crossbowmen half again against hand-weapon foot,
++  mounted units half again against siege engines, Mechanized Infantry
++  half again and the Gunship twice against armour, and so on; siege
++  units, Swordsmen, Marines, tanks and big ships get an
++  attack bonus against cities; Archers and Longbowmen hold cities,
++  Longbowmen and Partisans hills. City Walls double the defence only
++  against Melee, Archer, Mounted and Siege attackers (not the Howitzer).
++  Renamed units keep their old rule_name (Phalanx is Spearmen, Legion
++  Swordsmen, Elephants War Elephants, Armor Tank, Nuclear Atom Bomb,
++  Mech. Inf. Mechanized Infantry, Helicopter Gunship, AWACS Radar Plane,
++  AEGIS Cruiser Missile Cruiser, SSBN Missile Submarine, ICBM Nuclear
++  Missile), so saves and scripts load. Jaguar Warrior, Immortal, Alpine
++  Troops, Crusaders and Mechanic are gone (Engineers heal vehicles).
++- Strategic resources: Swordsmen, Macebearers, Crossbowmen, Knights,
++  Cannon, Ship of the Line and Ironclad need Iron (Ironclad Coal too),
++  War Elephants Ivory, and armour, aircraft and modern warships Oil,
++  somewhere in the city's radius. Horses, copper, aluminium and uranium
++  wait for the resources slice.
++- Nation-unique buildings: Arab Bazaar (built on a Marketplace, +50%
+   luxury, +25% gold). No new graphics yet; they reuse the sprites of the
+   unit or building they replace.
+ 
+diff --git a/data/civ45/actions.ruleset b/data/civ45/actions.ruleset
+index 8cd1fcb..0bda9fb 100644
+--- a/data/civ45/actions.ruleset
++++ b/data/civ45/actions.ruleset
+@@ -956,7 +956,7 @@ target_reqs   =
+ action        = "Heal Unit"
+ actor_reqs    =
+     { "type",         "name",       "range",  "present"
+-      "UnitType",     "Mechanic",   "Local",  TRUE
++      "UnitType",     "Engineers",  "Local",  TRUE
+       "MinMoveFrags", 1,            "Local",  TRUE
+       "DiplRel",      "Armistice",  "Local",  FALSE
+       "DiplRel",      "War",        "Local",  FALSE
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index bbd97a2..aeba722 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -2116,14 +2116,209 @@ reqs    =
+       "UnitClassFlag", "Aerial", "Local", FALSE
+     }
+ 
+-; All Ground units
+-[effect_city_walls_0]
++; City Walls double the defence against attackers that fight with hand weapons, bows, horses or
++; pre-gunpowder siege engines; they give nothing against gunpowder, armour or the Howitzer
++; (notes/freeciv45/design/units-and-upgrades.md, section 1).
++[effect_city_walls_melee]
+ type    = "Defend_Bonus"
+ value   = 100
+ reqs    =
+-    { "type",          "name",       "range"
+-      "UnitClassFlag", "Ground",     "Local"
+-      "Building",      "City Walls", "City"
++    { "type",     "name",       "range"
++      "UnitFlag", "Melee",      "Local"
++      "Building", "City Walls", "City"
++    }
++
++[effect_city_walls_archer]
++type    = "Defend_Bonus"
++value   = 100
++reqs    =
++    { "type",     "name",       "range"
++      "UnitFlag", "Archer",     "Local"
++      "Building", "City Walls", "City"
++    }
++
++[effect_city_walls_mounted]
++type    = "Defend_Bonus"
++value   = 100
++reqs    =
++    { "type",     "name",       "range"
++      "UnitFlag", "Mounted",    "Local"
++      "Building", "City Walls", "City"
++    }
++
++[effect_city_walls_siege]
++type    = "Defend_Bonus"
++value   = 100
++reqs    =
++    { "type",     "name",       "range", "present"
++      "UnitFlag", "Siege",      "Local", TRUE
++      "UnitType", "Howitzer",   "Local", FALSE
++      "Building", "City Walls", "City",  TRUE
++    }
++
++; Freeciv45 roster: attack bonuses against cities, by unit type (design note section 1).
++[effect_city_attack_legion]
++type    = "Attack_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Legion", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_catapult]
++type    = "Attack_Bonus"
++value   = 50
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Catapult", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_trebuchet]
++type    = "Attack_Bonus"
++value   = 100
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Trebuchet", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_cannon]
++type    = "Attack_Bonus"
++value   = 100
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Cannon", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_ship_of_the_line]
++type    = "Attack_Bonus"
++value   = 50
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Ship of the Line", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_artillery]
++type    = "Attack_Bonus"
++value   = 100
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Artillery", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_armor]
++type    = "Attack_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Armor", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_marines]
++type    = "Attack_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Marines", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_cruiser]
++type    = "Attack_Bonus"
++value   = 50
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Cruiser", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_battleship]
++type    = "Attack_Bonus"
++value   = 100
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Battleship", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_main_battle_tank]
++type    = "Attack_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Main Battle Tank", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_attack_howitzer]
++type    = "Attack_Bonus"
++value   = 100
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Howitzer", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++; Armoured Cars are half again as strong when they attack anything outside a city.
++[effect_open_field_armoured_cars]
++type    = "Attack_Bonus"
++value   = 50
++reqs    =
++    { "type", "name", "range", "present"
++      "UnitType", "Armoured Cars", "Local", TRUE
++      "CityTile", "Center", "Tile", FALSE
++    }
++
++; Archers and Longbowmen fortified in a city, Longbowmen on hills, Partisans on hills and in forest.
++[effect_city_defence_archers]
++type    = "Fortify_Defense_Bonus"
++value   = 50
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Archers", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_city_defence_longbowmen]
++type    = "Fortify_Defense_Bonus"
++value   = 50
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Longbowmen", "Local"
++      "CityTile", "Center", "Tile"
++    }
++
++[effect_hills_defence_longbowmen]
++type    = "Fortify_Defense_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Longbowmen", "Local"
++      "Terrain", "Hills", "Tile"
++    }
++
++[effect_hills_defence_partisan]
++type    = "Fortify_Defense_Bonus"
++value   = 50
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Partisan", "Local"
++      "Terrain", "Hills", "Tile"
++    }
++
++[effect_forest_defence_partisan]
++type    = "Fortify_Defense_Bonus"
++value   = 50
++reqs    =
++    { "type", "name", "range"
++      "UnitType", "Partisan", "Local"
++      "Terrain", "Forest", "Tile"
+     }
+ 
+ [effect_city_walls_1]
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 5fb5e41..715f6fd 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -54,6 +54,14 @@ flags =
+     _("Collateral"), _("Its bombardment wounds every unit on a tile that holds two or more units, and kills none of them.")
+     _("Withdraws"), _("When it attacks, it breaks off after 12 rounds for every 10 hit points it has, instead of fighting to the death.")
+     _("Draft"), _("Raised from one of the city's citizens instead of built from shields alone, and only under Tribal, Despotism, Monarchy, Communism or Fundamentalism. Disbanded in a city, it puts 30 shields into whatever the city is building.")
++    _("Melee"), _("Foot soldiers with hand weapons.")
++    _("Archer"), _("Foot soldiers with bows.")
++    _("Mounted"), _("Fights from horseback or an elephant.")
++    _("Gun"), _("Foot soldiers with firearms: city walls do not help against them.")
++    _("Siege"), _("A siege engine or gun.")
++    _("Armour"), _("An armoured fighting vehicle.")
++    _("Naval"), _("A warship or transport.")
++    _("Recon"), _("A scout: it sees far and cannot fight.")
+   }
+ 
+ ; Names for custom unit class flags. There can be up to 25 of these.
+@@ -681,54 +689,13 @@ sufficient existing land). See the Terrain Alterations section \
+ for more details.\
+ ")
+ 
+-[unit_mechanic]
+-name          = _("Mechanic")
+-class         = "Small Land"
+-reqs          =
+-  { "type", "name", "range"
+-    "Tech", "Engineering", "Player"
+-  }
+-obsolete_by   = "None"
+-graphic       = "u.mechanic"
+-graphic_alt   = "u.engineers"
+-sound_move    = "m_mechanic"
+-sound_move_alt = "m_generic"
+-sound_fight   = "f_mechanic"
+-sound_fight_alt = "f_generic"
+-build_cost    = 30
+-pop_cost      = 0
+-attack        = 0
+-defense       = 2
+-hitpoints     = 10
+-firepower     = 1
+-move_rate     = 1
+-vision_radius_sq = 2
+-transport_cap = 0
+-fuel          = 0
+-uk_happy      = 0
+-uk_shield     = 1
+-uk_food       = 0
+-uk_gold       = 0
+-tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Cant_Fortify", "NonMil", "HasNoZOC", "Fortress", "FleshBased"
+-; No veteran levels (level name is never displayed)
+-veteran_names = _("green")
+-veteran_base_raise_chance = 0
+-veteran_work_raise_chance = 0
+-veteran_power_fact = 100
+-veteran_move_bonus = 0
+-helptext      = _("\
+-A Mechanic can repair machines in the field.\
+-")
+-
+ [unit_warriors]
+ name          = _("Warriors")
+ class         = "Land"
+ reqs          =
+-  { "type", "name", "range", "present"
+-    "Nation", "Aztec", "Player", FALSE
++  { "type", "name", "range"
+   }
+-obsolete_by   = "Musketeers"
++obsolete_by   = "Legion"
+ graphic       = "u.warriors"
+ graphic_alt   = "-"
+ sound_move    = "m_warriors"
+@@ -750,7 +717,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
+ roles         = "DefendOk", "DefendOkStartUnit", "FirstBuild"
+ helptext      = _("\
+ This unit may be built from the start of the game.  It is the\
+@@ -758,24 +725,25 @@ This unit may be built from the start of the game.  It is the\
+ ")
+ 
+ ; civ45: Aztec unique unit, replaces Warriors (Civ4 Jaguar).
+-[unit_jaguar_warrior]
+-name          = _("Jaguar Warrior")
++[unit_phalanx]
++name          = _("Spearmen")
++rule_name     = "Phalanx"
+ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Nation", "Aztec", "Player"
++    "Tech", "Bronze Working", "Player"
+   }
+-obsolete_by   = "Musketeers"
+-graphic       = "u.jaguar_warrior"
+-graphic_alt   = "u.warriors"
+-sound_move    = "m_warriors"
++obsolete_by   = "Pikemen"
++graphic       = "u.phalanx"
++graphic_alt   = "-"
++sound_move    = "m_phalanx"
+ sound_move_alt = "m_generic"
+-sound_fight   = "f_warriors"
++sound_fight   = "f_phalanx"
+ sound_fight_alt = "f_generic"
+-build_cost    = 10
++build_cost    = 20
+ pop_cost      = 0
+ attack        = 2
+-defense       = 1
++defense       = 2
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 1
+@@ -787,31 +755,35 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "IgTer"
+-roles         = "DefendOk", "DefendOkStartUnit", "FirstBuild"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
++roles         = "DefendGood", "DefendGoodStartUnit", "FirstBuild"
++bonuses       =
++    { "flag", "type", "value"
++      "Mounted", "DefenseMultiplierPct", 100
++      "Mounted", "DefenseDividerPct", 100
++    }
+ helptext      = _("\
+-Aztec warriors who move through rough terrain as if it were flat and\
+- strike harder than ordinary Warriors.\
++The Phalanx is armored infantry, suitable for defending your cities.\
+ ")
+ 
+-[unit_phalanx]
+-name          = _("Phalanx")
++[unit_axemen]
++name          = _("Axemen")
+ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Bronze Working", "Player"
+   }
+-obsolete_by   = "Pikemen"
+-graphic       = "u.phalanx"
+-graphic_alt   = "-"
+-sound_move    = "m_phalanx"
++obsolete_by   = "Macebearers"
++graphic       = "u.axemen"
++graphic_alt   = "u.phalanx"
++sound_move    = "m_axemen"
+ sound_move_alt = "m_generic"
+-sound_fight   = "f_phalanx"
++sound_fight   = "f_axemen"
+ sound_fight_alt = "f_generic"
+-build_cost    = 20
++build_cost    = 25
+ pop_cost      = 0
+-attack        = 1
+-defense       = 2
++attack        = 3
++defense       = 3
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 1
+@@ -823,10 +795,15 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased"
+-roles         = "DefendGood", "DefendGoodStartUnit", "FirstBuild"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
++roles         = "DefendOk"
++bonuses       =
++    { "flag", "type", "value"
++      "Melee", "DefenseMultiplierPct", 50
++      "Melee", "DefenseDividerPct", 50
++    }
+ helptext      = _("\
+-The Phalanx is armored infantry, suitable for defending your cities.\
++Axemen are the first foot soldiers who win against other foot soldiers: half again as strong against Warriors, Spearmen and their like. They will need copper once the map has it.\
+ ")
+ 
+ [unit_archers]
+@@ -834,19 +811,19 @@ name          = _("Archers")
+ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Warrior Code", "Player"
++    "Tech", "Archery", "Player"
+   }
+-obsolete_by   = "Musketeers"
++obsolete_by   = "Longbowmen"
+ graphic       = "u.archers"
+ graphic_alt   = "-"
+ sound_move    = "m_archers"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_archers"
+ sound_fight_alt = "f_generic"
+-build_cost    = 20
++build_cost    = 25
+ pop_cost      = 0
+ attack        = 3
+-defense       = 1
++defense       = 3
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 1
+@@ -858,33 +835,109 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Archer"
+ roles         = "DefendOk", "Hut"
+ helptext      = _("\
+ Archers fight with bows and arrows and have a good offensive\
+  value.\
+ ")
+ 
++[unit_longbowmen]
++name          = _("Longbowmen")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Feudalism", "Player"
++  }
++obsolete_by   = "Riflemen"
++graphic       = "u.longbowmen"
++graphic_alt   = "u.archers"
++sound_move    = "m_longbowmen"
++sound_move_alt = "m_generic"
++sound_fight   = "f_longbowmen"
++sound_fight_alt = "f_generic"
++build_cost    = 45
++pop_cost      = 0
++attack        = 6
++defense       = 6
++hitpoints     = 10
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Archer"
++roles         = "DefendOk"
++helptext      = _("\
++Archers with the long bow: half again as strong when fortified in a city, and a quarter again on hills.\
++")
++
++[unit_crossbowmen]
++name          = _("Crossbowmen")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Machinery", "Player"
++    "Extra", "Iron", "City"
++  }
++obsolete_by   = "Riflemen"
++graphic       = "u.crossbowmen"
++graphic_alt   = "u.archers"
++sound_move    = "m_crossbowmen"
++sound_move_alt = "m_generic"
++sound_fight   = "f_crossbowmen"
++sound_fight_alt = "f_generic"
++build_cost    = 50
++pop_cost      = 0
++attack        = 6
++defense       = 6
++hitpoints     = 10
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Archer"
++roles         = "DefendOk"
++bonuses       =
++    { "flag", "type", "value"
++      "Melee", "DefenseMultiplierPct", 50
++      "Melee", "DefenseDividerPct", 50
++    }
++helptext      = _("\
++Crossbows punch through armour: half again as strong against foot soldiers. They need iron.\
++")
++
+ [unit_legion]
+-name          = _("Legion")
++name          = _("Swordsmen")
++rule_name     = "Legion"
+ class         = "Land"
+ reqs          =
+-  { "type", "name", "range", "present"
+-    "Tech", "Iron Working", "Player", TRUE
+-    "Extra", "Iron", "City", TRUE
+-    "Nation", "Persian", "Player", FALSE
++  { "type", "name", "range"
++    "Tech", "Iron Working", "Player"
++    "Extra", "Iron", "City"
+   }
+-obsolete_by   = "Musketeers"
++obsolete_by   = "Macebearers"
+ graphic       = "u.legion"
+ graphic_alt   = "-"
+ sound_move    = "m_legion"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_legion"
+ sound_fight_alt = "f_generic"
+-build_cost    = 30
++build_cost    = 40
+ pop_cost      = 0
+-attack        = 4
+-defense       = 2
++attack        = 6
++defense       = 6
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 1
+@@ -896,7 +949,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Marines", "Capturer", "Fortress", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
+ roles         = "DefendOk", "BarbarianBuild", "BarbarianSea"
+ helptext      = _("\
+ Legions are heavily armed and well disciplined infantry\
+@@ -904,25 +957,25 @@ Legions are heavily armed and well disciplined infantry\
+ ")
+ 
+ ; civ45: Persian unique unit, replaces Legion and needs no Iron.
+-[unit_immortal]
+-name          = _("Immortal")
++[unit_macebearers]
++name          = _("Macebearers")
+ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Iron Working", "Player"
+-    "Nation", "Persian", "Player"
++    "Tech", "Machinery", "Player"
++    "Extra", "Iron", "City"
+   }
+-obsolete_by   = "Musketeers"
+-graphic       = "u.immortal"
++obsolete_by   = "Grenadiers"
++graphic       = "u.macebearers"
+ graphic_alt   = "u.legion"
+-sound_move    = "m_legion"
++sound_move    = "m_macebearers"
+ sound_move_alt = "m_generic"
+-sound_fight   = "f_legion"
++sound_fight   = "f_macebearers"
+ sound_fight_alt = "f_generic"
+-build_cost    = 30
++build_cost    = 55
+ pop_cost      = 0
+-attack        = 4
+-defense       = 3
++attack        = 8
++defense       = 8
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 1
+@@ -934,11 +987,15 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Marines", "Capturer", "Fortress", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
+ roles         = "DefendOk"
++bonuses       =
++    { "flag", "type", "value"
++      "Melee", "DefenseMultiplierPct", 50
++      "Melee", "DefenseDividerPct", 50
++    }
+ helptext      = _("\
+-The Persian royal guard: as strong on the attack as a Legion, better in\
+- defence, and raised without an Iron supply.\
++Armoured foot soldiers with maces and flails, half again as strong against other foot soldiers. They need iron.\
+ ")
+ 
+ [unit_pikemen]
+@@ -955,10 +1012,10 @@ sound_move    = "m_pikemen"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_pikemen"
+ sound_fight_alt = "f_generic"
+-build_cost    = 30
++build_cost    = 45
+ pop_cost      = 0
+-attack        = 2
+-defense       = 3
++attack        = 6
++defense       = 6
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 1
+@@ -970,8 +1027,13 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
+ roles         = "DefendGood", "DefendGoodStartUnit", "FirstBuild"
++bonuses       =
++    { "flag", "type", "value"
++      "Mounted", "DefenseMultiplierPct", 100
++      "Mounted", "DefenseDividerPct", 100
++    }
+ helptext      = _("\
+ Equipped with long pikes, Pikemen replaces Phalanx\
+  as the preferred city defender.\
+@@ -991,10 +1053,10 @@ sound_move    = "m_musketeers"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_musketeers"
+ sound_fight_alt = "f_generic"
+-build_cost    = 40
++build_cost    = 60
+ pop_cost      = 0
+-attack        = 3
+-defense       = 3
++attack        = 9
++defense       = 9
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 1
+@@ -1006,7 +1068,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Marines", "Capturer", "Fortress", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Marines", "Gun"
+ roles         = "DefendGood", "DefendGoodStartUnit", "FirstBuild", "HutTech",
+                 "BarbarianTech", "BarbarianBuildTech", "BarbarianSeaTech"
+ helptext      = _("\
+@@ -1015,6 +1077,46 @@ Musketeers are infantry equipped with early\
+  city defender.\
+ ")
+ 
++[unit_grenadiers]
++name          = _("Grenadiers")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Chemistry", "Player"
++  }
++obsolete_by   = "Infantry"
++graphic       = "u.grenadiers"
++graphic_alt   = "u.musketeers"
++sound_move    = "m_grenadiers"
++sound_move_alt = "m_generic"
++sound_fight   = "f_grenadiers"
++sound_fight_alt = "f_generic"
++build_cost    = 80
++pop_cost      = 0
++attack        = 12
++defense       = 12
++hitpoints     = 20
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Gun"
++roles         = "DefendOk"
++bonuses       =
++    { "flag", "type", "value"
++      "Gun", "DefenseMultiplierPct", 50
++      "Gun", "DefenseDividerPct", 50
++    }
++helptext      = _("\
++Soldiers who throw grenades: half again as strong against other gunpowder units.\
++")
++
+ [unit_riflemen]
+ name          = _("Riflemen")
+ class         = "Land"
+@@ -1022,17 +1124,17 @@ reqs          =
+   { "type", "name", "range"
+     "Tech", "Conscription", "Player"
+   }
+-obsolete_by   = "Marines"
++obsolete_by   = "Infantry"
+ graphic       = "u.riflemen"
+ graphic_alt   = "-"
+ sound_move    = "m_riflemen"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_riflemen"
+ sound_fight_alt = "f_generic"
+-build_cost    = 50
++build_cost    = 90
+ pop_cost      = 0
+-attack        = 5
+-defense       = 4
++attack        = 14
++defense       = 14
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 1
+@@ -1044,31 +1146,36 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Marines", "Capturer", "Fortress", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Marines", "Gun"
+ roles         = "DefendGood", "DefendGoodStartUnit", "FirstBuild"
++bonuses       =
++    { "flag", "type", "value"
++      "Mounted", "DefenseMultiplierPct", 25
++      "Mounted", "DefenseDividerPct", 25
++    }
+ helptext      = _("\
+ Riflemen are World War-era infantry, very good\
+  at defending your cities.\
+ ")
+ 
+-[unit_alpine_troops]
+-name          = _("Alpine Troops")
++[unit_infantry]
++name          = _("Infantry")
+ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Tactics", "Player"
++    "Tech", "Machine Tools", "Player"
+   }
+-obsolete_by   = "None"
+-graphic       = "u.alpine_troops"
+-graphic_alt   = "-"
+-sound_move    = "m_alpine_troops"
++obsolete_by   = "Mech. Inf."
++graphic       = "u.infantry"
++graphic_alt   = "u.riflemen"
++sound_move    = "m_infantry"
+ sound_move_alt = "m_generic"
+-sound_fight   = "f_alpine_troops"
++sound_fight   = "f_infantry"
+ sound_fight_alt = "f_generic"
+-build_cost    = 60
++build_cost    = 120
+ pop_cost      = 0
+-attack        = 7
+-defense       = 4
++attack        = 20
++defense       = 20
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 1
+@@ -1080,13 +1187,89 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-embarks       = "Helicopter"
+-disembarks    = "Helicopter"
+-flags         = "Shield2Gold", "ShieldToGold", "IgTer", "Capturer", "Fortress", "SupplyLines", "FleshBased"
+-roles         = "DefendOk", "DefendOkStartUnit"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Gun"
++roles         = "DefendGood", "DefendGoodStartUnit", "FirstBuild"
+ helptext      = _("\
+-Alpine Troops are highly mobile units as well as\
+- excellent defenders.\
++Riflemen of the machine age, in uniform and in numbers: the backbone of an industrial army.\
++")
++
++[unit_machine_gunners]
++name          = _("Machine Gunners")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Machine Tools", "Player"
++  }
++obsolete_by   = "Mech. Inf."
++graphic       = "u.machine_gunners"
++graphic_alt   = "u.riflemen"
++sound_move    = "m_machine_gunners"
++sound_move_alt = "m_generic"
++sound_fight   = "f_machine_gunners"
++sound_fight_alt = "f_generic"
++build_cost    = 110
++pop_cost      = 0
++attack        = 0
++defense       = 18
++hitpoints     = 20
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Gun"
++roles         = "DefendGood"
++bonuses       =
++    { "flag", "type", "value"
++      "Gun", "DefenseMultiplierPct", 50
++      "Melee", "DefenseMultiplierPct", 50
++    }
++helptext      = _("\
++A machine gun crew holds ground and cannot attack: half again as strong against foot soldiers and gunpowder units.\
++")
++
++[unit_air_defence_infantry]
++name          = _("Air Defence Infantry")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Rocketry", "Player"
++  }
++obsolete_by   = "None"
++graphic       = "u.air_defence_infantry"
++graphic_alt   = "u.riflemen"
++sound_move    = "m_air_defence_infantry"
++sound_move_alt = "m_generic"
++sound_fight   = "f_air_defence_infantry"
++sound_fight_alt = "f_generic"
++build_cost    = 120
++pop_cost      = 0
++attack        = 0
++defense       = 24
++hitpoints     = 30
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Gun"
++roles         = "DefendGood"
++bonuses       =
++    { "flag", "type", "value"
++      "AirAttacker", "DefenseMultiplier", 3
++    }
++helptext      = _("\
++Infantry with missiles against aircraft: four times as strong against anything that flies, and unable to attack.\
+ ")
+ 
+ [unit_partisan]
+@@ -1105,8 +1288,8 @@ sound_fight   = "f_partisan"
+ sound_fight_alt = "f_generic"
+ build_cost    = 60
+ pop_cost      = 0
+-attack        = 4
+-defense       = 5
++attack        = 12
++defense       = 12
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 1
+@@ -1120,7 +1303,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ embarks       = "Helicopter"
+ disembarks    = "Helicopter"
+-flags         = "Shield2Gold", "ShieldToGold", "IgTer", "IgZOC", "Capturer", "Fortress", "SupplyLines", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "IgTer", "IgZOC", "SupplyLines", "Gun"
+ roles         = "DefendGood", "DefendGoodStartUnit", "Partisan", "BarbarianTech"
+ helptext      = _("\
+ Partisans are guerilla fighters who are experts\
+@@ -1167,8 +1350,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ embarks       = "Helicopter"
+ disembarks    = "Helicopter"
+-flags         = "Fanatic", "AddToCity", "Capturer", "Fortress",
+-                "SupplyLines", "FleshBased"
++flags         = "Fanatic", "AddToCity", "Capturer", "Fortress", "SupplyLines", "FleshBased", "Gun"
+ roles         = "DefendGood", "DefendGoodStartUnit"
+ helptext      = _("\
+ Fanatics are warriors extremely devoted to a higher cause.\
+@@ -1211,7 +1393,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased"
++flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased", "Melee"
+ roles         = ""
+ helptext      = _("\
+ Townsfolk called up with spear and shield for a season: as good as a\
+@@ -1257,7 +1439,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased"
++flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased", "Gun"
+ roles         = ""
+ helptext      = _("\
+ Citizens handed muskets and a few weeks of drill. They fight like\
+@@ -1303,7 +1485,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased"
++flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased", "Gun"
+ roles         = ""
+ helptext      = _("\
+ A conscript regiment, armed like Riflemen and raised in a turn from\
+@@ -1330,10 +1512,10 @@ sound_move    = "m_marines"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_marines"
+ sound_fight_alt = "f_generic"
+-build_cost    = 60
++build_cost    = 120
+ pop_cost      = 0
+-attack        = 8
+-defense       = 5
++attack        = 24
++defense       = 24
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 1
+@@ -1347,7 +1529,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ embarks       = "Helicopter"
+ disembarks    = "Helicopter"
+-flags         = "Shield2Gold", "ShieldToGold", "Marines", "Capturer", "Fortress", "SupplyLines", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Marines", "SupplyLines", "Gun"
+ roles         = "DefendGood", "FirstBuild", "BarbarianSeaTech"
+ helptext      = _("\
+ Marines are infantry who are experts at marine warfare.\
+@@ -1358,7 +1540,7 @@ name          = _("Paratroopers")
+ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Combined Arms", "Player"
++    "Tech", "Advanced Flight", "Player"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.paratroopers"
+@@ -1367,10 +1549,10 @@ sound_move    = "m_paratroopers"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_paratroopers"
+ sound_fight_alt = "f_generic"
+-build_cost    = 60
++build_cost    = 120
+ pop_cost      = 0
+-attack        = 6
+-defense       = 4
++attack        = 20
++defense       = 20
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 1
+@@ -1384,7 +1566,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ embarks       = "Helicopter"
+ disembarks    = "Helicopter"
+-flags         = "Shield2Gold", "ShieldToGold", "Paratroopers", "Capturer", "Fortress", "SupplyLines", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Paratroopers", "SupplyLines", "Gun"
+ roles         = "DefendOk"
+ helptext      = _("\
+ Paratroopers are experts at airborne attacks. From a friendly city, \
+@@ -1397,11 +1579,13 @@ targets!)\
+ paratroopers_range = 10
+ 
+ [unit_mech_inf]
+-name          = _("Mech. Inf.")
++name          = _("Mechanized Infantry")
++rule_name     = "Mech. Inf."
+ class         = "Big Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Robotics", "Player"
++    "Extra", "Oil", "City"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.mech_inf"
+@@ -1410,10 +1594,10 @@ sound_move    = "m_mech_inf"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_mech_inf"
+ sound_fight_alt = "f_generic"
+-build_cost    = 70
++build_cost    = 160
+ pop_cost      = 0
+-attack        = 6
+-defense       = 6
++attack        = 32
++defense       = 32
+ hitpoints     = 30
+ firepower     = 1
+ move_rate     = 3
+@@ -1425,8 +1609,13 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "IronBased", "Gun"
+ roles         = "DefendGood", "DefendGoodStartUnit", "FirstBuild"
++bonuses       =
++    { "flag", "type", "value"
++      "Armour", "DefenseMultiplierPct", 50
++      "Armour", "DefenseDividerPct", 50
++    }
+ helptext      = _("\
+ The Mechanized Infantry has the strongest inherent defensive strength \
+ of any land unit, and is very fast on roads and easy terrain, but it is \
+@@ -1442,7 +1631,7 @@ reqs          =
+   { "type", "name", "range"
+     "Tech", "Horseback Riding", "Player"
+   }
+-obsolete_by   = "Knights"
++obsolete_by   = "Horse Bowmen"
+ graphic       = "u.horsemen"
+ graphic_alt   = "-"
+ sound_move    = "m_horsemen"
+@@ -1452,7 +1641,7 @@ sound_fight_alt = "f_generic"
+ build_cost    = 20
+ pop_cost      = 0
+ attack        = 2
+-defense       = 1
++defense       = 2
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 2
+@@ -1464,14 +1653,60 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased", "Mounted"
+ roles         = "AttackFastStartUnit", "Hut", "Barbarian", "Hunter"
++bonuses       =
++    { "flag", "type", "value"
++      "Siege", "DefenseMultiplierPct", 50
++      "Siege", "DefenseDividerPct", 50
++    }
+ helptext      = _("\
+ Horsemen are mounted warriors and an early\
+  shock-troop that can penetrate deep into\
+  enemy territory.\
+ ")
+ 
++[unit_horse_bowmen]
++name          = _("Horse Bowmen")
++class         = "Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Archery", "Player"
++    "Tech", "Horseback Riding", "Player"
++  }
++obsolete_by   = "Knights"
++graphic       = "u.horse_bowmen"
++graphic_alt   = "u.horsemen"
++sound_move    = "m_horse_bowmen"
++sound_move_alt = "m_generic"
++sound_fight   = "f_horse_bowmen"
++sound_fight_alt = "f_generic"
++build_cost    = 40
++pop_cost      = 0
++attack        = 5
++defense       = 5
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased", "Mounted"
++roles         = "AttackFastStartUnit", "Hunter"
++bonuses       =
++    { "flag", "type", "value"
++      "Siege", "DefenseMultiplierPct", 50
++      "Siege", "DefenseDividerPct", 50
++    }
++helptext      = _("\
++Mounted archers who shoot and ride off: half again as strong against siege engines, and they break off a fight they are losing.\
++")
++
+ [unit_chariot]
+ name          = _("Chariot")
+ class         = "Big Land"
+@@ -1479,7 +1714,7 @@ reqs          =
+   { "type", "name", "range"
+     "Tech", "The Wheel", "Player"
+   }
+-obsolete_by   = "Dragoons"
++obsolete_by   = "Knights"
+ graphic       = "u.chariot"
+ graphic_alt   = "-"
+ sound_move    = "m_chariot"
+@@ -1489,7 +1724,7 @@ sound_fight_alt = "f_generic"
+ build_cost    = 30
+ pop_cost      = 0
+ attack        = 4
+-defense       = 1
++defense       = 4
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 2
+@@ -1501,7 +1736,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased", "Mounted"
+ roles         = "AttackFastStartUnit"
+ helptext      = _("\
+ Chariots are horse-pulled war wagons. They have a stronger attack than \
+@@ -1513,11 +1748,13 @@ without roads, and they cannot be transported by sea using early ships \
+ ")
+ 
+ [unit_elephants]
+-name          = _("Elephants")
+-class         = "Land"
++name          = _("War Elephants")
++rule_name     = "Elephants"
++class         = "Big Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Polytheism", "Player"
++    "Tech", "Horseback Riding", "Player"
++    "Extra", "Ivory", "City"
+   }
+ obsolete_by   = "Dragoons"
+ graphic       = "u.elephants"
+@@ -1526,13 +1763,13 @@ sound_move    = "m_elephants"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_elephants"
+ sound_fight_alt = "f_generic"
+-build_cost    = 30
++build_cost    = 50
+ pop_cost      = 0
+-attack        = 3
+-defense       = 2
++attack        = 8
++defense       = 8
+ hitpoints     = 10
+ firepower     = 1
+-move_rate     = 2
++move_rate     = 1
+ vision_radius_sq = 2
+ transport_cap = 0
+ fuel          = 0
+@@ -1541,55 +1778,25 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Capturer", "FleshBased", "Mounted"
+ roles         = "DefendOk", "AttackFastStartUnit", "Hunter"
++bonuses       =
++    { "flag", "type", "value"
++      "Mounted", "DefenseMultiplierPct", 50
++      "Mounted", "DefenseDividerPct", 50
++    }
+ helptext      = _("\
+ Elephants are towering animals trained for war that are often used as\
+  powerful shock troops.\
+ ")
+ 
+-[unit_crusaders]
+-name          = _("Crusaders")
+-class         = "Land"
+-reqs          =
+-  { "type", "name", "range"
+-    "Tech", "Monotheism", "Player"
+-  }
+-obsolete_by   = "Dragoons"
+-graphic       = "u.crusaders"
+-graphic_alt   = "u.knights"
+-sound_move    = "m_crusaders"
+-sound_move_alt = "m_generic"
+-sound_fight   = "f_crusaders"
+-sound_fight_alt = "f_generic"
+-build_cost    = 40
+-pop_cost      = 0
+-attack        = 5
+-defense       = 1
+-hitpoints     = 10
+-firepower     = 1
+-move_rate     = 2
+-vision_radius_sq = 2
+-transport_cap = 0
+-fuel          = 0
+-uk_happy      = 0
+-uk_shield     = 1
+-uk_food       = 1
+-uk_gold       = 0
+-tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
+-roles         = "AttackFastStartUnit", "Hunter"
+-helptext      = _("\
+-Crusaders are highly disciplined mounted\
+- warriors driven by a higher cause.\
+-")
+-
+ [unit_knights]
+ name          = _("Knights")
+ class         = "Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Chivalry", "Player"
++    "Extra", "Iron", "City"
+   }
+ obsolete_by   = "Dragoons"
+ graphic       = "u.knights"
+@@ -1598,10 +1805,10 @@ sound_move    = "m_knights"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_knights"
+ sound_fight_alt = "f_generic"
+-build_cost    = 40
++build_cost    = 70
+ pop_cost      = 0
+-attack        = 4
+-defense       = 3
++attack        = 10
++defense       = 10
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 2
+@@ -1613,9 +1820,14 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased", "Mounted"
+ roles         = "DefendOk", "AttackFastStartUnit",
+                 "HutTech","BarbarianTech", "BarbarianBuildTech", "Hunter"
++bonuses       =
++    { "flag", "type", "value"
++      "Siege", "DefenseMultiplierPct", 50
++      "Siege", "DefenseDividerPct", 50
++    }
+ helptext      = _("\
+ Knights are mounted and heavily armored warriors.\
+ ")
+@@ -1634,10 +1846,10 @@ sound_move    = "m_dragoons"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_dragoons"
+ sound_fight_alt = "f_generic"
+-build_cost    = 50
++build_cost    = 85
+ pop_cost      = 0
+-attack        = 5
+-defense       = 2
++attack        = 12
++defense       = 12
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 2
+@@ -1649,8 +1861,13 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased", "Mounted"
+ roles         = "AttackFastStartUnit", "BarbarianBuildTech", "Hunter"
++bonuses       =
++    { "flag", "type", "value"
++      "Siege", "DefenseMultiplierPct", 50
++      "Siege", "DefenseDividerPct", 50
++    }
+ helptext      = _("\
+ Dragoons are mounted warriors carrying early firearms.\
+ ")
+@@ -1662,17 +1879,17 @@ reqs          =
+   { "type", "name", "range"
+     "Tech", "Tactics", "Player"
+   }
+-obsolete_by   = "Armor"
++obsolete_by   = "Armoured Cars"
+ graphic       = "u.cavalry"
+ graphic_alt   = "-"
+ sound_move    = "m_cavalry"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_cavalry"
+ sound_fight_alt = "f_generic"
+-build_cost    = 60
++build_cost    = 100
+ pop_cost      = 0
+-attack        = 8
+-defense       = 3
++attack        = 15
++defense       = 15
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 2
+@@ -1684,34 +1901,40 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased", "Mounted"
+ roles         = "AttackFastStartUnit", "Hunter"
++bonuses       =
++    { "flag", "type", "value"
++      "Siege", "DefenseMultiplierPct", 50
++      "Siege", "DefenseDividerPct", 50
++    }
+ helptext      = _("\
+ Cavalry are mounted and highly trained soldiers.\
+ ")
+ 
+ [unit_armor]
+-name          = _("Armor")
++name          = _("Tank")
++rule_name     = "Armor"
+ class         = "Big Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Mobile Warfare", "Player"
+     "Extra", "Oil", "City"
+   }
+-obsolete_by   = "None"
++obsolete_by   = "Main Battle Tank"
+ graphic       = "u.armor"
+ graphic_alt   = "-"
+ sound_move    = "m_armor"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_armor"
+ sound_fight_alt = "f_generic"
+-build_cost    = 90
++build_cost    = 150
+ pop_cost      = 0
+-attack        = 10
+-defense       = 5
++attack        = 28
++defense       = 28
+ hitpoints     = 30
+ firepower     = 1
+-move_rate     = 3
++move_rate     = 2
+ vision_radius_sq = 2
+ transport_cap = 0
+ fuel          = 0
+@@ -1720,7 +1943,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "IronBased", "Armour"
+ roles         = "DefendOk", "AttackFastStartUnit", "Hunter"
+ helptext      = _("\
+ Armors are motorized war wagons that are faster, stronger, and can take \
+@@ -1730,6 +1953,78 @@ without roads), and unable to use less rough terrain to improve their \
+ defense.\
+ ")
+ 
++[unit_armoured_cars]
++name          = _("Armoured Cars")
++class         = "Big Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Automobile", "Player"
++    "Extra", "Oil", "City"
++  }
++obsolete_by   = "Armor"
++graphic       = "u.armoured_cars"
++graphic_alt   = "u.armor"
++sound_move    = "m_armoured_cars"
++sound_move_alt = "m_generic"
++sound_fight   = "f_armoured_cars"
++sound_fight_alt = "f_generic"
++build_cost    = 100
++pop_cost      = 0
++attack        = 16
++defense       = 16
++hitpoints     = 20
++firepower     = 1
++move_rate     = 3
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "IronBased", "Armour"
++roles         = "AttackFastStartUnit", "Hunter"
++helptext      = _("\
++Fast armoured cars: half again as strong when attacking in the open, and they break off a fight they are losing. They need oil.\
++")
++
++[unit_main_battle_tank]
++name          = _("Main Battle Tank")
++class         = "Big Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Robotics", "Player"
++    "Extra", "Oil", "City"
++  }
++obsolete_by   = "None"
++graphic       = "u.main_battle_tank"
++graphic_alt   = "u.armor"
++sound_move    = "m_main_battle_tank"
++sound_move_alt = "m_generic"
++sound_fight   = "f_main_battle_tank"
++sound_fight_alt = "f_generic"
++build_cost    = 200
++pop_cost      = 0
++attack        = 40
++defense       = 40
++hitpoints     = 30
++firepower     = 1
++move_rate     = 3
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "IronBased", "Armour"
++roles         = "DefendOk", "AttackFastStartUnit", "Hunter"
++helptext      = _("\
++The last word in armour: a quarter again as strong against a city. It needs oil, and aluminium once the map has it.\
++")
++
+ [unit_catapult]
+ name          = _("Catapult")
+ class         = "Big Land"
+@@ -1737,7 +2032,7 @@ reqs          =
+   { "type", "name", "range"
+     "Tech", "Mathematics", "Player"
+   }
+-obsolete_by   = "Cannon"
++obsolete_by   = "Trebuchet"
+ graphic       = "u.catapult"
+ graphic_alt   = "-"
+ sound_move    = "m_catapult"
+@@ -1746,8 +2041,8 @@ sound_fight   = "f_catapult"
+ sound_fight_alt = "f_generic"
+ build_cost    = 40
+ pop_cost      = 0
+-attack        = 6
+-defense       = 1
++attack        = 5
++defense       = 5
+ hitpoints     = 10
+ firepower     = 1
+ bombard_rate  = 5
+@@ -1760,8 +2055,12 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased", "Siege"
+ roles         = "AttackStrongStartUnit"
++bonuses       =
++    { "flag", "type", "value"
++      "Mounted", "DefenseMultiplierPct", -50
++    }
+ helptext      = _("\
+ Catapults are large rock-throwing machines of war.\
+  They are very strong attackers but equally weak\
+@@ -1773,12 +2072,49 @@ jungles), are difficult to defend, and are too big for early ships \
+ (Triremes and Caravels).\
+ ")
+ 
++[unit_trebuchet]
++name          = _("Trebuchet")
++class         = "Big Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Machinery", "Player"
++  }
++obsolete_by   = "Cannon"
++graphic       = "u.trebuchet"
++graphic_alt   = "u.catapult"
++sound_move    = "m_trebuchet"
++sound_move_alt = "m_generic"
++sound_fight   = "f_trebuchet"
++sound_fight_alt = "f_generic"
++build_cost    = 50
++pop_cost      = 0
++attack        = 4
++defense       = 4
++hitpoints     = 10
++firepower     = 1
++bombard_rate  = 8
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased", "Siege"
++roles         = "AttackStrongStartUnit"
++helptext      = _("\
++A counterweight engine that wounds a whole stack and is twice as strong against a city, and not much of a fighter otherwise.\
++")
++
+ [unit_cannon]
+ name          = _("Cannon")
+ class         = "Big Land"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Metallurgy", "Player"
++    "Extra", "Iron", "City"
+   }
+ obsolete_by   = "Artillery"
+ graphic       = "u.cannon"
+@@ -1787,10 +2123,10 @@ sound_move    = "m_cannon"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_cannon"
+ sound_fight_alt = "f_generic"
+-build_cost    = 50
++build_cost    = 80
+ pop_cost      = 0
+-attack        = 8
+-defense       = 1
++attack        = 12
++defense       = 12
+ hitpoints     = 20
+ firepower     = 1
+ bombard_rate  = 10
+@@ -1803,7 +2139,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased", "Siege"
+ roles         = "AttackStrongStartUnit", "BarbarianTech", "BarbarianBuildTech"
+ helptext      = _("\
+ Cannons are large firearms that can fire heavy projectiles over long \
+@@ -1817,7 +2153,7 @@ name          = _("Artillery")
+ class         = "Big Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Machine Tools", "Player"
++    "Tech", "Steel", "Player"
+   }
+ obsolete_by   = "Howitzer"
+ graphic       = "u.artillery"
+@@ -1826,10 +2162,10 @@ sound_move    = "m_artillery"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_artillery"
+ sound_fight_alt = "f_generic"
+-build_cost    = 60
++build_cost    = 110
+ pop_cost      = 0
+-attack        = 10
+-defense       = 2
++attack        = 18
++defense       = 18
+ hitpoints     = 20
+ firepower     = 1
+ bombard_rate  = 14
+@@ -1842,7 +2178,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Collateral", "CityBuster", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased", "Siege"
+ roles         = "AttackStrongStartUnit"
+ helptext      = _("\
+ The artillery is an upgraded cannon. As with its predecessors, it is a \
+@@ -1864,14 +2200,14 @@ sound_move    = "m_howitzer"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_howitzer"
+ sound_fight_alt = "f_generic"
+-build_cost    = 80
++build_cost    = 170
+ pop_cost      = 0
+-attack        = 12
+-defense       = 2
++attack        = 32
++defense       = 32
+ hitpoints     = 30
+ firepower     = 1
+ bombard_rate  = 20
+-move_rate     = 1
++move_rate     = 2
+ vision_radius_sq = 2
+ transport_cap = 0
+ fuel          = 0
+@@ -1880,7 +2216,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Collateral", "CityBuster", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased", "Siege"
+ roles         = "AttackStrongStartUnit"
+ helptext      = _("\
+ Howitzers are upgraded artillery with improved defensive as well as \
+@@ -1894,24 +2230,25 @@ class         = "Air"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Flight", "Player"
++    "Extra", "Oil", "City"
+   }
+-obsolete_by   = "Stealth Fighter"
++obsolete_by   = "Jet Fighter"
+ graphic       = "u.fighter"
+ graphic_alt   = "-"
+ sound_move    = "m_fighter"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_fighter"
+ sound_fight_alt = "f_generic"
+-build_cost    = 60
++build_cost    = 100
+ pop_cost      = 0
+-attack        = 4
+-defense       = 4
++attack        = 20
++defense       = 20
+ hitpoints     = 20
+ firepower     = 1
+-move_rate     = 10
++move_rate     = 8
+ vision_radius_sq = 8
+ transport_cap = 0
+-fuel          = 2
++fuel          = 1
+ uk_happy      = 1
+ uk_shield     = 1
+ uk_food       = 1
+@@ -1930,12 +2267,50 @@ Fighters and other aircraft lose 10% of their hitpoints for every \
+ turn not spent in a city, airstrip, or airbase, or on a Carrier.\
+ ")
+ 
++[unit_jet_fighter]
++name          = _("Jet Fighter")
++class         = "Air"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Advanced Flight", "Player"
++    "Extra", "Oil", "City"
++  }
++obsolete_by   = "Stealth Fighter"
++graphic       = "u.jet_fighter"
++graphic_alt   = "u.fighter"
++sound_move    = "m_jet_fighter"
++sound_move_alt = "m_generic"
++sound_fight   = "f_jet_fighter"
++sound_fight_alt = "f_generic"
++build_cost    = 140
++pop_cost      = 0
++attack        = 32
++defense       = 32
++hitpoints     = 30
++firepower     = 1
++move_rate     = 12
++vision_radius_sq = 8
++transport_cap = 0
++fuel          = 1
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++targets       = "Air", "Missile", "Helicopter"
++flags         = "Shield2Gold", "ShieldToGold", "AirAttacker", "HasNoZOC", "IronBased"
++roles         = "DefendOk", "DefendOkStartUnit"
++helptext      = _("\
++A jet interceptor: it hunts aircraft and missiles and must land each turn. It needs oil, and aluminium once the map has it.\
++")
++
+ [unit_bomber]
+ name          = _("Bomber")
+ class         = "Air"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Advanced Flight", "Player"
++    "Extra", "Oil", "City"
+   }
+ obsolete_by   = "Stealth Bomber"
+ graphic       = "u.bomber"
+@@ -1944,16 +2319,16 @@ sound_move    = "m_bomber"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_bomber"
+ sound_fight_alt = "f_generic"
+-build_cost    = 100
++build_cost    = 120
+ pop_cost      = 0
+-attack        = 6
+-defense       = 2
+-hitpoints     = 30
++attack        = 16
++defense       = 16
++hitpoints     = 20
+ firepower     = 1
+ move_rate     = 8
+ vision_radius_sq = 8
+ transport_cap = 0
+-fuel          = 3
++fuel          = 2
+ uk_happy      = 1
+ uk_shield     = 1
+ uk_food       = 1
+@@ -1978,11 +2353,13 @@ turn not spent in a city, airstrip, or airbase, or on a Carrier.\
+ bombard_rate = 3
+ 
+ [unit_helicopter]
+-name          = _("Helicopter")
++name          = _("Gunship")
++rule_name     = "Helicopter"
+ class         = "Helicopter"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Combined Arms", "Player"
++    "Extra", "Oil", "City"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.helicopter"
+@@ -1991,10 +2368,10 @@ sound_move    = "m_helicopter"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_helicopter"
+ sound_fight_alt = "f_generic"
+-build_cost    = 70
++build_cost    = 150
+ pop_cost      = 0
+-attack        = 5
+-defense       = 3
++attack        = 32
++defense       = 32
+ hitpoints     = 30
+ firepower     = 1
+ move_rate     = 6
+@@ -2007,9 +2384,13 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land"
+-flags         = "Shield2Gold", "ShieldToGold", "OneAttack", "AirAttacker",
+-                "Bombarder", "HasNoZOC", "Provoking", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "OneAttack", "AirAttacker"
+ roles         = ""
++bonuses       =
++    { "flag", "type", "value"
++      "Armour", "DefenseMultiplierPct", 100
++      "Armour", "DefenseDividerPct", 100
++    }
+ helptext      = _("\
+ A Helicopter's attack against units on land is a bombard attack; against \
+ units on water it has a regular attack.\
+@@ -2024,7 +2405,6 @@ Unlike other aircraft, Helicopters are not required to return to a city, \
+ base, or Carrier to refuel after a set number of turns; however, care \
+ must be exercised, due to the health they lose every turn.\
+ ")
+-bombard_rate = 2
+ 
+ [unit_stealth_fighter]
+ name          = _("Stealth Fighter")
+@@ -2040,16 +2420,16 @@ sound_move    = "m_stealth_fighter"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_stealth_fighter"
+ sound_fight_alt = "f_generic"
+-build_cost    = 80
++build_cost    = 180
+ pop_cost      = 0
+-attack        = 8
+-defense       = 8
+-hitpoints     = 20
++attack        = 40
++defense       = 40
++hitpoints     = 30
+ firepower     = 1
+ move_rate     = 14
+ vision_radius_sq = 8
+ transport_cap = 0
+-fuel          = 2
++fuel          = 1
+ uk_happy      = 1
+ uk_shield     = 1
+ uk_food       = 1
+@@ -2079,16 +2459,16 @@ sound_move    = "m_stealth_bomber"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_stealth_bomber"
+ sound_fight_alt = "f_generic"
+-build_cost    = 120
++build_cost    = 200
+ pop_cost      = 0
+-attack        = 9
+-defense       = 5
++attack        = 32
++defense       = 32
+ hitpoints     = 30
+ firepower     = 1
+ move_rate     = 12
+ vision_radius_sq = 8
+ transport_cap = 0
+-fuel          = 3
++fuel          = 2
+ uk_happy      = 1
+ uk_shield     = 1
+ uk_food       = 1
+@@ -2111,16 +2491,16 @@ reqs          =
+   { "type", "name", "range"
+     "Tech", "Map Making", "Player"
+   }
+-obsolete_by   = "Transport"
++obsolete_by   = "Galleon"
+ graphic       = "u.trireme"
+ graphic_alt   = "-"
+ sound_move    = "m_trireme"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_trireme"
+ sound_fight_alt = "f_generic"
+-build_cost    = 20
++build_cost    = 25
+ pop_cost      = 0
+-attack        = 0
++attack        = 1
+ defense       = 1
+ hitpoints     = 10
+ firepower     = 1
+@@ -2133,7 +2513,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-cargo         = "Land", "Small Land", "Merchant"
++cargo         = "Land", "Small Land"
+ flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC",
+                 "Provoking", "IronBased", "NonMil"
+ roles         = "Ferryboat", "FerryStartUnit"
+@@ -2145,12 +2525,47 @@ The Trireme is your first boat unit. It can act\
+  may still defend itself when attacked.\
+ ")
+ 
++[unit_war_galley]
++name          = _("War Galley")
++class         = "Trireme"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Seafaring", "Player"
++  }
++obsolete_by   = "Frigate"
++graphic       = "u.war_galley"
++graphic_alt   = "u.trireme"
++sound_move    = "m_war_galley"
++sound_move_alt = "m_generic"
++sound_fight   = "f_war_galley"
++sound_fight_alt = "f_generic"
++build_cost    = 35
++pop_cost      = 0
++attack        = 3
++defense       = 3
++hitpoints     = 10
++firepower     = 1
++move_rate     = 3
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC", "Naval"
++roles         = "Hunter"
++helptext      = _("\
++A rowed warship for the coast: it carries nothing and hunts the boats of others.\
++")
++
+ [unit_caravel]
+ name          = _("Caravel")
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Magnetism", "Player"
++    "Tech", "Compass", "Player"
+   }
+ obsolete_by   = "Galleon"
+ graphic       = "u.caravel"
+@@ -2159,26 +2574,24 @@ sound_move    = "m_caravel"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_caravel"
+ sound_fight_alt = "f_generic"
+-build_cost    = 30
++build_cost    = 40
+ pop_cost      = 0
+-attack        = 0
+-defense       = 2
++attack        = 3
++defense       = 3
+ hitpoints     = 10
+ firepower     = 1
+ move_rate     = 3
+ vision_radius_sq = 2
+-transport_cap = 3
+-fuel          = 3
++transport_cap = 1
++fuel          = 0
+ uk_happy      = 0
+ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-cargo         = "Land", "Small Land", "Merchant"
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender",
+-                "Only_Native_Attack", "HasNoZOC", "Provoking", "Coast",
+-                "IronBased", "NonMil"
+-roles         = "Ferryboat", "FerryStartUnit", "BarbarianBoat"
++cargo         = "Small Land"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "Naval"
++roles         = "Ferryboat", "FerryStartUnit"
+ helptext      = _("\
+ The Caravel is a sailing ship that can enter\
+  any ocean tile, but have to spend at least every third\
+@@ -2190,7 +2603,7 @@ name          = _("Galleon")
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Navigation", "Player"
++    "Tech", "Astronomy", "Player"
+   }
+ obsolete_by   = "Transport"
+ graphic       = "u.galleon"
+@@ -2199,15 +2612,15 @@ sound_move    = "m_galleon"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_galleon"
+ sound_fight_alt = "f_generic"
+-build_cost    = 40
++build_cost    = 60
+ pop_cost      = 0
+-attack        = 0
+-defense       = 2
++attack        = 4
++defense       = 4
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 4
+ vision_radius_sq = 2
+-transport_cap = 4
++transport_cap = 3
+ fuel          = 0
+ uk_happy      = 0
+ uk_shield     = 1
+@@ -2215,8 +2628,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land", "Small Land", "Big Land", "Merchant"
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC",
+-                "Provoking", "IronBased", "NonMil"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC", "Naval"
+ roles         = "Ferryboat", "FerryStartUnit", "BarbarianBoat"
+ helptext      = _("\
+ The Galleon is a big transport ship, the first which can\
+@@ -2228,7 +2640,7 @@ name          = _("Frigate")
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Navigation", "Player"
++    "Tech", "Magnetism", "Player"
+   }
+ obsolete_by   = "Ironclad"
+ graphic       = "u.frigate"
+@@ -2237,34 +2649,73 @@ sound_move    = "m_frigate"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_frigate"
+ sound_fight_alt = "f_generic"
+-build_cost    = 40
++build_cost    = 70
+ pop_cost      = 0
+-attack        = 3
+-defense       = 2
++attack        = 8
++defense       = 8
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 4
+ vision_radius_sq = 2
+-transport_cap = 0
++transport_cap = 1
++cargo         = "Land", "Small Land"
+ fuel          = 0
+ uk_happy      = 1
+ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased", "Naval"
+ roles         = "Hunter"
+ helptext      = _("\
+ The Frigate is a specialized ship with a strong offensive value,\
+  and can attack units on land, but it cannot transport units.\
+ ")
+ 
++[unit_ship_of_the_line]
++name          = _("Ship of the Line")
++class         = "Sea"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Navigation", "Player"
++    "Extra", "Iron", "City"
++  }
++obsolete_by   = "Ironclad"
++graphic       = "u.ship_of_the_line"
++graphic_alt   = "u.frigate"
++sound_move    = "m_ship_of_the_line"
++sound_move_alt = "m_generic"
++sound_fight   = "f_ship_of_the_line"
++sound_fight_alt = "f_generic"
++build_cost    = 100
++pop_cost      = 0
++attack        = 12
++defense       = 12
++hitpoints     = 20
++firepower     = 1
++move_rate     = 4
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased", "Naval"
++roles         = "DefendOk"
++helptext      = _("\
++A ship of two gun decks: half again as strong against a city. It needs iron for its guns.\
++")
++
+ [unit_ironclad]
+ name          = _("Ironclad")
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Steam Engine", "Player"
++    "Extra", "Iron", "City"
++    "Extra", "Coal", "City"
+   }
+ obsolete_by   = "Destroyer"
+ graphic       = "u.ironclad"
+@@ -2273,10 +2724,10 @@ sound_move    = "m_ironclad"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_ironclad"
+ sound_fight_alt = "f_generic"
+-build_cost    = 50
++build_cost    = 90
+ pop_cost      = 0
+-attack        = 4
+-defense       = 3
++attack        = 14
++defense       = 14
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 4
+@@ -2288,7 +2739,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased", "CoastStrict", "Naval"
+ roles         = "Hunter"
+ helptext      = _("\
+ The Ironclad is an armored ship,\
+@@ -2300,7 +2751,8 @@ name          = _("Destroyer")
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Engineering", "Player"
++    "Tech", "Combustion", "Player"
++    "Extra", "Oil", "City"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.destroyer"
+@@ -2309,11 +2761,11 @@ sound_move    = "m_destroyer"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_destroyer"
+ sound_fight_alt = "f_generic"
+-build_cost    = 60
++build_cost    = 110
+ pop_cost      = 0
+-attack        = 4
+-defense       = 4
+-hitpoints     = 30
++attack        = 24
++defense       = 24
++hitpoints     = 20
+ firepower     = 1
+ move_rate     = 6
+ vision_radius_sq = 8
+@@ -2324,12 +2776,12 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-bonuses       =
+-   { "flag", "type", "value"
+-     "Submarine", "DefenseMultiplier", 1
+-   }
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased", "Naval"
+ roles         = "Hunter"
++bonuses       =
++    { "flag", "type", "value"
++      "Submarine", "DefenseMultiplier", 1
++    }
+ helptext      = _("\
+ An improved Ironclad, with better move rate and vision.\
+  Anti-submarine weapons double its defense against Submarines.\
+@@ -2344,6 +2796,7 @@ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Steel", "Player"
++    "Extra", "Oil", "City"
+   }
+ obsolete_by   = "AEGIS Cruiser"
+ graphic       = "u.cruiser"
+@@ -2352,11 +2805,11 @@ sound_move    = "m_cruiser"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_cruiser"
+ sound_fight_alt = "f_generic"
+-build_cost    = 80
++build_cost    = 130
+ pop_cost      = 0
+-attack        = 6
+-defense       = 6
+-hitpoints     = 30
++attack        = 28
++defense       = 28
++hitpoints     = 20
+ firepower     = 1
+ move_rate     = 5
+ vision_radius_sq = 8
+@@ -2367,18 +2820,19 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased", "Naval"
+ roles         = "DefendOk", "DefendOkStartUnit"
+ helptext      = _("\
+ The Cruiser is a strong offensive boat unit.\
+ ")
+ 
+ [unit_aegis_cruiser]
+-name          = _("AEGIS Cruiser")
++name          = _("Missile Cruiser")
++rule_name     = "AEGIS Cruiser"
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Rocketry", "Player"
++    "Tech", "Computers", "Player"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.aegis_cruiser"
+@@ -2387,27 +2841,28 @@ sound_move    = "m_aegis_cruiser"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_aegis_cruiser"
+ sound_fight_alt = "f_generic"
+-build_cost    = 100
++build_cost    = 170
+ pop_cost      = 0
+-attack        = 8
+-defense       = 8
++attack        = 40
++defense       = 40
+ hitpoints     = 30
+ firepower     = 1
+ move_rate     = 5
+ vision_radius_sq = 8
+-transport_cap = 0
++transport_cap = 2
++cargo         = "Missile"
+ fuel          = 0
+ uk_happy      = 1
+ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-bonuses       =
+-   { "flag", "type", "value"
+-     "AirAttacker", "DefenseMultiplier", 4
+-   }
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "IronBased", "Naval"
+ roles         = "DefendGood", "DefendGoodStartUnit"
++bonuses       =
++    { "flag", "type", "value"
++      "AirAttacker", "DefenseMultiplier", 4
++    }
+ helptext      = _("\
+ The AEGIS Cruiser is equipped with an advanced\
+  defensive missile system.\
+@@ -2418,7 +2873,8 @@ name          = _("Battleship")
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Mass Production", "Player"
++    "Tech", "Automobile", "Player"
++    "Extra", "Oil", "City"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.battleship"
+@@ -2427,10 +2883,10 @@ sound_move    = "m_battleship"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_battleship"
+ sound_fight_alt = "f_generic"
+-build_cost    = 160
++build_cost    = 180
+ pop_cost      = 0
+-attack        = 12
+-defense       = 12
++attack        = 36
++defense       = 36
+ hitpoints     = 30
+ firepower     = 1
+ move_rate     = 4
+@@ -2446,8 +2902,7 @@ tp_defense    = "Alight"
+ ; Consensus historical article: "Airplanes Sink a Battleship?
+ ; No, Sir! Declares President" Chicago Daily Tribune, Feb. 26, 1938.
+ ; */ <-- avoid gettext warnings
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender",
+-                "Consensus", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "Naval"
+ roles         = "DefendOk", "DefendOkStartUnit"
+ helptext      = _("\
+ The Battleship is the supreme naval unit with\
+@@ -2460,18 +2915,19 @@ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Combustion", "Player"
++    "Extra", "Oil", "City"
+   }
+-obsolete_by   = "None"
++obsolete_by   = "SSBN"
+ graphic       = "u.submarine"
+ graphic_alt   = "-"
+ sound_move    = "m_submarine"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_submarine"
+ sound_fight_alt = "f_generic"
+-build_cost    = 70
++build_cost    = 110
+ pop_cost      = 0
+-attack        = 12
+-defense       = 5
++attack        = 24
++defense       = 24
+ hitpoints     = 20
+ firepower     = 1
+ move_rate     = 5
+@@ -2495,11 +2951,12 @@ Traveling under the surface of the ocean, Submarines have\
+ ")
+ 
+ [unit_SSBN]
+-name          = _("SSBN")
++name          = _("Missile Submarine")
++rule_name     = "SSBN"
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Nuclear Fission", "Player"
++    "Tech", "Nuclear Power", "Player"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.ssbn"
+@@ -2508,15 +2965,15 @@ sound_move    = "m_ssbm"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_ssbm"
+ sound_fight_alt = "f_generic"
+-build_cost    = 320
++build_cost    = 200
+ pop_cost      = 0
+-attack        = 12
+-defense       = 5
+-hitpoints     = 20
++attack        = 30
++defense       = 30
++hitpoints     = 30
+ firepower     = 1
+ move_rate     = 5
+ vision_radius_sq = 8
+-transport_cap = 16
++transport_cap = 8
+ fuel          = 0
+ uk_happy      = 0
+ uk_shield     = 1
+@@ -2541,6 +2998,7 @@ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+     "Tech", "Advanced Flight", "Player"
++    "Extra", "Oil", "City"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.carrier"
+@@ -2549,26 +3007,25 @@ sound_move    = "m_carrier"
+ sound_move_alt = "m_generic"
+ sound_fight   = "f_carrier"
+ sound_fight_alt = "f_generic"
+-build_cost    = 150
++build_cost    = 180
+ pop_cost      = 0
+ attack        = 0
+-defense       = 9
+-hitpoints     = 40
++defense       = 16
++hitpoints     = 30
+ firepower     = 1
+ move_rate     = 5
+ vision_radius_sq = 8
+-transport_cap = 8
++transport_cap = 4
+ fuel          = 0
+ uk_happy      = 0
+ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+-cargo         = "Land", "Air", "Missile", "Helicopter"
++cargo         = "Air", "Missile", "Helicopter"
+ tp_defense    = "Alight"
+ ; Consensus historical article: Julian Borger. "Wake-up call"
+ ; The Guardian, Sep. 6, 2002.
+-flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender",
+-                "HasNoZOC", "Consensus", "Provoking", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "Naval"
+ roles         = "DefendGood"
+ helptext      = _("\
+ The Carrier is a mobile airport.\
+@@ -2587,7 +3044,7 @@ name          = _("Transport")
+ class         = "Sea"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Engineering", "Player"
++    "Tech", "Industrialization", "Player"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.transport"
+@@ -2600,7 +3057,7 @@ build_cost    = 50
+ pop_cost      = 0
+ attack        = 0
+ defense       = 3
+-hitpoints     = 30
++hitpoints     = 20
+ firepower     = 1
+ move_rate     = 5
+ vision_radius_sq = 8
+@@ -2612,8 +3069,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land", "Small Land", "Big Land", "Merchant"
+-flags         = "Shield2Gold", "ShieldToGold", "Settlers", "BadCityDefender",
+-                "HasNoZOC", "Provoking", "IronBased", "NonMil"
++flags         = "Shield2Gold", "ShieldToGold", "Settlers", "BadCityDefender", "Naval"
+ veteran_names = _("green"), _("veteran"), _("hardened"), _("elite")
+ veteran_base_raise_chance      = 50, 33, 20, 0
+ veteran_work_raise_chance = 0, 0, 0, 0
+@@ -2647,11 +3103,11 @@ sound_fight   = "f_cruise_missile"
+ sound_fight_alt = "f_generic"
+ build_cost    = 50
+ pop_cost      = 0
+-attack        = 18
++attack        = 30
+ defense       = 0
+ hitpoints     = 10
+ firepower     = 1
+-move_rate     = 16
++move_rate     = 12
+ vision_radius_sq = 2
+ transport_cap = 0
+ fuel          = 1
+@@ -2673,7 +3129,8 @@ TIP:  A handful of these can successfully keep the waters around\
+ ")
+ 
+ [unit_nuclear]
+-name          = _("Nuclear")
++name          = _("Atom Bomb")
++rule_name     = "Nuclear"
+ class         = "Missile"
+ reqs          =
+   { "type", "name", "range"
+@@ -2736,11 +3193,13 @@ TIP:  You may be involved in a situation where you've invaded an\
+ ")
+ 
+ [unit_ICBM]
+-name          = _("ICBM")
++name          = _("Nuclear Missile")
++rule_name     = "ICBM"
+ class         = "Missile"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Fusion Power", "Player"
++    "Tech", "Rocketry", "Player"
++    "Tech", "Nuclear Fission", "Player"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.icbm"
+@@ -2805,7 +3264,7 @@ name          = _("Diplomat")
+ class         = "Small Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Alphabet", "Player"
++    "Tech", "Writing", "Player"
+   }
+ obsolete_by   = "Spy"
+ graphic       = "u.diplomat"
+@@ -3103,7 +3562,7 @@ name          = _("Explorer")
+ class         = "Small Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Seafaring", "Player"
++    "Tech", "Compass", "Player"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.explorer"
+@@ -3118,7 +3577,7 @@ attack        = 0
+ defense       = 1
+ hitpoints     = 10
+ firepower     = 1
+-move_rate     = 1
++move_rate     = 2
+ vision_radius_sq = 6
+ transport_cap = 0
+ fuel          = 0
+@@ -3127,8 +3586,7 @@ uk_shield     = 1
+ uk_food       = 0
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "IgTer", "IgZOC", "NonMil",
+-                "HasNoZOC", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Recon", "IgTer", "IgZOC", "NonMil"
+ roles         = "Explorer", "ExplorerStartUnit"
+ helptext      = _("\
+ Explorers are brave individuals that are very useful for\
+@@ -3148,6 +3606,41 @@ Explorers can also perform some actions in another player's city:\
+  The unit is not consumed by this action.\
+ ")
+ 
++[unit_scout]
++name          = _("Scout")
++class         = "Small Land"
++reqs          =
++  { "type", "name", "range"
++    "Tech", "Hunting", "Player"
++  }
++obsolete_by   = "Explorer"
++graphic       = "u.scout"
++graphic_alt   = "u.explorer"
++sound_move    = "m_scout"
++sound_move_alt = "m_generic"
++sound_fight   = "f_scout"
++sound_fight_alt = "f_generic"
++build_cost    = 15
++pop_cost      = 0
++attack        = 0
++defense       = 1
++hitpoints     = 10
++firepower     = 1
++move_rate     = 2
++vision_radius_sq = 5
++transport_cap = 0
++fuel          = 0
++uk_happy      = 0
++uk_shield     = 1
++uk_food       = 0
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Shield2Gold", "ShieldToGold", "Recon", "IgTer", "NonMil"
++roles         = "Explorer", "ExplorerStartUnit"
++helptext      = _("\
++Scouts travel light and fast over any ground and see far, but cannot fight. They find the lie of the land and the villages in it.\
++")
++
+ [unit_leader]
+ name          = _("?unit:Leader")
+ class         = "Land"
+@@ -3237,11 +3730,13 @@ When a Barbarian Leader is killed on a tile without any defending units,\
+ ")
+ 
+ [unit_awacs]
+-name          = _("AWACS")
++name          = _("Radar Plane")
++rule_name     = "AWACS"
+ class         = "Air"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Advanced Flight", "Player"
++    "Tech", "Computers", "Player"
++    "Extra", "Oil", "City"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.awacs"
+@@ -3254,7 +3749,7 @@ build_cost    = 140
+ pop_cost      = 0
+ attack        = 0
+ defense       = 1
+-hitpoints     = 20
++hitpoints     = 30
+ firepower     = 1
+ move_rate     = 16
+ vision_radius_sq = 26
+-- 
+2.56.0
+
