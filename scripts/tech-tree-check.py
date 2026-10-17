@@ -2,14 +2,16 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Check the Freeciv45 tech tree design against the roster design and a buildings.ruleset.
 
-Usage: scripts/tech-tree-check.py [--fill] [--buildings PATH] [--units PATH] [TREE.md]
+Usage: scripts/tech-tree-check.py [--fill] [--buildings PATH] [--units PATH] [--ruleset techs.ruleset] [TREE.md]
 
 Reads the "| Name | Era | Req 1 | Req 2 | Tier | Unlocks |" tables of notes/freeciv45/design/tech-tree.md
 and checks: every prerequisite exists and sits in the same or an earlier era; no cycles; the tier of each
 tech (Freeciv's num_reqs: the techs it needs, counted recursively, itself excluded; common/tech.c:230-243);
 every unit in units-and-upgrades.md has its tech in the tree; every building in buildings.ruleset has its
 tech in the tree or in the tree document's "re-homed" table; no tech is an orphan (unlocks nothing and
-nothing needs it). --fill rewrites the Tier column of the tree document in place. Exit 1 on any finding.
+nothing needs it). --fill rewrites the Tier column of the tree document in place. --ruleset compares a
+techs.ruleset with the tree: the same advances, the same prerequisites, and each advance's class is its era's
+name (Ancient, Classical, Medieval, Renaissance, Industrial, Modern, Information). Exit 1 on any finding.
 """
 import re
 import sys
@@ -38,7 +40,7 @@ def main():
     args = sys.argv[1:]
     fill = "--fill" in args
     args = [a for a in args if a != "--fill"]
-    buildings = units = None
+    buildings = units = ruleset = None
     tree_path = "notes/freeciv45/design/tech-tree.md"
     while args:
         a = args.pop(0)
@@ -46,6 +48,8 @@ def main():
             buildings = args.pop(0)
         elif a == "--units":
             units = args.pop(0)
+        elif a == "--ruleset":
+            ruleset = args.pop(0)
         else:
             tree_path = a
     units = units or "notes/freeciv45/design/units-and-upgrades.md"
@@ -137,6 +141,33 @@ def main():
         unlocks = t["unlocks"].strip()
         if (unlocks == "" or unlocks.startswith("(prereq")) and name not in needed:
             findings.append(f"orphan tech {name}: unlocks nothing and nothing needs it")
+    # the ruleset against the tree
+    if ruleset:
+        era_names = dict(zip(ERAS, ["Ancient", "Classical", "Medieval", "Renaissance", "Industrial", "Modern", "Information"]))
+        rtext = open(ruleset).read()
+        advances = {}
+        for m in re.finditer(r"\[advance_[^\]]+\]\n(.*?)(?=\n\[|\Z)", rtext, re.S):
+            body = m.group(1)
+            rname = re.search(r'^name\s*=\s*_\("(?:\?tech:)?([^"]+)"\)', body, re.M).group(1)
+            reqs = [re.search(r'^req%d\s*=\s*"([^"]*)"' % i, body, re.M) for i in (1, 2)]
+            reqs = [r.group(1) for r in reqs if r and r.group(1) != "None"]
+            cls = re.search(r'^class\s*=\s*"([^"]*)"', body, re.M)
+            advances[rname] = (sorted(reqs), cls.group(1) if cls else None)
+        print(f"advances in {ruleset}: {len(advances)}")
+        for n in sorted(set(tree) - set(advances)):
+            findings.append(f"ruleset lacks {n}")
+        for n in sorted(set(advances) - set(tree)):
+            findings.append(f"ruleset has {n}, which the tree does not")
+        for n in sorted(set(tree) & set(advances)):
+            reqs, cls = advances[n]
+            if reqs != sorted(tree[n]["reqs"]):
+                findings.append(f"{n}: ruleset prerequisites {reqs}, tree {sorted(tree[n]['reqs'])}")
+            if cls != era_names[tree[n]["era"]]:
+                findings.append(f"{n}: ruleset class {cls}, tree era {tree[n]['era']} ({era_names[tree[n]['era']]})")
+        classes = re.findall(r"^\[techclass_[^\]]+\]\nname\s*=\s*_\(\"([^\"]+)\"\)\ncost_pct\s*=\s*(\d+)", rtext, re.M)
+        print("tech classes: " + ", ".join(f"{c} {p}%" for c, p in classes))
+        if [c for c, _ in classes] != list(era_names.values()):
+            findings.append("ruleset tech classes are not the seven eras in order")
     roots = [n for n, t in tree.items() if not t["reqs"]]
     print(f"root techs: {len(roots)}: {', '.join(sorted(roots))}")
     # fill tiers

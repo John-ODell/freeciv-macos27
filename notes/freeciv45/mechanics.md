@@ -598,3 +598,70 @@ runner sets `endturn` 300, so the victory slice's score winner fired, as designe
 - The AI's use is as the autogame shows; nothing in the default AI knows what a draft is for (it treats a Levy as a
   cheap unit that happens to cost a citizen: `ai/default/daicity.c:712-735` prices the citizen in food, `:790` refuses
   it when the city is too small).
+
+## 9. Tech slice: the tree in seven eras (2026-10-17, patch 0011)
+
+Built from `notes/freeciv45/design/tech-tree.md` (PR 96) as issue 109, ahead of the roster (slice 10) because the
+roster's new units sit behind techs only this tree adds (Hunting, Archery, Machinery, Compass). Line numbers are
+the fork's at commit `af1367e` (upstream S3_2 `44e6898` plus patches 0001 to 0011).
+
+### What the ruleset says now
+
+| Rule | Freeciv form | Where |
+|---|---|---|
+| Seven eras | `[techclass_*]` sections Ancient, Classical, Medieval, Renaissance, Industrial, Modern, Information with `cost_pct` 100, 100, 110, 120, 130, 140, 150; every advance names its era in `class` | `data/civ45/techs.ruleset:49-76`, each `[advance_*]` |
+| 92 advances | 86 of civ45's 89 kept, 3 dropped (Ruler Apotheosis, Nanomaterials, Labor Union), 6 added (Agriculture, Hunting, Archery, Machinery, Compass, Printing) with fallback icons (`graphic_alt` of a related tech) until the tileset draws them | `techs.ruleset`; `scripts/tech-tree-check.py --ruleset` compares names, prerequisites and classes with the design tables |
+| Prerequisites | The design's tables; six changed from civ45's (Physics, Magnetism, Navigation, Atomic Theory, Genetic Engineering, Fusion Power) | the design note's "Re-homed" section |
+| Re-homed unlocks | Altar to The Divine Ruler at Monarchy, Space Elevator and its Tether at Superconductors, Shakespeare's Theatre at Printing, Barracks at Warrior Code (they had no tech), Mech. Inf. at Robotics, irrigation at Agriculture | `buildings.ruleset:266,1265,1525,2285`; `units.ruleset:1404`; `terrain.ruleset:1263` |
+| Cost | `Linear`: `base_tech_cost` 10 × the techs needed counted with the tech itself (`common/tech.c:230-243`, `advance_req_iterate` yields the tech too) × the era's `cost_pct` × `Tech_Cost_Factor` 3. A root tech costs 30, Gunpowder (tier 17) 648, Fusion Power (tier 70) 3,195. The design counted the tech itself out (612 and 3,150); its note is corrected in this slice | `scripts/civ45-rules-test.lua`, `fc45_tech_test_run` |
+
+### What stock Freeciv cannot express
+
+- Nothing in this slice: eras, costs per era and prerequisites are all stock 3.2 ruleset data. Lua has no getter for a
+  tech's class (`common/scriptcore/tolua_game.pkg`, module Tech_Type), so the runner greps the file for the seven
+  classes and the 92 `class` lines, and the research observer maps techs to eras from the design note.
+
+### Tests
+
+`scripts/civ45-rules-test.sh ~/freeciv-builds/qt --data port/freeciv/data`: 32/32 Lua cases and eleven shell checks
+(`logs/civ45-rules-20261017-163826`). New: the six techs exist and the three are gone (`find.tech_type`), and the
+Tester's cost for Alphabet, Gunpowder and Fusion Power through `Player:tech_cost` is 30, 648 and 3,195; the runner
+counts the classes and advances. `scripts/tech-tree-check.py --buildings ... --ruleset port/freeciv/data/civ45/techs.ruleset`
+passes. On the installed slice 1 copy (the control) 13/22 Lua cases pass, the tech and draft cases fail at their first check, and the runner's eleven greps fail, so it exits 1 as it should (`logs/civ45-rules-20261017-163628`). `scripts/harness-test.sh` passes (`logs/harness-civ45-20261017-163625`).
+
+### Autogame
+
+One 400-turn game, 10 AIs, seeds 42/42, diplomacy off, with `scripts/civ45-tech-log.lua`
+(`logs/test-qt-20261017-163447`, AI skill level not logged); the victory slice's 475-turn game (`logs/test-qt-20261017-155028`,
+same seeds, the old 89-tech tree with no era costs) is the control, read from its saves' `[research]` tables. Observed:
+
+| Era | First AI to learn one of its techs | Median AI | AIs that reached it by turn 395 |
+|---|---|---|---|
+| I | turn 13 | 23 | 11 of 11 |
+| II | 44 | 61 | 11 |
+| III | 148 | 177 | 11 |
+| IV | 205 | 234 | 10 |
+| V | 302 | 348 | 6 |
+| VI, VII | nobody | | 0 |
+
+| Techs known per AI | New tree (of 92) | Old tree (of 89) |
+|---|---|---|
+| Turn 200 | 18 to 24 | 15 to 36 |
+| Turn 400 | 31 to 44 | 56 to 59 |
+
+The design's test plan asked for era IV by turn 200 and era VII by turn 400 from the best AI. Era IV came at 205;
+era VII is out of reach: the best AI held 44 techs at turn 400 against 56 to 59 on the old tree, and the game ended at
+turn 400 with the score winner (the runner's `endturn`). Inferred: the per-era `cost_pct` is not the main brake,
+since the old tree's flat costs reached only era V to VI by turn 400 too; these AIs' science output is. The curve
+is kept as designed and this pace is the evidence for decision 10; if John wants era VII reachable in a 475-turn
+game, the lever is `cost_pct` for V to VII or `sciencebox`, measured again after the roster and the economy slices
+change what the AI builds.
+
+### Open
+
+- The design note's four questions for John are decision 10 in the plan: Archery in era II; the three dropped techs;
+  the `cost_pct` curve; themed names for Physics, Medicine and Electricity.
+- The six new techs have borrowed icons until civ45-tileset draws `a.agriculture`, `a.hunting`, `a.archery`,
+  `a.machinery`, `a.compass` and `a.printing`.
+- Players start with no tech, so nobody irrigates before Agriculture (30 bulbs); the AI's opening was not
+  measured separately.

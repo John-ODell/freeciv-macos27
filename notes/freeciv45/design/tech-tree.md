@@ -14,7 +14,7 @@ civ45's today (sandbox's, which are generic Freeciv names).
 | Techs | 92: 86 of civ45's 89 kept, 3 dropped (Ruler Apotheosis, Nanomaterials, Labor Union), 6 added (Agriculture, Hunting, Archery, Machinery, Compass, Printing) | section 2; `civ45/techs.ruleset` |
 | Eras | Seven, as tech classes: `[techclass_*]` sections, each advance names its class with `class = "..."` | `up/server/ruleset.c:1571-1575,1638-1641,1687-1692` (observed) |
 | Prerequisites | Two at most (`req1`, `req2`), always in the same or an earlier era; roots have none | `civ45/techs.ruleset:127-131` (format) |
-| Cost style | `Linear`: a tech costs `base_tech_cost` × `num_reqs`, where `num_reqs` is every tech it needs, counted recursively, itself excluded; roots fall to `min_tech_cost` | `up/common/tech.c:230-243`; `up/common/tech.h:299-307`; `civ45/game.ruleset:342-352` |
+| Cost style | `Linear`: a tech costs `base_tech_cost` × `num_reqs`, where `num_reqs` is every tech it needs, counted recursively, plus itself (`advance_req_iterate` yields the tech too, so a root tech has `num_reqs` 1 and costs `base_tech_cost`, above `min_tech_cost`); the Tier column below is `num_reqs` − 1. Corrected 2026-10-17 by the tech slice (issue 109): the first draft counted the tech itself out | `up/common/tech.c:230-243`; `up/common/tech.h:299-307`; `civ45/game.ruleset:342-352` |
 | Era curve | The tech class's `cost_pct` multiplies that cost | `up/common/tech.c:273` (observed) |
 | Then | × `Tech_Cost_Factor` (civ45: 3, `civ45/effects.ruleset` `tech_cost_base`), tech leakage from embassies, × `sciencebox` | `up/common/research.c:868-1043` |
 | Flags kept | `Bonus_Tech` on Philosophy, `Bridge` on Bridge Building, `Build_Airborne` on Flight | `civ45/techs.ruleset` (observed) |
@@ -29,8 +29,10 @@ VII, which fits.
 
 ### Cost per era
 
-With `base_tech_cost` 10, `Tech_Cost_Factor` 3 and `sciencebox` 100, bulbs = 30 × num_reqs × cost_pct / 100.
-The tiers come from the tree below (section 4 prints them); the `cost_pct` column is the lever.
+With `base_tech_cost` 10, `Tech_Cost_Factor` 3 and `sciencebox` 100, bulbs = 30 × (tier + 1) × cost_pct / 100.
+The tiers come from the tree below (section 4 prints them); the `cost_pct` column is the lever. The bulbs column
+below was written with 30 × tier and is one step low throughout: the rules test measured Alphabet 30, Gunpowder
+648 (tier 17) and Fusion Power 3,195 (tier 70) on the built tree (issue 109).
 
 | Era | Techs | Tier range (num_reqs) | `cost_pct` | Bulbs, cheapest to dearest | Why |
 |---|---|---|---|---|---|

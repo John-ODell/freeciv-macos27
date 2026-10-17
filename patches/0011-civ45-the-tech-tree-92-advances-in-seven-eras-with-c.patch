@@ -1,0 +1,969 @@
+From af1367ecf0c593ab68d4a88a339854eb064ca313 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 16:36:10 -0500
+Subject: [PATCH] civ45: the tech tree, 92 advances in seven eras with costs
+ per era and re-homed unlocks
+
+Freeciv45 tech slice. techs.ruleset: seven tech classes (Ancient,
+Classical, Medieval, Renaissance, Industrial, Modern, Information) with
+cost_pct 100, 100, 110, 120, 130, 140, 150; every advance names its
+class; six advances added (Agriculture, Hunting, Archery, Machinery,
+Compass, Printing) with fallback icons; three removed (Ruler Apotheosis,
+Nanomaterials, Labor Union); the prerequisites of Physics, Magnetism,
+Navigation, Atomic Theory, Genetic Engineering and Fusion Power changed.
+buildings.ruleset: Altar to The Divine Ruler needs Monarchy, the Space
+Elevator and its Tether Superconductors, Shakespeare's Theatre Printing,
+Barracks Warrior Code. units.ruleset: Mech. Inf. needs Robotics.
+terrain.ruleset: irrigation needs Agriculture. README.civ45 says so.
+---
+ data/civ45/README.civ45      |  10 ++
+ data/civ45/buildings.ruleset |   9 +-
+ data/civ45/techs.ruleset     | 220 +++++++++++++++++++++++++++++------
+ data/civ45/terrain.ruleset   |   4 +
+ data/civ45/units.ruleset     |   2 +-
+ 5 files changed, 207 insertions(+), 38 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 97d9d37..d50a3a5 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -53,6 +53,16 @@ Differences from sandbox
+   2050) and at the start of that turn the living player with the highest
+   score is named the winner, so the game ends with a victor rather than a
+   turn-limit notice. The thresholds are first values, untuned.
++- The tech tree has 92 advances in seven eras (Ancient, Classical,
++  Medieval, Renaissance, Industrial, Modern, Information), each a tech
++  class whose cost_pct (100, 100, 110, 120, 130, 140, 150) scales the
++  era's costs on top of the Linear style. Six techs are new
++  (Agriculture, Hunting, Archery, Machinery, Compass, Printing), three
++  sandbox leftovers are gone (Ruler Apotheosis, Nanomaterials, Labor
++  Union) and their unlocks moved (Altar to The Divine Ruler to Monarchy,
++  the Space Elevator and its Tether to Superconductors, Mech. Inf. to
++  Robotics); Shakespeare's Theatre needs Printing, Barracks need Warrior
++  Code, and irrigation needs Agriculture.
+ - Upgrades keep a unit's veteran levels (sandbox takes one away).
+ - Drafting: Levy (Bronze Working, 2/2, 10 shields), Militia (Gunpowder,
+   8/8, 20 shields) and Conscripts (Conscription, 14/14, 25 shields) are
+diff --git a/data/civ45/buildings.ruleset b/data/civ45/buildings.ruleset
+index c6dbadd..4b6d151 100644
+--- a/data/civ45/buildings.ruleset
++++ b/data/civ45/buildings.ruleset
+@@ -263,6 +263,7 @@ name		= _("Barracks")
+ genus		= "Improvement"
+ reqs	=
+     { "type", "name", "range"
++      "Tech", "Warrior Code", "Player"
+     }
+ graphic         = "b.barracks_i"
+ graphic_alt     = "-"
+@@ -1261,7 +1262,7 @@ name            = _("Space Elevator Tether")
+ genus           = "Improvement"
+ reqs            =
+     { "type",         "name",           "range",     "present"
+-      "Tech",         "Nanomaterials",  "Player",    TRUE
++      "Tech",         "Superconductors", "Player",    TRUE
+       "Building",     "Space Elevator", "Continent", TRUE
+       "Building",     "Space Elevator", "City",      FALSE
+     }
+@@ -1521,7 +1522,7 @@ name            = _("Altar to The Divine Ruler")
+ genus           = "GreatWonder"
+ reqs            =
+     { "type", "name",             "range"
+-      "Tech", "Ruler Apotheosis", "Player"
++      "Tech", "Monarchy", "Player"
+     }
+ graphic         = "b.altar"
+ graphic_alt     = "b.oracle"
+@@ -2281,7 +2282,7 @@ rule_name	= "Shakespeare's Theatre"  ; en_GB spelling used originally
+ genus		= "GreatWonder"
+ reqs	=
+     { "type", "name", "range"
+-      "Tech", "Sanitation", "Player"
++      "Tech", "Printing", "Player"
+     }
+ graphic         = "b.shakespeares_theatre"
+ graphic_alt     = "-"
+@@ -2308,7 +2309,7 @@ name            = _("Space Elevator")
+ genus           = "SmallWonder"
+ reqs            =
+     { "type",         "name",           "range", "present"
+-      "Tech",         "Nanomaterials",  "Player", TRUE
++      "Tech",         "Superconductors", "Player", TRUE
+       "Building",     "Apollo Program", "World",  TRUE
+       "Building",     "Space Elevator", "Player", FALSE
+       "TerrainClass", "Oceanic",        "City",   TRUE
+diff --git a/data/civ45/techs.ruleset b/data/civ45/techs.ruleset
+index 32d7568..ab83d70 100644
+--- a/data/civ45/techs.ruleset
++++ b/data/civ45/techs.ruleset
+@@ -44,6 +44,36 @@ format_version = 30
+ ;[techclass_default]
+ ;name =
+ 
++; Freeciv45's seven eras. Each advance names its era in "class"; cost_pct scales the
++; era's tech costs (notes/freeciv45/design/tech-tree.md, section 1).
++[techclass_ancient]
++name     = _("Ancient")
++cost_pct = 100
++
++[techclass_classical]
++name     = _("Classical")
++cost_pct = 100
++
++[techclass_medieval]
++name     = _("Medieval")
++cost_pct = 110
++
++[techclass_renaissance]
++name     = _("Renaissance")
++cost_pct = 120
++
++[techclass_industrial]
++name     = _("Industrial")
++cost_pct = 130
++
++[techclass_modern]
++name     = _("Modern")
++cost_pct = 140
++
++[techclass_information]
++name     = _("Information")
++cost_pct = 150
++
+ ; /* <-- avoid gettext warnings
+ ;
+ ; Below: The individual advances, one per section.
+@@ -118,16 +148,28 @@ format_version = 30
+ name     = _("Advanced Flight")
+ req1     = "Radio"
+ req2     = "Machine Tools"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.advanced_flight"
+ graphic_alt = "-"
+ helptext = _("Enables movement of nuclear units."),
+            _("Enables airlift of medium weight units.")
+ 
++[advance_agriculture]
++name     = _("Agriculture")
++req1     = "None"
++req2     = "None"
++class    = "Ancient"
++flags    = ""
++graphic     = "a.agriculture"
++graphic_alt = "a.pottery"
++helptext = _("Fields that are watered and weeded: irrigation can be built.")
++
+ [advance_alphabet]
+ name     = _("Alphabet")
+ req1     = "None"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.alphabet"
+ graphic_alt = "-"
+@@ -136,14 +178,26 @@ graphic_alt = "-"
+ name     = _("Amphibious Warfare")
+ req1     = "Engineering"
+ req2     = "Tactics"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.amphibious_warfare"
+ graphic_alt = "-"
+ 
++[advance_archery]
++name     = _("Archery")
++req1     = "Hunting"
++req2     = "Warrior Code"
++class    = "Classical"
++flags    = ""
++graphic     = "a.archery"
++graphic_alt = "a.warrior_code"
++helptext = _("The bow as a weapon of war: Archers and Horse Bowmen can be built.")
++
+ [advance_astronomy]
+ name     = _("Astronomy")
+ req1     = "Mysticism"
+ req2     = "Mathematics"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.astronomy"
+ graphic_alt = "-"
+@@ -151,8 +205,9 @@ helptext = _("Increases units' vision when in fortresses.")
+ 
+ [advance_atomic_theory]
+ name     = _("Atomic Theory")
+-req1     = "Chemistry"
+-req2     = "Refrigeration"
++req1     = "Theory of Gravity"
++req2     = "Electricity"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.atomic_theory"
+ graphic_alt = "-"
+@@ -161,6 +216,7 @@ graphic_alt = "-"
+ name     = _("Automobile")
+ req1     = "Combustion"
+ req2     = "Steel"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.automobile"
+ graphic_alt = "-"
+@@ -169,6 +225,7 @@ graphic_alt = "-"
+ name     = _("Banking")
+ req1     = "Trade"
+ req2     = "The Republic"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.banking"
+ graphic_alt = "-"
+@@ -177,6 +234,7 @@ graphic_alt = "-"
+ name     = _("Bridge Building")
+ req1     = "The Wheel"
+ req2     = "Construction"
++class    = "Classical"
+ flags    = "Bridge"
+ graphic     = "a.bridge_building"
+ graphic_alt = "-"
+@@ -186,6 +244,7 @@ helptext = _("Allows roads to be built on river tiles.")
+ name     = _("Bronze Working")
+ req1     = "None"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.bronze_working"
+ graphic_alt = "-"
+@@ -194,6 +253,7 @@ graphic_alt = "-"
+ name     = _("Ceremonial Burial")
+ req1     = "None"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.ceremonial_burial"
+ graphic_alt = "-"
+@@ -202,6 +262,7 @@ graphic_alt = "-"
+ name     = _("Chemistry")
+ req1     = "University"
+ req2     = "Medicine"
++class    = "Renaissance"
+ flags    = ""
+ graphic     = "a.chemistry"
+ graphic_alt = "-"
+@@ -210,6 +271,7 @@ graphic_alt = "-"
+ name     = _("Chivalry")
+ req1     = "Feudalism"
+ req2     = "Horseback Riding"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.chivalry"
+ graphic_alt = "-"
+@@ -218,6 +280,7 @@ graphic_alt = "-"
+ name     = _("Code of Laws")
+ req1     = "Alphabet"
+ req2     = "None"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.code_of_laws"
+ graphic_alt = "-"
+@@ -226,6 +289,7 @@ graphic_alt = "-"
+ name     = _("Combined Arms")
+ req1     = "Mobile Warfare"
+ req2     = "Advanced Flight"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.combined_arms"
+ graphic_alt = "-"
+@@ -234,6 +298,7 @@ graphic_alt = "-"
+ name     = _("Combustion")
+ req1     = "Refining"
+ req2     = "Engineering"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.combustion"
+ graphic_alt = "-"
+@@ -242,14 +307,26 @@ graphic_alt = "-"
+ name     = _("Communism")
+ req1     = "Theology"
+ req2     = "Industrialization"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.communism"
+ graphic_alt = "-"
+ 
++[advance_compass]
++name     = _("Compass")
++req1     = "Seafaring"
++req2     = "Astronomy"
++class    = "Medieval"
++flags    = ""
++graphic     = "a.compass"
++graphic_alt = "a.seafaring"
++helptext = _("A needle that finds north: the Caravel and the Explorer can be built.")
++
+ [advance_computers]
+ name     = _("Computers")
+ req1     = "Miniaturization"
+ req2     = "Radio"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.computers"
+ graphic_alt = "-"
+@@ -258,6 +335,7 @@ graphic_alt = "-"
+ name     = _("Conscription")
+ req1     = "Democracy"
+ req2     = "Metallurgy"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.conscription"
+ graphic_alt = "-"
+@@ -266,6 +344,7 @@ graphic_alt = "-"
+ name     = _("Construction")
+ req1     = "Masonry"
+ req2     = "Iron Working"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.construction"
+ graphic_alt = "-"
+@@ -278,6 +357,7 @@ units to build forts and fortresses.\
+ name     = _("Currency")
+ req1     = "Bronze Working"
+ req2     = "None"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.currency"
+ graphic_alt = "-"
+@@ -286,6 +366,7 @@ graphic_alt = "-"
+ name     = _("Democracy")
+ req1     = "Banking"
+ req2     = "Invention"
++class    = "Renaissance"
+ flags    = ""
+ graphic     = "a.democracy"
+ graphic_alt = "-"
+@@ -294,6 +375,7 @@ graphic_alt = "-"
+ name     = _("Economics")
+ req1     = "Banking"
+ req2     = "University"
++class    = "Renaissance"
+ flags    = ""
+ graphic     = "a.economics"
+ graphic_alt = "-"
+@@ -302,6 +384,7 @@ graphic_alt = "-"
+ name     = _("Electricity")
+ req1     = "Metallurgy"
+ req2     = "Theory of Gravity"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.electricity"
+ graphic_alt = "-"
+@@ -316,6 +399,7 @@ Grants you vision inside your borders.\
+ name     = _("Electronics")
+ req1     = "The Corporation"
+ req2     = "Electricity"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.electronics"
+ graphic_alt = "-"
+@@ -324,6 +408,7 @@ graphic_alt = "-"
+ name     = _("Engineering")
+ req1     = "Electricity"
+ req2     = "Steam Engine"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.engineering"
+ graphic_alt = "-"
+@@ -332,6 +417,7 @@ graphic_alt = "-"
+ name     = _("Environmentalism")
+ req1     = "Recycling"
+ req2     = "Space Flight"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.environmentalism"
+ graphic_alt = "-"
+@@ -340,6 +426,7 @@ graphic_alt = "-"
+ name     = _("Espionage")
+ req1     = "Communism"
+ req2     = "Democracy"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.espionage"
+ graphic_alt = "-"
+@@ -348,6 +435,7 @@ graphic_alt = "-"
+ name     = _("Explosives")
+ req1     = "Gunpowder"
+ req2     = "Chemistry"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.explosives"
+ graphic_alt = "-"
+@@ -356,6 +444,7 @@ graphic_alt = "-"
+ name     = _("Feudalism")
+ req1     = "Iron Working"
+ req2     = "Monarchy"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.feudalism"
+ graphic_alt = "-"
+@@ -364,6 +453,7 @@ graphic_alt = "-"
+ name     = _("Flight")
+ req1     = "Combustion"
+ req2     = "Tactics"
++class    = "Modern"
+ flags    = "Build_Airborne"
+ graphic     = "a.flight"
+ graphic_alt = "-"
+@@ -372,7 +462,8 @@ helptext = _("Enables airlift of light weight units.")
+ [advance_fusion_power]
+ name     = _("Fusion Power")
+ req1     = "Superconductors"
+-req2     = "Labor Union"
++req2     = "Nuclear Power"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.fusion_power"
+ graphic_alt = "-"
+@@ -382,7 +473,8 @@ helptext = _("Makes it possible for Engineers to transform terrains."),
+ [advance_genetic_engineering]
+ name     = _("Genetic Engineering")
+ req1     = "Refrigeration"
+-req2     = "The Corporation"
++req2     = "Computers"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.genetic_engineering"
+ graphic_alt = "-"
+@@ -391,6 +483,7 @@ graphic_alt = "-"
+ name     = _("Guerilla Warfare")
+ req1     = "Communism"
+ req2     = "Tactics"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.guerilla_warfare"
+ graphic_alt = "-"
+@@ -399,21 +492,34 @@ graphic_alt = "-"
+ name     = _("Gunpowder")
+ req1     = "Invention"
+ req2     = "Feudalism"
++class    = "Renaissance"
+ graphic     = "a.gunpowder"
+ graphic_alt = "-"
+ 
+ [advance_horseback_riding]
+ name     = _("Horseback Riding")
+-req1     = "None"
++req1     = "Agriculture"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.horseback_riding"
+ graphic_alt = "-"
+ 
++[advance_hunting]
++name     = _("Hunting")
++req1     = "None"
++req2     = "None"
++class    = "Ancient"
++flags    = ""
++graphic     = "a.hunting"
++graphic_alt = "a.warrior_code"
++helptext = _("Tracking game across country: the Scout can be built.")
++
+ [advance_industrialization]
+ name     = _("Industrialization")
+ req1     = "Railroad"
+ req2     = "Banking"
++class    = "Industrial"
+ graphic     = "a.industrialization"
+ graphic_alt = "-"
+ 
+@@ -421,6 +527,7 @@ graphic_alt = "-"
+ name     = _("Invention")
+ req1     = "Bridge Building"
+ req2     = "Literacy"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.invention"
+ graphic_alt = "-"
+@@ -430,22 +537,16 @@ helptext = _("Halves the upgrade cost of your units.")
+ name     = _("Iron Working")
+ req1     = "Bronze Working"
+ req2     = "Warrior Code"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.iron_working"
+ graphic_alt = "-"
+ 
+-[advance_labor_union]
+-name     = _("Labor Union")
+-req1     = "Communism"
+-req2     = "Mobile Warfare"
+-flags    = ""
+-graphic     = "a.labor_union"
+-graphic_alt = "-"
+-
+ [advance_laser]
+ name     = _("Laser")
+ req1     = "Computers"
+ req2     = "Nuclear Power"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.laser"
+ graphic_alt = "-"
+@@ -454,6 +555,7 @@ graphic_alt = "-"
+ name     = _("Leadership")
+ req1     = "Chivalry"
+ req2     = "Gunpowder"
++class    = "Renaissance"
+ flags    = ""
+ graphic     = "a.leadership"
+ graphic_alt = "-"
+@@ -462,6 +564,7 @@ graphic_alt = "-"
+ name     = _("Literacy")
+ req1     = "Writing"
+ req2     = "Code of Laws"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.literacy"
+ graphic_alt = "-"
+@@ -470,14 +573,26 @@ graphic_alt = "-"
+ name     = _("Machine Tools")
+ req1     = "Steel"
+ req2     = "Tactics"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.machine_tools"
+ graphic_alt = "-"
+ 
++[advance_machinery]
++name     = _("Machinery")
++req1     = "Iron Working"
++req2     = "Mathematics"
++class    = "Medieval"
++flags    = ""
++graphic     = "a.machinery"
++graphic_alt = "a.mathematics"
++helptext = _("Cranks, gears and the crossbow: Macebearers, Crossbowmen and the Trebuchet can be built.")
++
+ [advance_magnetism]
+ name     = _("Magnetism")
+-req1     = "Seafaring"
+-req2     = "Astronomy"
++req1     = "Compass"
++req2     = "Physics"
++class    = "Renaissance"
+ flags    = ""
+ graphic     = "a.magnetism"
+ graphic_alt = "-"
+@@ -486,6 +601,7 @@ graphic_alt = "-"
+ name     = _("Map Making")
+ req1     = "Alphabet"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.map_making"
+ graphic_alt = "-"
+@@ -494,6 +610,7 @@ graphic_alt = "-"
+ name     = _("Masonry")
+ req1     = "None"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.masonry"
+ graphic_alt = "-"
+@@ -502,6 +619,7 @@ graphic_alt = "-"
+ name     = _("Mass Production")
+ req1     = "Automobile"
+ req2     = "The Corporation"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.mass_production"
+ graphic_alt = "-"
+@@ -510,6 +628,7 @@ graphic_alt = "-"
+ name     = _("Mathematics")
+ req1     = "Alphabet"
+ req2     = "Masonry"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.mathematics"
+ graphic_alt = "-"
+@@ -518,6 +637,7 @@ graphic_alt = "-"
+ name     = _("Medicine")
+ req1     = "Philosophy"
+ req2     = "Trade"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.medicine"
+ graphic_alt = "-"
+@@ -531,6 +651,7 @@ Reduces the risk of plague in your cities by 30% of the base chance \
+ name     = _("Metallurgy")
+ req1     = "Gunpowder"
+ req2     = "Mathematics"
++class    = "Renaissance"
+ flags    = ""
+ graphic     = "a.metallurgy"
+ graphic_alt = "-"
+@@ -539,6 +660,7 @@ graphic_alt = "-"
+ name     = _("Miniaturization")
+ req1     = "Combustion"
+ req2     = "Electronics"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.miniaturization"
+ graphic_alt = "-"
+@@ -552,6 +674,7 @@ Offshore Platforms.\
+ name     = _("Mobile Warfare")
+ req1     = "Automobile"
+ req2     = "Machine Tools"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.mobile_warfare"
+ graphic_alt = "-"
+@@ -560,6 +683,7 @@ graphic_alt = "-"
+ name     = _("Monarchy")
+ req1     = "Ceremonial Burial"
+ req2     = "Code of Laws"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.monarchy"
+ graphic_alt = "-"
+@@ -568,6 +692,7 @@ graphic_alt = "-"
+ name     = _("Monotheism")
+ req1     = "Astronomy"
+ req2     = "Polytheism"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.monotheism"
+ graphic_alt = "-"
+@@ -576,23 +701,17 @@ graphic_alt = "-"
+ name     = _("Mysticism")
+ req1     = "Ceremonial Burial"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.mysticism"
+ graphic_alt = "-"
+ helptext = _("Improves the effect of Temples.")
+ 
+-[advance_nanomaterials]
+-name     = _("Nanomaterials")
+-req1     = "Plastics"
+-req2     = "Computers"
+-flags    = ""
+-graphic     = "a.nanomaterials"
+-graphic_alt = "a.plastics"
+-
+ [advance_navigation]
+ name     = _("Navigation")
+-req1     = "Invention"
+-req2     = "Physics"
++req1     = "Compass"
++req2     = "Invention"
++class    = "Renaissance"
+ flags    = ""
+ graphic     = "a.navigation"
+ graphic_alt = "-"
+@@ -601,6 +720,7 @@ graphic_alt = "-"
+ name     = _("Nuclear Fission")
+ req1     = "Mass Production"
+ req2     = "Atomic Theory"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.nuclear_fission"
+ graphic_alt = "-"
+@@ -609,6 +729,7 @@ graphic_alt = "-"
+ name     = _("Nuclear Power")
+ req1     = "Nuclear Fission"
+ req2     = "Miniaturization"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.nuclear_power"
+ graphic_alt = "-"
+@@ -618,6 +739,7 @@ helptext = _("Gives sea units one extra move.")
+ name     = _("Philosophy")
+ req1     = "Mysticism"
+ req2     = "Literacy"
++class    = "Classical"
+ flags    = "Bonus_Tech"
+ bonus_message = _("Great philosophers from all the world join \
+ your civilization: you learn %s immediately.")
+@@ -626,8 +748,9 @@ graphic_alt = "-"
+ 
+ [advance_physics]
+ name     = _("Physics")
+-req1     = "The Wheel"
+-req2     = "Magnetism"
++req1     = "Machinery"
++req2     = "Astronomy"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.physics"
+ graphic_alt = "-"
+@@ -636,6 +759,7 @@ graphic_alt = "-"
+ name     = _("Plastics")
+ req1     = "Mass Production"
+ req2     = "Robotics"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.plastics"
+ graphic_alt = "-"
+@@ -644,6 +768,7 @@ graphic_alt = "-"
+ name     = _("Polytheism")
+ req1     = "Horseback Riding"
+ req2     = "Ceremonial Burial"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.polytheism"
+ graphic_alt = "-"
+@@ -652,14 +777,26 @@ graphic_alt = "-"
+ name     = _("Pottery")
+ req1     = "None"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.pottery"
+ graphic_alt = "-"
+ 
++[advance_printing]
++name     = _("Printing")
++req1     = "Machinery"
++req2     = "Literacy"
++class    = "Renaissance"
++flags    = ""
++graphic     = "a.printing"
++graphic_alt = "a.literacy"
++helptext = _("Movable type: Shakespeare's Theatre can be built.")
++
+ [advance_radio]
+ name     = _("Radio")
+ req1     = "Flight"
+ req2     = "Electronics"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.radio"
+ graphic_alt = "-"
+@@ -672,6 +809,7 @@ airbases and buoys. Allows Transports to build buoys.\
+ name     = _("?tech:Railroad")
+ req1     = "Steam Engine"
+ req2     = "Metallurgy"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.railroad"
+ graphic_alt = "-"
+@@ -690,6 +828,7 @@ celebrating).\
+ name     = _("Recycling")
+ req1     = "Mass Production"
+ req2     = "Sanitation"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.recycling"
+ graphic_alt = "-"
+@@ -698,6 +837,7 @@ graphic_alt = "-"
+ name     = _("Refining")
+ req1     = "Explosives"
+ req2     = "Industrialization"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.refining"
+ graphic_alt = "-"
+@@ -711,6 +851,7 @@ point.\
+ name     = _("Refrigeration")
+ req1     = "Sanitation"
+ req2     = "Electricity"
++class    = "Modern"
+ flags    = ""
+ graphic     = "a.refrigeration"
+ graphic_alt = "-"
+@@ -723,6 +864,7 @@ irrigation systems to farmland.\
+ name     = _("Robotics")
+ req1     = "Mobile Warfare"
+ req2     = "Computers"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.robotics"
+ graphic_alt = "-"
+@@ -731,6 +873,7 @@ graphic_alt = "-"
+ name     = _("Rocketry")
+ req1     = "Advanced Flight"
+ req2     = "Miniaturization"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.rocketry"
+ graphic_alt = "-"
+@@ -739,17 +882,12 @@ helptext = _("Doubles movement of nuclear units.")
+ ; We now know that there may be other gods, my lord. I suggest that we now
+ ; seek to find out if you are a god yourself. You are after all extremely
+ ; powerful.
+-[advance_ruler_apotheosis]
+-name        = _("Ruler Apotheosis")
+-req1        = "Polytheism"
+-req2        = "Mysticism"
+-graphic     = "a.apotheosis"
+-graphic_alt = "a.polytheism"
+ 
+ [advance_sanitation]
+ name     = _("Sanitation")
+ req1     = "Bridge Building"
+ req2     = "Medicine"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.sanitation"
+ graphic_alt = "-"
+@@ -758,6 +896,7 @@ graphic_alt = "-"
+ name     = _("Seafaring")
+ req1     = "Pottery"
+ req2     = "Map Making"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.seafaring"
+ graphic_alt = "-"
+@@ -766,6 +905,7 @@ graphic_alt = "-"
+ name     = _("Space Flight")
+ req1     = "Computers"
+ req2     = "Rocketry"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.space_flight"
+ graphic_alt = "-"
+@@ -774,6 +914,7 @@ graphic_alt = "-"
+ name     = _("Stealth")
+ req1     = "Plastics"
+ req2     = "Space Flight"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.stealth"
+ graphic_alt = "-"
+@@ -782,6 +923,7 @@ graphic_alt = "-"
+ name     = _("Steam Engine")
+ req1     = "Chemistry"
+ req2     = "Navigation"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.steam_engine"
+ graphic_alt = "-"
+@@ -790,6 +932,7 @@ graphic_alt = "-"
+ name     = _("Steel")
+ req1     = "Engineering"
+ req2     = "Industrialization"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.steel"
+ graphic_alt = "-"
+@@ -798,6 +941,7 @@ graphic_alt = "-"
+ name     = _("Superconductors")
+ req1     = "Space Flight"
+ req2     = "Laser"
++class    = "Information"
+ flags    = ""
+ graphic     = "a.superconductors"
+ graphic_alt = "-"
+@@ -810,6 +954,7 @@ with maglev.\
+ name     = _("Tactics")
+ req1     = "Conscription"
+ req2     = "Leadership"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.tactics"
+ graphic_alt = "-"
+@@ -818,6 +963,7 @@ graphic_alt = "-"
+ name     = _("The Corporation")
+ req1     = "Economics"
+ req2     = "Industrialization"
++class    = "Industrial"
+ flags    = ""
+ graphic     = "a.the_corporation"
+ graphic_alt = "-"
+@@ -830,6 +976,7 @@ Halves the corruption of trade related to distance from the capital \
+ name     = _("The Republic")
+ req1     = "Code of Laws"
+ req2     = "Literacy"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.the_republic"
+ graphic_alt = "-"
+@@ -838,6 +985,7 @@ graphic_alt = "-"
+ name     = _("The Wheel")
+ req1     = "Horseback Riding"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.the_wheel"
+ graphic_alt = "-"
+@@ -846,6 +994,7 @@ graphic_alt = "-"
+ name     = _("Theology")
+ req1     = "Philosophy"
+ req2     = "Monotheism"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.theology"
+ graphic_alt = "-"
+@@ -855,6 +1004,7 @@ helptext = _("Improves the effect of Cathedrals.")
+ name     = _("Theory of Gravity")
+ req1     = "Physics"
+ req2     = "University"
++class    = "Renaissance"
+ flags    = ""
+ graphic     = "a.theory_of_gravity"
+ graphic_alt = "-"
+@@ -863,6 +1013,7 @@ graphic_alt = "-"
+ name     = _("Trade")
+ req1     = "Currency"
+ req2     = "Pottery"
++class    = "Classical"
+ flags    = ""
+ graphic     = "a.trade"
+ graphic_alt = "-"
+@@ -874,6 +1025,7 @@ Halves the waste of production related to distance from the capital.\
+ name     = _("University")
+ req1     = "Mathematics"
+ req2     = "Philosophy"
++class    = "Medieval"
+ flags    = ""
+ graphic     = "a.university"
+ graphic_alt = "-"
+@@ -882,6 +1034,7 @@ graphic_alt = "-"
+ name     = _("Warrior Code")
+ req1     = "None"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.warrior_code"
+ graphic_alt = "-"
+@@ -890,6 +1043,7 @@ graphic_alt = "-"
+ name     = _("Writing")
+ req1     = "Alphabet"
+ req2     = "None"
++class    = "Ancient"
+ flags    = ""
+ graphic     = "a.writing"
+ graphic_alt = "-"
+diff --git a/data/civ45/terrain.ruleset b/data/civ45/terrain.ruleset
+index 2567364..9aed11a 100644
+--- a/data/civ45/terrain.ruleset
++++ b/data/civ45/terrain.ruleset
+@@ -1258,6 +1258,10 @@ name           = _("Irrigation")
+ category       = "Infra"
+ causes         = "Irrigation"
+ rmcauses       = "Pillage"
++reqs           =
++    { "type", "name", "range"
++      "Tech", "Agriculture", "Player"
++    }
+ graphic        = "tx.irrigation"
+ graphic_alt    = "-"
+ activity_gfx   = "unit.irrigation"
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 2dd46d8..5fb5e41 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -1401,7 +1401,7 @@ name          = _("Mech. Inf.")
+ class         = "Big Land"
+ reqs          =
+   { "type", "name", "range"
+-    "Tech", "Labor Union", "Player"
++    "Tech", "Robotics", "Player"
+   }
+ obsolete_by   = "None"
+ graphic       = "u.mech_inf"
+-- 
+2.56.0
+

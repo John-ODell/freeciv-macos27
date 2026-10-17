@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
--- Freeciv45 (civ45) stack, map, combat, victory and draft rules test. Load it into a civ45 server before the game starts with
+-- Freeciv45 (civ45) stack, map, combat, victory, draft and tech rules test. Load it into a civ45 server before the game starts with
 --   lua file scripts/civ45-rules-test.lua
 -- (scripts/civ45-rules-test.sh does that; an autogame reads no console input once it runs). It runs at the
 -- first turn start from turn 5 on, checks one more thing a turn later, and prints
@@ -153,6 +153,32 @@ function fc45_rules_test_run()
   if tester ~= nil and animals ~= nil then fc45_combat_test_run(tester, animals, used) end
   fc45_victory_test_run()
   if tester ~= nil then fc45_draft_test_run(tester, used) end
+  if tester ~= nil then fc45_tech_test_run(tester) end
+end
+
+-- The tech tree: the six new techs exist and the three dropped ones do not, and the cost of a tech is what
+-- the Linear style gives: base_tech_cost 10 times the number of techs it needs counted with itself
+-- (common/tech.c, num_reqs starts at 1), times the era's cost_pct, times Tech_Cost_Factor 3. Gunpowder needs
+-- 17 techs in the Renaissance (120%): 30 x 18 x 1.2 = 648; Fusion Power needs 70 in the Information era
+-- (150%): 30 x 71 x 1.5 = 3195; a root tech such as Alphabet is 30. (The design note counted the tech itself
+-- out, so its 612 and 3150 are one tier short.) Player:tech_cost reads research_total_bulbs_required for the
+-- Tester, who has no embassy, so no leakage lowers it; under this style the cost does not depend on what the
+-- player already knows.
+function fc45_tech_test_run(tester)
+  local have = find.tech_type("Agriculture") ~= nil and find.tech_type("Hunting") ~= nil
+    and find.tech_type("Archery") ~= nil and find.tech_type("Machinery") ~= nil
+    and find.tech_type("Compass") ~= nil and find.tech_type("Printing") ~= nil
+  local gone = find.tech_type("Ruler Apotheosis") == nil and find.tech_type("Nanomaterials") == nil
+    and find.tech_type("Labor Union") == nil
+  check("the six new techs exist and the three dropped ones are gone", have and gone)
+  if not have then return end
+  local al = tester:tech_cost(find.tech_type("Alphabet"))
+  local gp, fp = tester:tech_cost(find.tech_type("Gunpowder")), tester:tech_cost(find.tech_type("Fusion Power"))
+  log.normal("FC45TEST tech costs for the Tester: Alphabet %d, Gunpowder %d, Fusion Power %d (sciencebox %s)",
+             al, gp, fp, tostring(server.setting.get("sciencebox")))
+  check("a root tech (Alphabet) costs 30 bulbs", al == 30)
+  check("Gunpowder costs 648 bulbs (17 techs needed plus itself, Renaissance 120%)", gp == 648)
+  check("Fusion Power costs 3195 bulbs (70 techs needed plus itself, Information era 150%)", fp == 3195)
 end
 
 -- Slice 3, upgrades and the draft. The Tester gets a city of its own (it has none: nothing moved its
