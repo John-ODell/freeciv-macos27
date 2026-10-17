@@ -1,4 +1,4 @@
-From 09481fff2fb736fb44c1390ab4f2168649078c63 Mon Sep 17 00:00:00 2001
+From f55003f19e1f2ef874c1b15cec33c2de1b4f3447 Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Fri, 16 Oct 2026 19:51:28 -0500
 Subject: [PATCH] AI: let an outside chooser make named AI players' build and
@@ -18,7 +18,6 @@ when it is in danger or has been on Coinage for 5 turns, if the AI
 would build something else. Research is asked again after each new tech
 or when something else changes it. Everything else (units, rates,
 government, diplomacy) stays with the AI.
-
 ---
  ai/default/Makefile.am  |    2 +
  ai/default/aitech.c     |   24 +-
