@@ -1,0 +1,262 @@
+From c499bd2940f057d6afbd9d638f79415b52c3da9e Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 16:22:17 -0500
+Subject: [PATCH] civ45: upgrades keep veterancy, draft units that cost a
+ citizen, the levy as a whip
+
+Freeciv45 slice 3. game.ruleset: upgrade_veteran_loss and
+autoupgrade_veteran_loss 0, so an upgraded unit keeps its levels.
+units.ruleset: a Draft user flag and three draft units, Levy (Bronze
+Working, 2/2, 10 shields), Militia (Gunpowder, 8/8, 20) and Conscripts
+(Conscription, 14/14, 25), each with pop_cost 1 and not buildable under
+Anarchy, Republic, Democracy or Federation. effects.ruleset: three
+Unit_Shield_Value_Pct rows so that any of them disbanded in a city with
+"Disband Unit Recover" puts 30 shields into the build, which stands in
+for the whip until Lua can shrink a city. README.civ45 says so.
+---
+ data/civ45/README.civ45    |   8 +++
+ data/civ45/effects.ruleset |  33 +++++++++
+ data/civ45/game.ruleset    |   4 +-
+ data/civ45/units.ruleset   | 139 +++++++++++++++++++++++++++++++++++++
+ 4 files changed, 182 insertions(+), 2 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 571c17f..97d9d37 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -53,6 +53,14 @@ Differences from sandbox
+   2050) and at the start of that turn the living player with the highest
+   score is named the winner, so the game ends with a victor rather than a
+   turn-limit notice. The thresholds are first values, untuned.
++- Upgrades keep a unit's veteran levels (sandbox takes one away).
++- Drafting: Levy (Bronze Working, 2/2, 10 shields), Militia (Gunpowder,
++  8/8, 20 shields) and Conscripts (Conscription, 14/14, 25 shields) are
++  raised from one of the city's citizens (pop_cost 1), only under Tribal,
++  Despotism, Monarchy, Communism or Fundamentalism. They stand in for
++  the whip too: disbanded in a city ("Disband recovering production")
++  each puts 30 shields into the build, whatever it cost, so a citizen
++  becomes 30 shields. No unhappiness follows a draft yet.
+ - Strategic resources: Legion needs Iron and Armor needs Oil somewhere in
+   the city's radius.
+ - Nation-unique units and buildings: Aztec Jaguar Warrior (replaces
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index cf449a3..bbd97a2 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -5455,6 +5455,39 @@ reqs    =
+       "Action", "Disband Unit Recover", "Local", TRUE
+     }
+ 
++; A draft unit disbanded in a city is worth 30 shields to the build (the recycle
++; effect above halves the base; this row brings a Levy to 30).
++[effect_unit_shield_value_draft_levy]
++type    = "Unit_Shield_Value_Pct"
++value   = 250
++reqs    =
++    { "type",     "name",                 "range", "present"
++      "Action",   "Disband Unit Recover", "Local", TRUE
++      "UnitType", "Levy", "Local", TRUE
++    }
++
++; A draft unit disbanded in a city is worth 30 shields to the build (the recycle
++; effect above halves the base; this row brings a Militia to 30).
++[effect_unit_shield_value_draft_militia]
++type    = "Unit_Shield_Value_Pct"
++value   = 100
++reqs    =
++    { "type",     "name",                 "range", "present"
++      "Action",   "Disband Unit Recover", "Local", TRUE
++      "UnitType", "Militia", "Local", TRUE
++    }
++
++; A draft unit disbanded in a city is worth 30 shields to the build (the recycle
++; effect above halves the base; this row brings a Conscripts to 30).
++[effect_unit_shield_value_draft_conscripts]
++type    = "Unit_Shield_Value_Pct"
++value   = 70
++reqs    =
++    { "type",     "name",                 "range", "present"
++      "Action",   "Disband Unit Recover", "Local", TRUE
++      "UnitType", "Conscripts", "Local", TRUE
++    }
++
+ [effect_unit_shield_value_in_upgrade_price_calc]
+ type    = "Unit_Shield_Value_Pct"
+ value   = -50
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index 9541728..c922e51 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -129,10 +129,10 @@ base_bribe_cost  = 750
+ ransom_gold      = 100
+ 
+ ; Number of veteran levels lost when upgrading a unit
+-upgrade_veteran_loss     = 1
++upgrade_veteran_loss     = 0
+ 
+ ; Number of veteran levels lost when auto-upgrading a unit
+-autoupgrade_veteran_loss = 1
++autoupgrade_veteran_loss = 0
+ 
+ ; Whether player gets to select which terrain improvement to pillage.
+ pillage_select           = TRUE
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 3f591f4..2dd46d8 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -53,6 +53,7 @@ flags =
+     _("OneAttack")
+     _("Collateral"), _("Its bombardment wounds every unit on a tile that holds two or more units, and kills none of them.")
+     _("Withdraws"), _("When it attacks, it breaks off after 12 rounds for every 10 hit points it has, instead of fighting to the death.")
++    _("Draft"), _("Raised from one of the city's citizens instead of built from shields alone, and only under Tribal, Despotism, Monarchy, Communism or Fundamentalism. Disbanded in a city, it puts 30 shields into whatever the city is building.")
+   }
+ 
+ ; Names for custom unit class flags. There can be up to 25 of these.
+@@ -1177,6 +1178,144 @@ Fundamentalist nations can maintain Fanatic units without\
+  Instead, each unit reduces the population by 1.\
+ ")
+ 
++[unit_levy]
++name          = _("Levy")
++class         = "Land"
++reqs          =
++  { "type", "name", "range", "present"
++    "Tech", "Bronze Working", "Player", TRUE
++    "Gov",  "Anarchy",    "Player", FALSE
++    "Gov",  "Republic",   "Player", FALSE
++    "Gov",  "Democracy",  "Player", FALSE
++    "Gov",  "Federation", "Player", FALSE
++  }
++obsolete_by   = "None"
++graphic       = "u.levy"
++graphic_alt   = "u.warriors"
++sound_move    = "m_levy"
++sound_move_alt = "m_generic"
++sound_fight   = "f_levy"
++sound_fight_alt = "f_generic"
++build_cost    = 10
++pop_cost      = 1
++attack        = 2
++defense       = 2
++hitpoints     = 10
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased"
++roles         = ""
++helptext      = _("\
++Townsfolk called up with spear and shield for a season: as good as a\
++ Phalanx in a fight, raised in a turn, and a citizen fewer at home.\
++"), _("\
++A draft unit costs one of the city's citizens as well as its shields, and\
++ can only be raised under Tribal, Despotism, Monarchy, Communism or\
++ Fundamentalism. Disbanded in a city with \"Disband recovering production\"\
++ it puts 30 shields into the city's current build, whatever it cost: that is\
++ how a city turns a citizen into production.\
++")
++
++[unit_militia]
++name          = _("Militia")
++class         = "Land"
++reqs          =
++  { "type", "name", "range", "present"
++    "Tech", "Gunpowder", "Player", TRUE
++    "Gov",  "Anarchy",    "Player", FALSE
++    "Gov",  "Republic",   "Player", FALSE
++    "Gov",  "Democracy",  "Player", FALSE
++    "Gov",  "Federation", "Player", FALSE
++  }
++obsolete_by   = "None"
++graphic       = "u.militia"
++graphic_alt   = "u.musketeers"
++sound_move    = "m_militia"
++sound_move_alt = "m_generic"
++sound_fight   = "f_militia"
++sound_fight_alt = "f_generic"
++build_cost    = 20
++pop_cost      = 1
++attack        = 8
++defense       = 8
++hitpoints     = 20
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased"
++roles         = ""
++helptext      = _("\
++Citizens handed muskets and a few weeks of drill. They fight like\
++ Musketeers and are raised in a turn from one of the city's citizens.\
++"), _("\
++A draft unit costs one of the city's citizens as well as its shields, and\
++ can only be raised under Tribal, Despotism, Monarchy, Communism or\
++ Fundamentalism. Disbanded in a city with \"Disband recovering production\"\
++ it puts 30 shields into the city's current build, whatever it cost: that is\
++ how a city turns a citizen into production.\
++")
++
++[unit_conscripts]
++name          = _("Conscripts")
++class         = "Land"
++reqs          =
++  { "type", "name", "range", "present"
++    "Tech", "Conscription", "Player", TRUE
++    "Gov",  "Anarchy",    "Player", FALSE
++    "Gov",  "Republic",   "Player", FALSE
++    "Gov",  "Democracy",  "Player", FALSE
++    "Gov",  "Federation", "Player", FALSE
++  }
++obsolete_by   = "None"
++graphic       = "u.conscripts"
++graphic_alt   = "u.riflemen"
++sound_move    = "m_conscripts"
++sound_move_alt = "m_generic"
++sound_fight   = "f_conscripts"
++sound_fight_alt = "f_generic"
++build_cost    = 25
++pop_cost      = 1
++attack        = 14
++defense       = 14
++hitpoints     = 20
++firepower     = 1
++move_rate     = 1
++vision_radius_sq = 2
++transport_cap = 0
++fuel          = 0
++uk_happy      = 1
++uk_shield     = 1
++uk_food       = 1
++uk_gold       = 0
++tp_defense    = "Alight"
++flags         = "Draft", "Shield2Gold", "ShieldToGold", "Fortress", "FleshBased"
++roles         = ""
++helptext      = _("\
++A conscript regiment, armed like Riflemen and raised in a turn from\
++ one of the city's citizens.\
++"), _("\
++A draft unit costs one of the city's citizens as well as its shields, and\
++ can only be raised under Tribal, Despotism, Monarchy, Communism or\
++ Fundamentalism. Disbanded in a city with \"Disband recovering production\"\
++ it puts 30 shields into the city's current build, whatever it cost: that is\
++ how a city turns a citizen into production.\
++")
++
+ [unit_marines]
+ name          = _("Marines")
+ class         = "Land"
+-- 
+2.56.0
+
