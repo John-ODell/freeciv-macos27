@@ -274,6 +274,7 @@ The patch becomes `patches/0008-...` applied to the fork, built with `scripts/bu
 
 ## 7. The prepared first slice
 
-The unit bar of 5.3 is prepared under its own issue as `first-slice.diff` in this folder: a diff against the
-fork's `client/gui-qt`, unapplied, with build notes in `first-slice.md`. It is not in `patches/` and the fork is
-untouched by this work.
+The unit bar of 5.3 is prepared under issue #95 as `first-slice.diff` in this folder: a diff against the
+fork's `client/gui-qt`, unapplied, with build notes, what was tested and what was not in `first-slice.md`, and
+screenshots `first-slice-on.png` (the bar), `first-slice-bar.png` (the bar alone) and `first-slice-off.png` (the
+option off, today's panel back). It is not in `patches/` and the fork is untouched by this work.
