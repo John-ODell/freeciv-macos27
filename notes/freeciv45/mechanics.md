@@ -632,7 +632,7 @@ passes. On the installed slice 1 copy (the control) 13/22 Lua cases pass, the te
 ### Autogame
 
 One 400-turn game, 10 AIs, seeds 42/42, diplomacy off, with `scripts/civ45-tech-log.lua`
-(`logs/test-qt-20261017-163447`, AI skill level not logged); the victory slice's 475-turn game (`logs/test-qt-20261017-155028`,
+(`logs/test-qt-20261017-163447`, AI skill level Easy, the server default); the victory slice's 475-turn game (`logs/test-qt-20261017-155028`,
 same seeds, the old 89-tech tree with no era costs) is the control, read from its saves' `[research]` tables. Observed:
 
 | Era | First AI to learn one of its techs | Median AI | AIs that reached it by turn 395 |
