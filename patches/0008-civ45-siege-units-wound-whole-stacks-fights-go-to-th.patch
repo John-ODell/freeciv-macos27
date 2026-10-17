@@ -1,0 +1,459 @@
+From 6777c8573d5e3d53d36268fbcfb4c2f6a9f5965d Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 15:35:51 -0500
+Subject: [PATCH] civ45: siege units wound whole stacks, fights go to the
+ death, fast units break off, bombard range 1
+
+Catapult, Cannon, Artillery and Howitzer get the Collateral flag and a
+bombard_rate (5, 10, 14, 20). "Bombard 2", Freeciv's non-lethal bombard,
+is enabled for them against an adjacent tile that holds two or more
+enemy units, so every unit there is shot at and wounded but none is
+killed; against a lone unit they attack as before, and against a stack
+the player may still attack instead. Bombarding ends the unit's turn.
+
+Combat_Rounds drops from 15 to 0, so a fight lasts until one side dies,
+except for attackers with the new Withdraws flag (Horsemen, Chariot,
+Elephants, Crusaders, Knights, Dragoons, Cavalry, Armor), whose attack
+ends after 12 rounds for every 10 hit points they have left. Aircraft
+bombard reaches one tile again instead of two. README.civ45, the
+summary and the flag help texts describe the rules.
+---
+ data/civ45/README.civ45    | 16 ++++++-
+ data/civ45/actions.ruleset | 95 +++++++++++++++++++++++++++++++++++---
+ data/civ45/effects.ruleset | 52 ++++++++++++++++++++-
+ data/civ45/game.ruleset    | 10 ++--
+ data/civ45/units.ruleset   | 30 +++++++-----
+ 5 files changed, 178 insertions(+), 25 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 01fe760..2940126 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -28,7 +28,21 @@ Differences from sandbox
+ - The ruleset suggests the trident tileset, the only overhead square
+   tileset Freeciv ships, until a Freeciv45 tileset exists.
+ - Cultural victory is enabled alongside spacerace and allied victory.
+-- Bombard range is 2 instead of 1.
++- Combat is to the death: a fight lasts until the attacker or the
++  defender dies (sandbox stops every fight after 15 rounds). Units with
++  the Withdraws flag (Horsemen, Chariot, Elephants, Crusaders, Knights,
++  Dragoons, Cavalry, Armor) break off their own attacks instead, after
++  12 rounds for every 10 hit points they have left; when attacked they
++  fight to the death like everyone else.
++- Siege collateral: Catapult, Cannon, Artillery and Howitzer (flag
++  Collateral) can bombard an adjacent tile that holds two or more enemy
++  units ("Bombard Stack"). Every unit there is shot at bombard_rate
++  times (5, 10, 14, 20) and loses 1 hit point per hit, but none can be
++  killed by it (each keeps at least 1 hit point). Bombarding ends the
++  siege unit's turn. Against a lone unit the siege unit attacks as
++  usual, and against a stack the player may still choose to attack.
++- Bombard range is 1 for aircraft (sandbox's value; the first slices had
++  2 for ranged units of a different game).
+ - Strategic resources: Legion needs Iron and Armor needs Oil somewhere in
+   the city's radius.
+ - Nation-unique units and buildings: Aztec Jaguar Warrior (replaces
+diff --git a/data/civ45/actions.ruleset b/data/civ45/actions.ruleset
+index f2155c9..8cd1fcb 100644
+--- a/data/civ45/actions.ruleset
++++ b/data/civ45/actions.ruleset
+@@ -33,21 +33,26 @@ if_attacker =
+       "UnitFlag",     "NuclearOP", "Local", FALSE
+     }
+ 
+-attack_actions = "Capture Units", "Bombard",
++attack_actions = "Capture Units", "Bombard", "Bombard 2",
+                  "Collect Ransom", "Attack", "Suicide Attack"
+ 
+ [actions]
+ ; Forbid "Bombard" if any one of the listed actions are legal.
+ bombard_blocked_by = "Capture Units"
+ 
++; Forbid "Bombard 2" (siege against a stack) if any one of the listed actions
++; are legal. "Attack" is not blocked by "Bombard 2": a siege unit next to a
++; stack may bombard it or attack its defender, the player chooses.
++bombard_2_blocked_by = "Capture Units"
++
+ ; Forbid "Explode Nuclear" if any one of the listed actions are legal.
+-explode_nuclear_blocked_by = "Capture Units", "Bombard"
++explode_nuclear_blocked_by = "Capture Units", "Bombard", "Bombard 2"
+ 
+ ; Forbid "Nuke City" if any one of the listed actions are legal.
+-nuke_city_blocked_by = "Capture Units", "Bombard"
++nuke_city_blocked_by = "Capture Units", "Bombard", "Bombard 2"
+ 
+ ; Forbid "Nuke Units" if any one of the listed actions are legal.
+-nuke_units_blocked_by = "Capture Units", "Bombard"
++nuke_units_blocked_by = "Capture Units", "Bombard", "Bombard 2"
+ 
+ ; Forbid "Attack" if any one of the listed actions are legal.
+ attack_blocked_by = "Collect Ransom", "Capture Units", "Bombard",
+@@ -59,12 +64,12 @@ suicide_attack_blocked_by = "Collect Ransom", "Capture Units", "Bombard",
+                             "Explode Nuclear", "Nuke City", "Nuke Units"
+ 
+ ; Forbid "Conquer City" if any one of the listed actions are legal.
+-conquer_city_blocked_by = "Capture Units", "Bombard",
++conquer_city_blocked_by = "Capture Units", "Bombard", "Bombard 2",
+                           "Explode Nuclear", "Nuke City", "Nuke Units",
+                           "Attack", "Suicide Attack"
+ 
+ ; Forbid "Conquer City 2" if any one of the listed actions are legal.
+-conquer_city_2_blocked_by = "Capture Units", "Bombard",
++conquer_city_2_blocked_by = "Capture Units", "Bombard", "Bombard 2",
+                             "Explode Nuclear", "Nuke City", "Nuke Units",
+                             "Attack", "Suicide Attack"
+ 
+@@ -161,7 +166,7 @@ disband_unit_recover_max_range = 1
+ ; the actor unit. The special value "unlimited" lifts the maximum distance
+ ; restriction. The maximum distance can`t be smaller than the minimum
+ ; distance.
+-bombard_max_range = 2
++bombard_max_range = 1
+ 
+ ; The maximum distance from the actor unit to the target of the "Bombard 2"
+ ; action. The value 1 means that the targets must be on a tile adjacent to
+@@ -333,6 +338,9 @@ ui_name_join_city = _("%sAdd to City%s")
+ ; /* TRANS: _Bombard (100% chance of success). */
+ ui_name_bombard = _("%sBombard%s")
+ 
++; /* TRANS: Bombard _Stack (100% chance of success). */
++ui_name_bombard_2 = _("Bombard %sStack%s")
++
+ ; /* TRANS: Destroy _City (100% chance of success). */
+ ui_name_destroy_city = _("Destroy %sCity%s")
+ 
+@@ -1262,6 +1270,79 @@ target_reqs    =
+       "CityTile",     "Center",  "Tile",  FALSE
+     }
+ 
++; Siege collateral: a unit with the Collateral flag may bombard a tile that
++; holds two or more units. "Bombard 2" is Freeciv's non-lethal bombard, so it
++; wounds every unit on the tile and leaves each with at least 1 hit point.
++; Against a lone unit the siege unit attacks as usual. The four enablers mirror
++; the four "Bombard" enablers above (city or not, Treuga Dei or not) with the
++; Collateral flag and the two-or-more-units requirement.
++[actionenabler_bombard_stack_city]
++action = "Bombard 2"
++actor_reqs    =
++    { "type",         "name",        "range", "present"
++      "UnitFlag",     "Collateral",  "Local", TRUE
++      "UnitState",    "Transported", "Local", FALSE
++      "MinMoveFrags", "1",           "Local", TRUE
++      "DiplRel",      "War",         "Local", TRUE
++      "Building",     "Treuga Dei",  "World", FALSE
++    }
++target_reqs    =
++    { "type",             "name",    "range", "present"
++      "TerrainClass",     "Oceanic", "Tile",  FALSE
++      "DiplRelTileOther", "War",     "Local", TRUE
++      "MaxUnitsOnTile",   "1",       "Tile",  FALSE
++    }
++
++[actionenabler_bombard_stack_no_city]
++action = "Bombard 2"
++actor_reqs    =
++    { "type",         "name",        "range", "present"
++      "UnitFlag",     "Collateral",  "Local", TRUE
++      "UnitState",    "Transported", "Local", FALSE
++      "MinMoveFrags", "1",           "Local", TRUE
++      "DiplRel",      "War",         "Local", TRUE
++    }
++target_reqs    =
++    { "type",           "name",    "range", "present"
++      "TerrainClass",   "Oceanic", "Tile",  FALSE
++      "CityTile",       "Center",  "Tile",  FALSE
++      "MaxUnitsOnTile", "1",       "Tile",  FALSE
++    }
++
++[actionenabler_bombard_stack_city_despite_treuga_dei]
++action = "Bombard 2"
++actor_reqs    =
++    { "type",         "name",        "range", "present", "survives"
++      "UnitFlag",     "Collateral",  "Local", TRUE,      FALSE
++      "UnitState",    "Transported", "Local", FALSE,     FALSE
++      "MinMoveFrags", "1",           "Local", TRUE,      FALSE
++      "DiplRel",      "War",         "Local", TRUE,      FALSE
++      "Tech",         "Communism",   "World", TRUE,      TRUE
++    }
++target_reqs    =
++    { "type",             "name",    "range", "present"
++      "TerrainClass",     "Oceanic", "Tile",  FALSE
++      "DiplRelTileOther", "War",     "Local", TRUE
++      "MaxUnitsOnTile",   "1",       "Tile",  FALSE
++    }
++
++[actionenabler_bombard_stack_no_city_despite_treuga_dei]
++action = "Bombard 2"
++actor_reqs    =
++    { "type",         "name",        "range", "present", "survives"
++      "UnitFlag",     "Collateral",  "Local", TRUE,      FALSE
++      "UnitState",    "Transported", "Local", FALSE,     FALSE
++      "MinMoveFrags", "1",           "Local", TRUE,      FALSE
++      "DiplRel",      "War",         "Local", TRUE,      FALSE
++      "Tech",         "Communism",   "World", TRUE,      TRUE
++    }
++target_reqs    =
++    { "type",           "name",    "range", "present"
++      "TerrainClass",   "Oceanic", "Tile",  FALSE
++      "CityTile",       "Center",  "Tile",  FALSE
++      "MaxUnitsOnTile", "1",       "Tile",  FALSE
++    }
++
+ [actionenabler_build_city_pioneer]
+ action = "Found City"
+ actor_reqs    =
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index abb010c..cf449a3 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -541,9 +541,40 @@ reqs    =
+       "UnitType", "Nuclear", "Local"
+     }
+ 
++; Combat is to the death: 0 rounds means the fight lasts until one side dies
++; (sandbox capped every fight at 15 rounds). A unit with the Withdraws flag
++; breaks off instead: its attack ends after 12 rounds for every 10 hit points
++; it has left (12, 24 or 36), whether or not anyone died. The cap is read for
++; the attacker only, so a Withdraws unit that is attacked fights to the death.
+ [effect_combat_rounds_base]
+ type    = "Combat_Rounds"
+-value   = 15
++value   = 0
++
++[effect_combat_rounds_withdraws]
++type    = "Combat_Rounds"
++value   = 12
++reqs    =
++    { "type", "name", "range"
++      "UnitFlag", "Withdraws", "Local"
++    }
++
++[effect_combat_rounds_withdraws_20hp]
++type    = "Combat_Rounds"
++value   = 12
++reqs    =
++    { "type", "name", "range"
++      "UnitFlag", "Withdraws", "Local"
++      "MinHitPoints", "11", "Local"
++    }
++
++[effect_combat_rounds_withdraws_30hp]
++type    = "Combat_Rounds"
++value   = 12
++reqs    =
++    { "type", "name", "range"
++      "UnitFlag", "Withdraws", "Local"
++      "MinHitPoints", "21", "Local"
++    }
+ 
+ ; Invention halves unit upgrade prices
+ [effect_upgrade_price_halfed]
+@@ -4945,6 +4976,15 @@ reqs    =
+       "Action", "Bombard", "Local", TRUE
+     }
+ 
++; Siege bombardment ("Bombard 2") also ends the unit's turn.
++[effect_action_success_move_cost_bombard_stack]
++type    = "Action_Success_Actor_Move_Cost"
++value   = 65535
++reqs    =
++    { "type", "name", "range", "present"
++      "Action", "Bombard 2", "Local", TRUE
++    }
++
+ [effect_action_success_move_cost_from_non_native]
+ type    = "Action_Success_Actor_Move_Cost"
+ value   = 65535
+@@ -5183,6 +5223,16 @@ reqs    =
+       "Building", "Treuga Dei",           "World", TRUE
+     }
+ 
++; Treuga Dei Casus Belli
++[effect_treuga_dei_casus_belli_bombard_stack]
++type    = "Casus_Belli_Success"
++value   = 1000
++reqs    =
++    { "type",     "name",                 "range", "survives"
++      "Action",   "Bombard 2",            "Local", FALSE
++      "Building", "Treuga Dei",           "World", TRUE
++    }
++
+ ; Treuga Dei Casus Belli
+ [effect_treuga_dei_casus_belli_explode_nuclear]
+ type    = "Casus_Belli_Success"
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index 305c92f..de75771 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -41,10 +41,12 @@ summary = _("\
+ You are playing Freeciv45: the sandbox rules with stacks of units on \
+ a square map. Any number of units can share a tile. When a stack is \
+ attacked its best defender fights, and if it loses, only that unit \
+-dies. The map is a square grid seen from above that wraps east to west, \
+-and each city works 21 tiles. \
+-Also: cultural victory, \
+-bombardment at range 2, strategic resources (Legion needs Iron, Armor \
++dies. Fights are to the death, except that mounted and armoured units \
++break off after a number of rounds. Siege units (Catapult to Howitzer) \
++can bombard a stack of two or more units, wounding every unit in it \
++and killing none. The map is a square grid seen from above that wraps \
++east to west, and each city works 21 tiles. \
++Also: cultural victory, strategic resources (Legion needs Iron, Armor \
+ needs Oil) and a few nation-unique units and buildings.\
+ \n\n\
+ Experimental: an early slice of Freeciv45, not balanced yet.\
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 4e74c8d..3f591f4 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -51,6 +51,8 @@ flags =
+     _("Marines"), _("Can launch attack from non-native tiles.")
+     _("Cant_Fortify")
+     _("OneAttack")
++    _("Collateral"), _("Its bombardment wounds every unit on a tile that holds two or more units, and kills none of them.")
++    _("Withdraws"), _("When it attacks, it breaks off after 12 rounds for every 10 hit points it has, instead of fighting to the death.")
+   }
+ 
+ ; Names for custom unit class flags. There can be up to 25 of these.
+@@ -1323,7 +1325,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
+ roles         = "AttackFastStartUnit", "Hut", "Barbarian", "Hunter"
+ helptext      = _("\
+ Horsemen are mounted warriors and an early\
+@@ -1360,7 +1362,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
+ roles         = "AttackFastStartUnit"
+ helptext      = _("\
+ Chariots are horse-pulled war wagons. They have a stronger attack than \
+@@ -1400,7 +1402,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
+ roles         = "DefendOk", "AttackFastStartUnit", "Hunter"
+ helptext      = _("\
+ Elephants are towering animals trained for war that are often used as\
+@@ -1436,7 +1438,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
+ roles         = "AttackFastStartUnit", "Hunter"
+ helptext      = _("\
+ Crusaders are highly disciplined mounted\
+@@ -1472,7 +1474,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
+ roles         = "DefendOk", "AttackFastStartUnit",
+                 "HutTech","BarbarianTech", "BarbarianBuildTech", "Hunter"
+ helptext      = _("\
+@@ -1508,7 +1510,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
+ roles         = "AttackFastStartUnit", "BarbarianBuildTech", "Hunter"
+ helptext      = _("\
+ Dragoons are mounted warriors carrying early firearms.\
+@@ -1543,7 +1545,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "Capturer", "FleshBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased"
+ roles         = "AttackFastStartUnit", "Hunter"
+ helptext      = _("\
+ Cavalry are mounted and highly trained soldiers.\
+@@ -1579,7 +1581,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "IronBased"
+ roles         = "DefendOk", "AttackFastStartUnit", "Hunter"
+ helptext      = _("\
+ Armors are motorized war wagons that are faster, stronger, and can take \
+@@ -1609,6 +1611,7 @@ attack        = 6
+ defense       = 1
+ hitpoints     = 10
+ firepower     = 1
++bombard_rate  = 5
+ move_rate     = 1
+ vision_radius_sq = 2
+ transport_cap = 0
+@@ -1618,7 +1621,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased"
+ roles         = "AttackStrongStartUnit"
+ helptext      = _("\
+ Catapults are large rock-throwing machines of war.\
+@@ -1651,6 +1654,7 @@ attack        = 8
+ defense       = 1
+ hitpoints     = 20
+ firepower     = 1
++bombard_rate  = 10
+ move_rate     = 1
+ vision_radius_sq = 2
+ transport_cap = 0
+@@ -1660,7 +1664,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "IronBased"
+ roles         = "AttackStrongStartUnit", "BarbarianTech", "BarbarianBuildTech"
+ helptext      = _("\
+ Cannons are large firearms that can fire heavy projectiles over long \
+@@ -1689,6 +1693,7 @@ attack        = 10
+ defense       = 2
+ hitpoints     = 20
+ firepower     = 1
++bombard_rate  = 14
+ move_rate     = 1
+ vision_radius_sq = 2
+ transport_cap = 0
+@@ -1698,7 +1703,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "CityBuster", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "CityBuster", "IronBased"
+ roles         = "AttackStrongStartUnit"
+ helptext      = _("\
+ The artillery is an upgraded cannon. As with its predecessors, it is a \
+@@ -1726,6 +1731,7 @@ attack        = 12
+ defense       = 2
+ hitpoints     = 30
+ firepower     = 1
++bombard_rate  = 20
+ move_rate     = 1
+ vision_radius_sq = 2
+ transport_cap = 0
+@@ -1735,7 +1741,7 @@ uk_shield     = 1
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Shield2Gold", "ShieldToGold", "CityBuster", "IronBased"
++flags         = "Shield2Gold", "ShieldToGold", "Collateral", "CityBuster", "IronBased"
+ roles         = "AttackStrongStartUnit"
+ helptext      = _("\
+ Howitzers are upgraded artillery with improved defensive as well as \
+-- 
+2.56.0
+

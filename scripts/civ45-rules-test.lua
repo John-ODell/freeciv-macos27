@@ -1,12 +1,13 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
--- Freeciv45 (civ45) stack and map rules test. Load it into a civ45 server before the game starts with
+-- Freeciv45 (civ45) stack, map and combat rules test. Load it into a civ45 server before the game starts with
 --   lua file scripts/civ45-rules-test.lua
 -- (scripts/civ45-rules-test.sh does that; an autogame reads no console input once it runs). It runs at the
 -- first turn start from turn 5 on, checks one more thing a turn later, and prints
 -- "FC45TEST PASS|FAIL <case>" lines to the server log and a final "FC45TEST DONE <n>/<total>".
 -- Moves and attacks go through the real "Unit Move" and "Attack" enablers via Unit:perform_action. The
 -- human-controlled "Tester" (made by the runner) owns the test units: with no client attached, nothing
--- moves them between turns. The Animal Kingdom is at war with everyone, so it owns the stack that is attacked.
+-- moves them between turns. The Animal Kingdom is at war with everyone, so it owns the units that are attacked.
+-- The combat cases (slice 2) use "Bombard 2", the siege bombardment, and "Bombard", the aircraft one.
 
 fc45_test = { passed = 0, total = 0 }
 
@@ -33,13 +34,18 @@ local function free(t)
   return find.unit_type("Warriors"):can_exist_at_tile(t)
 end
 
--- A free tile with n free neighbours; returns the tile and the neighbours.
-local function free_spot(n, used)
+-- A free tile with n free neighbours; returns the tile and the neighbours. With big, the tile and the
+-- neighbours must also carry a Big Land unit (siege units need a road in rough terrain).
+local function free_spot(n, used, big)
+  local ok = free
+  if big then
+    ok = function(t) return free(t) and find.unit_type("Howitzer"):can_exist_at_tile(t) end
+  end
   for t in whole_map_iterate() do
-    if free(t) and not used[t.id] then
+    if ok(t) and not used[t.id] then
       local around = {}
       for a in t:circle_iterate(2) do
-        if a.id ~= t.id and free(a) and not used[a.id] then around[#around + 1] = a end
+        if a.id ~= t.id and ok(a) and not used[a.id] then around[#around + 1] = a end
       end
       if #around >= n then
         used[t.id] = true
@@ -142,6 +148,125 @@ function fc45_rules_test_run()
     else
       check("only the defender dies when a stack outside a city loses (two of three left)", result)
     end
+  end
+
+  if tester ~= nil and animals ~= nil then fc45_combat_test_run(tester, animals, used) end
+end
+
+-- Slice 2, combat. Units of the Tester and of the Animal Kingdom are created next to each other on free land
+-- and act at once through the real enablers; what is checked is what is left on the tiles afterwards.
+function fc45_combat_test_run(tester, animals, used)
+  local attack, bombard, bombard_stack = find.action("Attack"), find.action("Bombard"), find.action("Bombard 2")
+  local function mk(owner, type_name, tile)
+    return edit.create_unit(owner, tile, find.unit_type(type_name), 0, nil, -1)
+  end
+  local function alive(owner, id) return find.unit(owner, id) ~= nil end
+  local function owned_by(tile, owner)
+    local n = 0
+    for u in tile:units_iterate() do if u.owner.id == owner.id then n = n + 1 end end
+    return n
+  end
+
+  -- Siege against a stack of three: all three live, and the bombardment wounded them (a Warriors then
+  -- beats the stack's defender, which is at 1 hit point: a Howitzer's 20 shots at attack 12 against defence
+  -- 1 leave a 10-hit-point Warriors at the 1-point floor almost surely, and a Warriors wins a round
+  -- against a 1-point defender before losing ten in about 99.9% of fights).
+  local spot, side = free_spot(2, used, true)
+  if spot == nil then
+    log.normal("FC45TEST SKIP no free land for the siege case")
+  else
+    mk(animals, "Warriors", spot); mk(animals, "Warriors", spot); mk(animals, "Warriors", spot)
+    local howitzer = mk(tester, "Howitzer", side[1])
+    local shot = howitzer:perform_action(bombard_stack, spot)
+    log.normal("FC45TEST siege: bombard %s, units left %d", tostring(shot), spot:num_units())
+    check("a siege unit bombards a three-unit stack and all three live", shot and spot:num_units() == 3)
+    local warriors = mk(tester, "Warriors", side[2])
+    local wid = warriors.id
+    local hit = warriors:perform_action(attack, spot)
+    log.normal("FC45TEST siege: warriors attack %s, units left %d, warriors alive %s", tostring(hit),
+               spot:num_units(), tostring(alive(tester, wid)))
+    check("a Warriors then beats the bombarded stack's defender (the stack was wounded)",
+          hit and owned_by(spot, animals) == 2 and alive(tester, wid))
+  end
+
+  -- Siege against a lone unit is refused (the enabler wants two or more units on the tile).
+  spot, side = free_spot(1, used, true)
+  if spot == nil then
+    log.normal("FC45TEST SKIP no free land for the lone-unit case")
+  else
+    mk(animals, "Warriors", spot)
+    local catapult = mk(tester, "Catapult", side[1])
+    local shot = catapult:perform_action(bombard_stack, spot)
+    check("a siege unit may not bombard a lone unit", shot == false and spot:num_units() == 1)
+
+    -- Aircraft bombard reaches one tile: a Bomber two tiles away is refused, an adjacent one is not,
+    -- and its bombardment does not kill the lone unit either.
+    local far = nil
+    for a in spot:circle_iterate(4) do
+      if spot:sq_distance(a) == 4 and free(a) and not used[a.id] then far = a; break end
+    end
+    if far == nil then
+      log.normal("FC45TEST SKIP no free tile two steps from the lone unit")
+    else
+      used[far.id] = true
+      local bomber = mk(tester, "Bomber", far)
+      check("a Bomber two tiles away may not bombard (range 1)",
+            bomber:perform_action(bombard, spot) == false and spot:num_units() == 1)
+    end
+    local near = mk(tester, "Bomber", side[1])
+    check("an adjacent Bomber bombards the lone unit, which lives",
+          near:perform_action(bombard, spot) == true and spot:num_units() == 1)
+  end
+
+  -- To the death: two Musketeers (20 hit points, firepower 1) need 20 lost rounds to die, so sandbox's
+  -- 15-round cap always left both alive; with no cap exactly one of them dies.
+  spot, side = free_spot(1, used)
+  if spot == nil then
+    log.normal("FC45TEST SKIP no free land for the duel")
+  else
+    mk(animals, "Musketeers", spot)
+    local m = mk(tester, "Musketeers", side[1])
+    local mid = m.id
+    check("Combat_Rounds is 0 for a Musketeers (fights to the death)",
+          effects.unit_bonus(m, nil, "Combat_Rounds") == 0)
+    local hit = m:perform_action(attack, spot)
+    local att_alive, def_alive = alive(tester, mid), owned_by(spot, animals) == 1
+    log.normal("FC45TEST duel: attack %s, attacker alive %s, defender alive %s", tostring(hit),
+               tostring(att_alive), tostring(def_alive))
+    check("an even fight is to the death: Musketeers against Musketeers leaves exactly one dead",
+          hit and att_alive ~= def_alive)
+  end
+
+  -- Withdraws: a Knights (10 hit points, cap 12 rounds) attacking a Musketeers (20 hit points) can never
+  -- kill it, and dies only if it loses 10 of at most 12 rounds (about 1 fight in 200 at attack 4 against
+  -- defence 3), so both are alive afterwards; two tries make a false failure negligible. Without the cap
+  -- (or with Combat_Rounds 0 for everyone) one of the two always dies.
+  local both = nil
+  for try = 1, 2 do
+    spot, side = free_spot(1, used)
+    if spot == nil then break end
+    mk(animals, "Musketeers", spot)
+    local k = mk(tester, "Knights", side[1])
+    local kid = k.id
+    if try == 1 then
+      check("Combat_Rounds is 12 for a Knights (Withdraws, 10 hit points)",
+            effects.unit_bonus(k, nil, "Combat_Rounds") == 12)
+      local d = mk(tester, "Dragoons", side[1])
+      check("Combat_Rounds is 24 for a Dragoons (Withdraws, 20 hit points)",
+            effects.unit_bonus(d, nil, "Combat_Rounds") == 24)
+      d:kill("disbanded", nil)
+    end
+    local hit = k:perform_action(attack, spot)
+    local att_alive, def_alive = alive(tester, kid), owned_by(spot, animals) == 1
+    log.normal("FC45TEST withdraw try %d: attack %s, knights alive %s, musketeers alive %s", try,
+               tostring(hit), tostring(att_alive), tostring(def_alive))
+    if hit and att_alive and def_alive then both = true; break end
+    both = false
+  end
+  if both == nil then
+    log.normal("FC45TEST SKIP no free land for the withdraw case")
+  else
+    check("a Withdraws attacker that cannot win breaks off: Knights and Musketeers both alive", both)
   end
 end
 
