@@ -6,10 +6,14 @@ Walks every Mach-O under Contents/MacOS, Contents/Frameworks and Contents/PlugIn
 outside the bundle and outside /usr/lib and /System (Homebrew, the install prefix, ...) is copied into
 Contents/Frameworks (whole .framework directories for frameworks, minus Headers), its LC_ID_DYLIB is set to
 @rpath/<leaf>, the referencing LC_LOAD_DYLIB is rewritten to @rpath/<leaf>, and every executable and library gets
-LC_RPATH entries for @executable_path/../Frameworks and @loader_path/../Frameworks. Dependencies that Homebrew
-already expresses relatively (@loader_path/libfoo.dylib, @rpath/QtX.framework/...) are resolved against the
-library's original location, copied under the referenced name, and left as they are. At the end every
-reference must resolve inside the bundle or the script exits non-zero.
+LC_RPATH entries for @executable_path/../Frameworks and @loader_path/../Frameworks. Every LC_RPATH that leads out
+of the bundle is deleted: absolute ones into Homebrew or the install prefix, and relative ones that only made sense
+where Homebrew keeps the library (Qt's plugins carry @loader_path/../../../../lib, which from Contents/PlugIns/<kind>/
+is a lib/ folder next to the .app; sdl2-compat's libSDL2 carries @loader_path/../../../../opt/sdl3/lib).
+Dependencies that Homebrew already expresses relatively (@loader_path/libfoo.dylib, @rpath/QtX.framework/...) are
+resolved against the library's original location, copied under the referenced name, and left as they are. At the
+end every reference and every LC_RPATH must resolve inside the bundle (or /usr/lib, /System) or the script exits
+non-zero.
 
 Usage: fix-dylibs.py <App.app> [--extra /path/to/lib.dylib ...]
 --extra copies libraries nothing links against directly (dlopen'ed ones such as libSDL3).
@@ -123,6 +127,20 @@ class Bundler:
                 return os.path.normpath(c)   # no '..' left, or split_framework() picks the wrong .framework
         return None
 
+    def rpath_outside(self, rp, p):
+        """True if LC_RPATH rp of bundle file p leads out of the bundle; /usr/lib and /System are fine"""
+        if rp.startswith('/'):
+            return external(rp)
+        app = os.path.realpath(self.app)
+        # dyld substitutes the file's own directory for @loader_path and the main executable's for
+        # @executable_path; every program in this bundle lives in Contents/MacOS
+        bases = {'@loader_path': os.path.dirname(p), '@executable_path': os.path.join(app, 'Contents', 'MacOS')}
+        for var, base in bases.items():
+            if rp == var or rp.startswith(var + '/'):
+                d = os.path.normpath(os.path.realpath(base) + rp[len(var):])
+                return d != app and not d.startswith(app + os.sep)
+        return True   # a plain relative path is taken from the working directory
+
     def run(self, extra):
         for sub in ('MacOS', 'Frameworks', 'PlugIns'):
             for root, _, files in os.walk(os.path.join(self.app, 'Contents', sub)):
@@ -177,8 +195,9 @@ class Bundler:
                 if rp not in have:
                     changes += ['-add_rpath', rp]
             for rp in have:
-                if rp.startswith('/opt/homebrew') or rp.startswith('/Users/') or rp.startswith('/usr/local'):
+                if self.rpath_outside(rp, p):
                     changes += ['-delete_rpath', rp]
+                    print(f"deleted LC_RPATH {rp} from {os.path.relpath(p, self.app)}")
             if changes:
                 sh('install_name_tool', *changes, p)
 
@@ -196,6 +215,9 @@ class Bundler:
                 elif dep.startswith('@loader_path/'):
                     if not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(p), dep[len('@loader_path/'):]))):
                         bad.append((p, dep + '  [unresolved]'))
+            for rp in rpaths(p):
+                if self.rpath_outside(rp, p):
+                    bad.append((p, f'LC_RPATH {rp}  [outside the bundle]'))
         if bad:
             for p, d in bad:
                 print(f"STILL EXTERNAL: {d}  (from {os.path.relpath(p, self.app)})")
