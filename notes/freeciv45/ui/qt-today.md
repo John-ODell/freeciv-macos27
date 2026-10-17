@@ -119,10 +119,10 @@ A left click on an own city tile (release, `SELECT_POPUP`) reaches `do_map_click
 `CU_POPUP_DIALOG` (`client/update_queue.c:623-627`) and the queue runs `qtg_real_city_dialog_popup`
 (`citydlg.cpp:3822-3832`): one `city_dialog` is built lazily and `setup_ui(pcity)` + `show()` + `raise()`.
 Ctrl+click on a city opens the quick production chooser instead and Ctrl+Shift+click the quick buy
-(`mapctrl.cpp:325-333`, `:418-425`; `shortcuts.cpp:72-75`). A city's units on the tile are reached by clicking
-the tile when the city is foreign or when a unit is in focus and the tile holds one unit (`control.c:2990-2993`).
-The dialog closes on its own only when the tileset changes (`mapview.cpp:1270-1271`); the X button hides it
-(`citydlg.cpp:1711`).
+(`mapctrl.cpp:325-333`, `:418-425`; `shortcuts.cpp:72-75`). A foreign city's visible unit is reached by clicking
+its tile: the stack chooser opens instead of the dialog (`control.c:2990-2993`). The X button only hides the
+dialog (`citydlg.cpp:1711`); the client destroys it on a tileset change (`mapview.cpp:1270-1271`) and through
+`qtg_popdown_city_dialog` and `qtg_popdown_all_city_dialogs` (`citydlg.cpp:3850-3867`).
 
 ### 3.2 What is drawn (observed, `qt-today-city.png`)
 
