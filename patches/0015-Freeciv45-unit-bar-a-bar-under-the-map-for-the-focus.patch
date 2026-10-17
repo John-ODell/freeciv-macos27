@@ -1,0 +1,1000 @@
+From 31e5b1411762c4fead317afc0a574a449220a0a9 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 18:37:34 -0500
+Subject: [PATCH] Freeciv45 unit bar: a bar under the map for the focus unit's
+ stack and its actions (Qt client, first slice)
+
+A unit_bar QFrame on the map view lists the focused unit's tile mates as
+chips (the focus chip ringed, a "+N" chip for the rest) and a row of action
+buttons for the common orders, with key hints; the bar is a client option
+(gui_qt_freeciv45_panels) and refreshes from the focus and unit-change
+hooks. The look comes from the theme stylesheets: the chips and buttons
+paint their boxes from the palette that background-color, color and
+selection-background-color set, the key hint colour is the hint_color
+property (qproperty-hint_color), and NightStalker and System give the bar
+a background of its own so its text reads over the map on either theme.
+---
+ client/gui-qt/Makefile.am                    |   5 +-
+ client/gui-qt/fc_client.cpp                  |   5 +
+ client/gui-qt/fc_client.h                    |   2 +
+ client/gui-qt/gui_main.cpp                   |  18 +
+ client/gui-qt/hudwidget.cpp                  |   4 +
+ client/gui-qt/mapview.cpp                    |   4 +
+ client/gui-qt/pages.cpp                      |   2 +
+ client/gui-qt/unitbar.cpp                    | 520 +++++++++++++++++++
+ client/gui-qt/unitbar.h                      | 122 +++++
+ client/options.c                             |   6 +
+ client/options.h                             |   1 +
+ data/themes/gui-qt/NightStalker/resource.qss |  24 +
+ data/themes/gui-qt/System/resource.qss       |  24 +
+ meson.build                                  |   4 +-
+ 14 files changed, 739 insertions(+), 2 deletions(-)
+ create mode 100644 client/gui-qt/unitbar.cpp
+ create mode 100644 client/gui-qt/unitbar.h
+
+diff --git a/client/gui-qt/Makefile.am b/client/gui-qt/Makefile.am
+index e52d258..18820d7 100644
+--- a/client/gui-qt/Makefile.am
++++ b/client/gui-qt/Makefile.am
+@@ -44,7 +44,8 @@ MOC_FILES = \
+ 	meta_shortcuts.cpp	\
+ 	meta_voteinfo_bar.cpp	\
+ 	meta_gotodlg.cpp	\
+-	meta_hudwidget.cpp
++	meta_hudwidget.cpp	\
++	meta_unitbar.cpp
+ 
+ libgui_qt_la_SOURCES = \
+ 	canvas.cpp	\
+@@ -116,6 +117,8 @@ libgui_qt_la_SOURCES = \
+ 	sprite.cpp	\
+ 	sprite.h	\
+ 	themes.cpp	\
++	unitbar.cpp	\
++	unitbar.h	\
+ 	voteinfo_bar.cpp \
+ 	voteinfo_bar.h	\
+ 	wldlg.cpp	\
+diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
+index 4fdb850..8b57da8 100644
+--- a/client/gui-qt/fc_client.cpp
++++ b/client/gui-qt/fc_client.cpp
+@@ -53,6 +53,7 @@
+ #include "optiondlg.h"
+ #include "sidebar.h"
+ #include "sprite.h"
++#include "unitbar.h"
+ 
+ fc_icons* fc_icons::m_instance = 0;
+ fc_font* fc_font::m_instance = 0;
+@@ -124,6 +125,7 @@ fc_client::fc_client() : QMainWindow()
+   gtd = NULL;
+   update_info_timer = nullptr;
+   unitinfo_wdg = nullptr;
++  unitbar_wdg = nullptr;
+   battlelog_wdg = nullptr;
+   interface_locked = false;
+   map_scale = 1.0f;
+@@ -1124,6 +1126,9 @@ void fc_game_tab_widget::resizeEvent(QResizeEvent *event)
+     side_disable_endturn(get_turn_done_button_state());
+     gui()->mapview_wdg->resize(event->size().width(),size.height());
+     gui()->unitinfo_wdg->update_actions(nullptr);
++    if (gui()->unitbar_wdg != nullptr) {
++      gui()->unitbar_wdg->place();
++    }
+   }
+   event->setAccepted(true);
+ }
+diff --git a/client/gui-qt/fc_client.h b/client/gui-qt/fc_client.h
+index 9e3cb6c..b881006 100644
+--- a/client/gui-qt/fc_client.h
++++ b/client/gui-qt/fc_client.h
+@@ -64,6 +64,7 @@ class fc_sidetax;
+ class fc_sidewidget;
+ class MainWindow;
+ class pregame_options;
++class unit_bar;
+ class QApplication;
+ class QDialog;
+ class QLabel;
+@@ -269,6 +270,7 @@ public:
+   trade_generator trade_gen;
+   qfc_rally_list rallies;
+   hud_units *unitinfo_wdg;
++  unit_bar *unitbar_wdg;
+   hud_battle_log *battlelog_wdg;
+   bool interface_locked;
+   fc_sidewidget *sw_cunit;
+diff --git a/client/gui-qt/gui_main.cpp b/client/gui-qt/gui_main.cpp
+index b5180fd..e1e5a88 100644
+--- a/client/gui-qt/gui_main.cpp
++++ b/client/gui-qt/gui_main.cpp
+@@ -43,6 +43,7 @@
+ 
+ // client
+ #include "client_main.h"
++#include "control.h"
+ #include "editgui_g.h"
+ #include "options.h"
+ #include "sprite.h"
+@@ -56,6 +57,7 @@
+ #include "gui_main.h"
+ #include "helpdlg.h"
+ #include "hudwidget.h"
++#include "unitbar.h"
+ #include "qtg_cxxside.h"
+ 
+ extern "C" {
+@@ -75,6 +77,7 @@ static void apply_font(struct option *poption);
+ static void apply_help_font(struct option *poption);
+ static void apply_notify_font(struct option *poption);
+ static void apply_sidebar(struct option *poption);
++static void apply_panels(struct option *poption);
+ static void apply_titlebar(struct option *poption);
+ static void apply_fullscreen(struct option *poption);
+ 
+@@ -262,6 +265,8 @@ void qtg_options_extra_init()
+                           apply_titlebar);
+   option_var_set_callback(gui_qt_sidebar_left,
+                           apply_sidebar);
++  option_var_set_callback(gui_qt_freeciv45_panels,
++                          apply_panels);
+   option_var_set_callback(gui_qt_fullscreen,
+                           apply_fullscreen);
+ #undef option_var_set_callback
+@@ -407,6 +412,19 @@ void apply_titlebar(struct option *poption)
+   gui()->show();
+ }
+ 
++/************************************************************************//**
++  Show the Freeciv45 unit bar or the old unit info widget
++****************************************************************************/
++static void apply_panels(struct option *poption)
++{
++  if (gui()->unitbar_wdg != nullptr) {
++    gui()->unitbar_wdg->refresh(get_units_in_focus());
++  }
++  if (gui()->unitinfo_wdg != nullptr) {
++    gui()->unitinfo_wdg->update_actions(nullptr);
++  }
++}
++
+ /**********************************************************************//**
+   Change sidebar position
+ **************************************************************************/
+diff --git a/client/gui-qt/hudwidget.cpp b/client/gui-qt/hudwidget.cpp
+index 3d2a54a..f841760 100644
+--- a/client/gui-qt/hudwidget.cpp
++++ b/client/gui-qt/hudwidget.cpp
+@@ -602,6 +602,10 @@ void hud_units::update_actions(unit_list *punits)
+                     * gui()->qt_settings.unit_info_pos_fy)));
+   QRect parent_frame = this->parentWidget()->geometry();
+ 
++  if (gui_options.gui_qt_freeciv45_panels) {
++    hide();
++    return;
++  }
+   punit = head_of_units_in_focus();
+   if (punit == nullptr) {
+     hide();
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index 6b9bcb0..68d327e 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -46,6 +46,7 @@
+ // gui-qt
+ #include "colors.h"
+ #include "fc_client.h"
++#include "unitbar.h"
+ #include "gui_main.h"
+ #include "mapview.h"
+ #include "qtg_cxxside.h"
+@@ -1065,6 +1066,9 @@ void fc_client::update_info_label(void)
+ **************************************************************************/
+ void update_unit_info_label(struct unit_list *punitlist)
+ {
++  if (gui()->unitbar_wdg != nullptr) {
++    gui()->unitbar_wdg->refresh(punitlist);
++  }
+   if (gui()->unitinfo_wdg->isVisible()) {
+     gui()->unitinfo_wdg->update_actions(nullptr);
+   }
+diff --git a/client/gui-qt/pages.cpp b/client/gui-qt/pages.cpp
+index f5c0860..addd678 100644
+--- a/client/gui-qt/pages.cpp
++++ b/client/gui-qt/pages.cpp
+@@ -50,6 +50,7 @@
+ #include "qtg_cxxside.h"
+ #include "sidebar.h"
+ #include "sprite.h"
++#include "unitbar.h"
+ #include "voteinfo_bar.h"
+ 
+ extern "C" {
+@@ -788,6 +789,7 @@ void fc_client::create_game_page()
+   x_vote->hide();
+   gtd = new goto_dialog(mapview_wdg);
+   gtd->hide();
++  unitbar_wdg = new unit_bar(mapview_wdg);
+ 
+   game_layout->addWidget(mapview_wdg, 1, 0);
+   game_main_widget->setLayout(game_layout);
+diff --git a/client/gui-qt/unitbar.cpp b/client/gui-qt/unitbar.cpp
+new file mode 100644
+index 0000000..6b692fa
+--- /dev/null
++++ b/client/gui-qt/unitbar.cpp
+@@ -0,0 +1,520 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++// Qt
++#include <QHBoxLayout>
++#include <QLabel>
++#include <QMouseEvent>
++#include <QPainter>
++#include <QPaintEvent>
++#include <QVBoxLayout>
++
++// utility
++#include "fcintl.h"
++
++// common
++#include "city.h"
++#include "game.h"
++#include "movement.h"
++#include "player.h"
++#include "tile.h"
++#include "unit.h"
++#include "unitlist.h"
++#include "unittype.h"
++
++// client
++#include "client_main.h"
++#include "control.h"
++#include "mapview_common.h"
++#include "options.h"
++#include "tilespec.h"
++
++// client/include
++extern "C" {
++#include "dialogs_g.h"
++}
++
++// gui-qt
++#include "canvas.h"
++#include "fc_client.h"
++#include "fonts.h"
++#include "menu.h"
++#include "shortcuts.h"
++#include "unitbar.h"
++
++// Logical sizes at 1x; the same at 2x, pixmaps carry the pixel ratio.
++static const int PORTRAIT_SIZE = 80;
++static const int PORTRAIT_IMAGE = 64;
++static const int HEALTH_BAR_HEIGHT = 6;
++static const int CHIP_SIZE = 30;
++static const int CHIP_IMAGE = 24;
++static const int MAX_CHIPS = 8;
++static const int ACTION_SIZE = 36;
++static const int ACTION_ICON = 24;
++static const int BAR_MARGIN = 12;
++
++/************************************************************************//**
++  Draw the unit as the map draws it, cropped to its ink, scaled to the given
++  logical height, with the widget's pixel ratio so the OS does not scale
++  it a second time.
++****************************************************************************/
++static QPixmap unit_pixmap(struct unit *punit, int height, qreal dpr)
++{
++  struct canvas *cv;
++  struct tileset *tmp = nullptr;
++  QImage img, cropped, scaled;
++  QPixmap pm;
++
++  if (unscaled_tileset) {
++    tmp = tileset;
++    tileset = unscaled_tileset;
++  }
++  cv = qtg_canvas_create(tileset_unit_width(tileset),
++                         tileset_unit_height(tileset));
++  cv->map_pixmap.fill(Qt::transparent);
++  put_unit(punit, cv, 1.0, 0, 0);
++  img = cv->map_pixmap.toImage();
++  cropped = img.copy(zealous_crop_rect(img));
++  qtg_canvas_free(cv);
++  if (tmp != nullptr) {
++    tileset = tmp;
++  }
++  if (cropped.isNull() || cropped.height() == 0) {
++    return pm;
++  }
++  scaled = cropped.scaledToHeight(qRound(height * dpr),
++                                  Qt::SmoothTransformation);
++  pm = QPixmap::fromImage(scaled);
++  pm.setDevicePixelRatio(dpr);
++
++  return pm;
++}
++
++/************************************************************************//**
++  Portrait: the unit image with a health bar under it.
++****************************************************************************/
++unit_portrait::unit_portrait(QWidget *parent) : QWidget(parent)
++{
++  hp = 0;
++  hp_max = 1;
++  setFixedSize(PORTRAIT_SIZE, PORTRAIT_SIZE);
++}
++
++/************************************************************************//**
++  Take the unit's image and hit points.
++****************************************************************************/
++void unit_portrait::set_unit(struct unit *punit)
++{
++  pix = unit_pixmap(punit, PORTRAIT_IMAGE, devicePixelRatioF());
++  hp = punit->hp;
++  hp_max = MAX(1, unit_type_get(punit)->hp);
++  update();
++}
++
++/************************************************************************//**
++  Paint the portrait: image centred above, bar below.
++****************************************************************************/
++void unit_portrait::paintEvent(QPaintEvent *event)
++{
++  QPainter p(this);
++  QRect bar(4, PORTRAIT_SIZE - HEALTH_BAR_HEIGHT - 4,
++            PORTRAIT_SIZE - 8, HEALTH_BAR_HEIGHT);
++  QColor fill;
++  int w;
++
++  p.setRenderHint(QPainter::SmoothPixmapTransform);
++  if (!pix.isNull()) {
++    QSizeF ls = pix.deviceIndependentSize();
++    int x = (PORTRAIT_SIZE - qRound(ls.width())) / 2;
++    int y = (bar.top() - 4 - qRound(ls.height())) / 2;
++
++    p.drawPixmap(x, y, pix);
++  }
++  p.setPen(Qt::NoPen);
++  p.setBrush(palette().color(QPalette::Shadow));
++  p.drawRoundedRect(bar, 2, 2);
++  w = (bar.width() * hp) / hp_max;
++  if (3 * hp > 2 * hp_max) {
++    fill = QColor(76, 175, 80);
++  } else if (3 * hp > hp_max) {
++    fill = QColor(255, 213, 74);
++  } else {
++    fill = QColor(194, 59, 59);
++  }
++  p.setBrush(fill);
++  p.drawRoundedRect(QRect(bar.left(), bar.top(), w, bar.height()), 2, 2);
++  event->accept();
++}
++
++/************************************************************************//**
++  A click on the portrait centres the map on the unit.
++****************************************************************************/
++void unit_portrait::mousePressEvent(QMouseEvent *event)
++{
++  if (event->button() == Qt::LeftButton) {
++    request_center_focus_unit();
++  }
++}
++
++/************************************************************************//**
++  Chip for one unit of the stack.
++****************************************************************************/
++unit_chip::unit_chip(struct unit *punit, bool focus,
++                     QWidget *parent) : QAbstractButton(parent)
++{
++  unit_id = punit->id;
++  more_count = 0;
++  focused = focus;
++  chip_tile = unit_tile(punit);
++  pix = unit_pixmap(punit, CHIP_IMAGE, devicePixelRatioF());
++  setFixedSize(CHIP_SIZE, CHIP_SIZE);
++  setToolTip(QString(unit_name_translation(punit))
++             + QString(" ") + QString(_("HP:%1/%2"))
++             .arg(QString::number(punit->hp),
++                  QString::number(unit_type_get(punit)->hp)));
++}
++
++/************************************************************************//**
++  Chip that stands for the units beyond the last shown one.
++****************************************************************************/
++unit_chip::unit_chip(int more, struct tile *ptile,
++                     QWidget *parent) : QAbstractButton(parent)
++{
++  unit_id = 0;
++  more_count = more;
++  focused = false;
++  chip_tile = ptile;
++  setFixedSize(CHIP_SIZE, CHIP_SIZE);
++  setToolTip(QString(PL_("%1 more unit on this tile",
++                         "%1 more units on this tile", more)).arg(more));
++}
++
++/************************************************************************//**
++  Paint the chip: rounded box, unit image or "+N", ring when focused.
++****************************************************************************/
++void unit_chip::paintEvent(QPaintEvent *event)
++{
++  QPainter p(this);
++  QRect box(1, 1, CHIP_SIZE - 2, CHIP_SIZE - 2);
++
++  p.setRenderHint(QPainter::Antialiasing);
++  p.setRenderHint(QPainter::SmoothPixmapTransform);
++  p.setPen(Qt::NoPen);
++  p.setBrush(palette().color(QPalette::Base));
++  p.drawRoundedRect(box, 4, 4);
++  if (more_count > 0) {
++    p.setPen(palette().color(QPalette::Text));
++    p.drawText(box, Qt::AlignCenter, QString("+%1").arg(more_count));
++  } else if (!pix.isNull()) {
++    QSizeF ls = pix.deviceIndependentSize();
++
++    p.drawPixmap((CHIP_SIZE - qRound(ls.width())) / 2,
++                 (CHIP_SIZE - qRound(ls.height())) / 2, pix);
++  }
++  if (focused) {
++    p.setPen(QPen(palette().color(QPalette::Highlight), 2));
++    p.setBrush(Qt::NoBrush);
++    p.drawRoundedRect(box, 4, 4);
++  }
++  event->accept();
++}
++
++/************************************************************************//**
++  Click: focus that unit alone; Shift+click adds it to the focus; the
++  "+N" chip opens the stack chooser.
++****************************************************************************/
++void unit_chip::mousePressEvent(QMouseEvent *event)
++{
++  struct unit *punit;
++
++  if (event->button() != Qt::LeftButton) {
++    return;
++  }
++  if (more_count > 0) {
++    unit_select_dialog_popup(chip_tile);
++    return;
++  }
++  punit = game_unit_by_number(unit_id);
++  if (punit == nullptr) {
++    return;
++  }
++  if (event->modifiers() & Qt::ShiftModifier) {
++    unit_focus_add(punit);
++  } else {
++    unit_focus_set(punit);
++  }
++}
++
++/************************************************************************//**
++  Action button: theme icon, key hint from the shortcut table, tooltip
++  from the menu.
++****************************************************************************/
++unit_action_button::unit_action_button(shortcut_id sid, const QString &icon,
++                                       QWidget *parent)
++  : QAbstractButton(parent)
++{
++  QPixmap *pm = fc_icons::instance()->get_pixmap(icon);
++  fc_shortcut *sc = fc_shortcuts::sc()->get_shortcut(sid);
++
++  action = sid;
++  if (pm != nullptr) {
++    icon_pix = *pm;
++    delete pm;
++  }
++  hint = shortcut_to_string(sc);
++  setFixedSize(ACTION_SIZE, ACTION_SIZE);
++  setToolTip(gui()->menu_bar->shortcut_2_menustring(sid));
++  setFocusPolicy(Qt::NoFocus);
++  connect(this, &QAbstractButton::clicked, this, &unit_action_button::run);
++}
++
++/************************************************************************//**
++  Paint: rounded box, icon on top, hint bottom right.
++****************************************************************************/
++void unit_action_button::paintEvent(QPaintEvent *event)
++{
++  QPainter p(this);
++  QRect box(1, 1, ACTION_SIZE - 2, ACTION_SIZE - 2);
++  QFont f = font();
++
++  p.setRenderHint(QPainter::Antialiasing);
++  p.setRenderHint(QPainter::SmoothPixmapTransform);
++  p.setPen(Qt::NoPen);
++  p.setBrush(palette().color(underMouse() ? QPalette::Highlight
++                                          : QPalette::Base));
++  p.drawRoundedRect(box, 4, 4);
++  if (!icon_pix.isNull()) {
++    p.drawPixmap(QRect((ACTION_SIZE - ACTION_ICON) / 2, 2,
++                       ACTION_ICON, ACTION_ICON), icon_pix);
++  }
++  f.setPixelSize(9);
++  f.setBold(true);
++  p.setFont(f);
++  p.setPen(hint_color);
++  p.drawText(box.adjusted(0, 0, -2, -1), Qt::AlignRight | Qt::AlignBottom,
++             hint);
++  event->accept();
++}
++
++/************************************************************************//**
++  Run the action the way the menu does.
++****************************************************************************/
++void unit_action_button::run()
++{
++  switch (action) {
++  case SC_FORTIFY:
++    key_unit_fortify();
++    break;
++  case SC_SENTRY:
++    key_unit_sentry();
++    break;
++  case SC_WAIT:
++    key_unit_wait();
++    break;
++  case SC_DONE_MOVING:
++    key_unit_done();
++    break;
++  default:
++    gui()->menu_bar->execute_shortcut(action);
++    break;
++  }
++}
++
++/************************************************************************//**
++  The bar itself.
++****************************************************************************/
++unit_bar::unit_bar(QWidget *parent) : QFrame(parent)
++{
++  QFont name_font = *fc_font::instance()->get_font(fonts::default_font);
++  QFont small_font = *fc_font::instance()->get_font(fonts::notify_label);
++
++  setObjectName("unit_bar");
++  setFrameShape(QFrame::StyledPanel);
++  main_row = new QHBoxLayout(this);
++  main_row->setContentsMargins(BAR_MARGIN, 8, BAR_MARGIN, 8);
++  main_row->setSpacing(BAR_MARGIN);
++
++  portrait = new unit_portrait(this);
++  main_row->addWidget(portrait, 0, Qt::AlignTop);
++
++  text_column = new QVBoxLayout;
++  text_column->setSpacing(2);
++  name_label = new QLabel(this);
++  name_font.setBold(true);
++  name_label->setFont(name_font);
++  sub_label = new QLabel(this);
++  sub_label->setFont(small_font);
++  stats_label = new QLabel(this);
++  stats_label->setFont(small_font);
++  text_column->addWidget(name_label);
++  text_column->addWidget(sub_label);
++  text_column->addWidget(stats_label);
++  text_column->addStretch(1);
++  main_row->addLayout(text_column);
++
++  right_column = new QVBoxLayout;
++  right_column->setSpacing(6);
++  chips_row = new QHBoxLayout;
++  chips_row->setSpacing(6);
++  chips_row->addStretch(1);
++  actions_row = new QHBoxLayout;
++  actions_row->setSpacing(6);
++  actions_row->addStretch(1);
++  right_column->addLayout(chips_row);
++  right_column->addLayout(actions_row);
++  main_row->addLayout(right_column);
++
++  setFocusPolicy(Qt::NoFocus);
++  hide();
++}
++
++/************************************************************************//**
++  Destructor
++****************************************************************************/
++unit_bar::~unit_bar()
++{
++}
++
++/************************************************************************//**
++  Remove the chips or action buttons from a row (its stretch stays).
++****************************************************************************/
++void unit_bar::clear_row(QHBoxLayout *row)
++{
++  QList<QWidget *> &list = (row == chips_row) ? chips : actions;
++
++  foreach (QWidget *w, list) {
++    row->removeWidget(w);
++    delete w;
++  }
++  list.clear();
++}
++
++/************************************************************************//**
++  Fill the bar for the head focus unit, or hide it when nothing is in
++  focus or the option is off.
++****************************************************************************/
++void unit_bar::refresh(struct unit_list *punits)
++{
++  struct unit *punit = head_of_units_in_focus();
++  const struct unit_type *ptype;
++  struct city *home;
++  const char *vet;
++  QString sub, stats;
++  int shown = 0;
++  int own = 0;
++  int focus_count;
++
++  if (punit == nullptr || !gui_options.gui_qt_freeciv45_panels
++      || !can_client_change_view()) {
++    hide();
++    return;
++  }
++
++  setUpdatesEnabled(false);
++  ptype = unit_type_get(punit);
++  portrait->set_unit(punit);
++  name_label->setText(QString(unit_name_translation(punit)));
++
++  vet = utype_veteran_name_translation(ptype, punit->veteran);
++  if (vet != nullptr) {
++    sub = QString(vet);
++  }
++  home = player_city_by_number(unit_owner(punit), punit->homecity);
++  if (home != nullptr) {
++    if (!sub.isEmpty()) {
++      sub += " ";
++    }
++    sub += QString("(%1)").arg(city_name_get(home));
++  }
++  sub_label->setText(sub);
++
++  // TRANS: unit bar: attack / defence, moves left, hit points
++  stats = QString(_("str %1 / %2   moves %3   hp %4/%5"))
++          .arg(QString::number(ptype->attack_strength),
++               QString::number(ptype->defense_strength),
++               QString(move_points_text(punit->moves_left, false)),
++               QString::number(punit->hp),
++               QString::number(ptype->hp));
++  focus_count = unit_list_size(get_units_in_focus());
++  if (focus_count > 1) {
++    stats += QString(PL_("   (Selected %1 unit)", "   (Selected %1 units)",
++                         focus_count)).arg(focus_count);
++  }
++  stats_label->setText(stats);
++
++  clear_row(chips_row);
++  unit_list_iterate(unit_tile(punit)->units, other) {
++    if (unit_owner(other) != client_player()) {
++      continue;
++    }
++    own++;
++    if (shown < MAX_CHIPS) {
++      bool focused = (unit_list_search(get_units_in_focus(), other) != nullptr);
++      unit_chip *chip = new unit_chip(other, focused, this);
++
++      chips_row->insertWidget(chips_row->count() - 1, chip);
++      chips.append(chip);
++      shown++;
++    }
++  } unit_list_iterate_end;
++  if (own > shown) {
++    unit_chip *chip = new unit_chip(own - shown, unit_tile(punit), this);
++
++    chips_row->insertWidget(chips_row->count() - 1, chip);
++    chips.append(chip);
++  }
++
++  clear_row(actions_row);
++  {
++    QList<unit_action_button *> row;
++
++    row.append(new unit_action_button(SC_GOTO, "goto", this));
++    if (can_unit_do_activity_client(punit, ACTIVITY_FORTIFYING)) {
++      row.append(new unit_action_button(SC_FORTIFY, "fortify", this));
++    }
++    if (can_unit_do_activity_client(punit, ACTIVITY_SENTRY)) {
++      row.append(new unit_action_button(SC_SENTRY, "sentry", this));
++    }
++    row.append(new unit_action_button(SC_WAIT, "wait", this));
++    row.append(new unit_action_button(SC_DONE_MOVING, "done", this));
++    foreach (unit_action_button *b, row) {
++      actions_row->insertWidget(actions_row->count() - 1, b);
++      actions.append(b);
++    }
++  }
++
++  setUpdatesEnabled(true);
++  adjustSize();
++  place();
++  show();
++  raise();
++}
++
++/************************************************************************//**
++  Centre the bar at the bottom of the map.
++****************************************************************************/
++void unit_bar::place()
++{
++  QWidget *parent = parentWidget();
++
++  if (parent == nullptr) {
++    return;
++  }
++  adjustSize();
++  move((parent->width() - width()) / 2,
++       parent->height() - height() - BAR_MARGIN);
++}
+diff --git a/client/gui-qt/unitbar.h b/client/gui-qt/unitbar.h
+new file mode 100644
+index 0000000..d483777
+--- /dev/null
++++ b/client/gui-qt/unitbar.h
+@@ -0,0 +1,122 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifndef FC__UNITBAR_H
++#define FC__UNITBAR_H
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++// Qt
++#include <QAbstractButton>
++#include <QFrame>
++#include <QList>
++#include <QPixmap>
++
++// gui-qt
++#include "shortcuts.h"
++
++class QHBoxLayout;
++class QLabel;
++class QVBoxLayout;
++struct tile;
++struct unit;
++struct unit_list;
++
++/****************************************************************************
++  The focus unit's portrait with a health bar under it
++****************************************************************************/
++class unit_portrait : public QWidget
++{
++  Q_OBJECT
++public:
++  unit_portrait(QWidget *parent);
++  void set_unit(struct unit *punit);
++protected:
++  void paintEvent(QPaintEvent *event);
++  void mousePressEvent(QMouseEvent *event);
++private:
++  QPixmap pix;
++  int hp;
++  int hp_max;
++};
++
++/****************************************************************************
++  One unit of the stack on the focus unit's tile
++****************************************************************************/
++class unit_chip : public QAbstractButton
++{
++  Q_OBJECT
++public:
++  unit_chip(struct unit *punit, bool focused, QWidget *parent);
++  unit_chip(int more, struct tile *ptile, QWidget *parent);
++protected:
++  void paintEvent(QPaintEvent *event);
++  void mousePressEvent(QMouseEvent *event);
++private:
++  QPixmap pix;
++  int unit_id;
++  int more_count;
++  bool focused;
++  struct tile *chip_tile;
++};
++
++/****************************************************************************
++  One action on the bar: icon, key hint, handler
++****************************************************************************/
++class unit_action_button : public QAbstractButton
++{
++  Q_OBJECT
++  // The key hint's colour; a theme sets it with qproperty-hint_color.
++  Q_PROPERTY(QColor hint_color MEMBER hint_color)
++public:
++  unit_action_button(shortcut_id sid, const QString &icon, QWidget *parent);
++protected:
++  void paintEvent(QPaintEvent *event);
++private slots:
++  void run();
++private:
++  shortcut_id action;
++  QPixmap icon_pix;
++  QString hint;
++  QColor hint_color = QColor(255, 213, 74);
++};
++
++/****************************************************************************
++  The bottom unit bar: follows the focus list, hidden when it is empty
++****************************************************************************/
++class unit_bar : public QFrame
++{
++  Q_OBJECT
++public:
++  unit_bar(QWidget *parent);
++  ~unit_bar();
++  void refresh(struct unit_list *punits);
++  void place();
++private:
++  void clear_row(QHBoxLayout *row);
++  unit_portrait *portrait;
++  QLabel *name_label;
++  QLabel *sub_label;
++  QLabel *stats_label;
++  QHBoxLayout *chips_row;
++  QHBoxLayout *actions_row;
++  QHBoxLayout *main_row;
++  QVBoxLayout *text_column;
++  QVBoxLayout *right_column;
++  QList<QWidget *> chips;
++  QList<QWidget *> actions;
++};
++
++#endif // FC__UNITBAR_H
+diff --git a/client/options.c b/client/options.c
+index b1c9733..e3baae6 100644
+--- a/client/options.c
++++ b/client/options.c
+@@ -379,6 +379,7 @@ struct client_options gui_options = {
+   .gui_qt_fullscreen = FALSE,
+   .gui_qt_show_preview = TRUE,
+   .gui_qt_sidebar_left = TRUE,
++  .gui_qt_freeciv45_panels = TRUE,
+   .gui_qt_default_theme_name = FC_QT_DEFAULT_THEME_NAME,
+   .gui_qt_font_default = "Sans Serif,10,-1,5,75,0,0,0,0,0",
+   .gui_qt_font_notify_label = "Monospace,8,-1,5,75,0,0,0,0,0",
+@@ -3294,6 +3295,11 @@ static struct client_option client_options[] = {
+                   N_("If this option is set, the sidebar will be to the left "
+                      "of the map, otherwise to the right."),
+                   COC_INTERFACE, GUI_QT, TRUE, NULL),
++  GEN_BOOL_OPTION(gui_qt_freeciv45_panels, N_("Freeciv45 unit bar"),
++                  N_("If this option is set, the selected unit is shown in "
++                     "a bar at the bottom of the map, with its stack and "
++                     "its common orders, instead of the unit info widget."),
++                  COC_INTERFACE, GUI_QT, TRUE, NULL),
+   GEN_STR_OPTION(gui_qt_wakeup_text,
+                  N_("Wake up sequence"),
+                  N_("String which will trigger sound in pregame page; "
+diff --git a/client/options.h b/client/options.h
+index b8a8c8d..5b46f30 100644
+--- a/client/options.h
++++ b/client/options.h
+@@ -406,6 +406,7 @@ struct client_options
+   bool gui_qt_show_preview;
+   bool gui_qt_allied_chat_only;
+   bool gui_qt_sidebar_left;
++  bool gui_qt_freeciv45_panels;
+   char gui_qt_default_theme_name[512];
+   char gui_qt_font_default[FONT_NAME_SIZE];
+   char gui_qt_font_notify_label[FONT_NAME_SIZE];
+diff --git a/data/themes/gui-qt/NightStalker/resource.qss b/data/themes/gui-qt/NightStalker/resource.qss
+index de28318..9076e78 100644
+--- a/data/themes/gui-qt/NightStalker/resource.qss
++++ b/data/themes/gui-qt/NightStalker/resource.qss
+@@ -873,3 +873,27 @@ tax_rates_dialog {
+   background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 rgba(0, 0, 75,195) stop:1 rgba(25, 25, 45, 225));
+   border: 2px solid #0000AA;
+ }
++
++/* Freeciv45 unit bar (client/gui-qt/unitbar.cpp). The chips and the action
++   buttons paint their own box from the palette, which these rules set:
++   background-color is the box, color the "+N" text, selection-background-color
++   the focus chip's ring and the action button's hover box. */
++unit_bar {
++  background-color: rgba(30, 34, 41, 225);
++  border: 1px solid #47515f;
++  border-radius: 6px;
++}
++unit_bar QLabel {
++  color: #e6e9ef;
++}
++unit_chip, unit_action_button {
++  background-color: #323843;
++  color: #e6e9ef;
++}
++unit_chip {
++  selection-background-color: #e6e9ef;
++}
++unit_action_button {
++  selection-background-color: #4f5b6d;
++  qproperty-hint_color: #f2c14e;
++}
+diff --git a/data/themes/gui-qt/System/resource.qss b/data/themes/gui-qt/System/resource.qss
+index 7f2f003..406cc06 100644
+--- a/data/themes/gui-qt/System/resource.qss
++++ b/data/themes/gui-qt/System/resource.qss
+@@ -94,3 +94,27 @@ hud_unit_combat {
+   selection-background-color: rgba(0, 0, 75,165);
+   alternate-background-color: #0000AA;
+ }
++
++/* Freeciv45 unit bar (client/gui-qt/unitbar.cpp): a light bar with dark text,
++   so the native palette's white boxes and black text stay readable over the
++   map. background-color is a chip's or button's box, color the "+N" text,
++   selection-background-color the focus ring and the button's hover box. */
++unit_bar {
++  background-color: rgba(244, 244, 246, 235);
++  border: 1px solid #b8bcc4;
++  border-radius: 6px;
++}
++unit_bar QLabel {
++  color: #1d1f23;
++}
++unit_chip, unit_action_button {
++  background-color: #dfe3e9;
++  color: #1d1f23;
++}
++unit_chip {
++  selection-background-color: #2f6fd6;
++}
++unit_action_button {
++  selection-background-color: #c3cfe2;
++  qproperty-hint_color: #9a4f00;
++}
+diff --git a/meson.build b/meson.build
+index d1721c2..e9258f7 100644
+--- a/meson.build
++++ b/meson.build
+@@ -3527,7 +3527,8 @@ mocced_client = qt_mod.preprocess(
+    'client/gui-qt/shortcuts.h',
+    'client/gui-qt/voteinfo_bar.h',
+    'client/gui-qt/gotodlg.h',
+-   'client/gui-qt/hudwidget.h']
++   'client/gui-qt/hudwidget.h',
++   'client/gui-qt/unitbar.h']
+   )
+ 
+ executable('freeciv-qt',
+@@ -3567,6 +3568,7 @@ executable('freeciv-qt',
+   'client/gui-qt/spaceshipdlg.cpp',
+   'client/gui-qt/sprite.cpp',
+   'client/gui-qt/themes.cpp',
++  'client/gui-qt/unitbar.cpp',
+   'client/gui-qt/voteinfo_bar.cpp',
+   'client/gui-qt/wldlg.cpp',
+   mocced_client, clienticon,
+-- 
+2.56.0
+

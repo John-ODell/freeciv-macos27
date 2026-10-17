@@ -59,8 +59,8 @@ git -C port/freeciv apply notes/freeciv45/ui/first-slice.diff
 scripts/build.sh qt
 ```
 
-Then run `~/freeciv-builds/qt/bin/freeciv-qt` as usual. To make it patch 0008 later: commit it on the fork's
-`macos27-port` branch and `git -C port/freeciv format-patch -1 -o ../../patches --start-number 8`, as the earlier
+Then run `~/freeciv-builds/qt/bin/freeciv-qt` as usual. It is patch 0015 (applied 2026-10-17, issue 123): it was committed on the fork's
+`macos27-port` branch and `git -C port/freeciv format-patch -1 -o ../../patches --start-number 15`, as the earlier
 patches were made (unverified: the exact command the ruleset lane uses).
 
 `git apply --check` passed against the fork at `6777c85` (the commit the scratch copy was taken from) and again at
@@ -99,9 +99,40 @@ not changed).
 ## Known rough edges, for the next slices
 
 - Chips and buttons take their box colour from `QPalette::Base`, which is light in the NightStalker theme, so they
-  show as white squares. Design section 2.5 wants them themed through `resource.qss`; the widgets have object
-  names (`unit_bar`) ready for it but no stylesheet yet.
+  showed as white squares. Fixed in patch 0015 (issue 99): see "Patch 0015" below.
 - The old `hud_units` is hidden by an early return in `update_actions`; its `unit_info_pos` settings and the
   drag handling still exist and are harmless.
 - The bar is a child of the map view and is placed on every resize, but it is not moved when the sidebar is
   toggled; the map view resizes then, so the resize event covers it (not verified).
+
+## Patch 0015 (2026-10-17, issue 123)
+
+The diff above went onto the fork's `macos27-port` as commit 31e5b14 and `patches/0015-Freeciv45-unit-bar-a-bar-under-the-map-for-the-focus.patch`,
+with three changes for issue 99 on top:
+
+- `unit_action_button` has a `hint_color` property (`Q_PROPERTY(QColor hint_color MEMBER hint_color)`, default the
+  old yellow), so a theme sets the key hint colour with `qproperty-hint_color`.
+- NightStalker's `resource.qss` gives `unit_bar` a dark translucent background, light label text, dark chip and
+  button boxes, a light focus ring and a yellow hint. The chips and buttons paint from their palette, which the
+  stylesheet's `background-color` (Base), `color` (Text) and `selection-background-color` (Highlight) set
+  (type selectors work because all three classes have `Q_OBJECT`).
+- System's `resource.qss` gives the bar a light background with dark text, since the native palette's black text
+  was unreadable on a see-through bar over the map. Classic and Necrophos have no rules yet.
+
+`git apply` was clean on the fork at 9c9b25c (after patch 0014). `scripts/build.sh qt` (with
+`FREECIV_SRC=port/freeciv`, since the worktree has no fork of its own) built and installed it with no warnings
+from the new files. The client then ran against the installed civ45 server (`set revealmap START`, 4 AIs,
+`dispersion 0`, seeds 42), with a throwaway `HOME` whose options file named the theme, and each client window was
+captured alone with `screencapture -l` at turn 1:
+
+| File | What it shows |
+|---|---|
+| `unit-bar-stack-nightstalker.png` | NightStalker, the start stack: the Explorer in focus (ringed), Workers and Settlers as chips, go to, sentry, wait and done with G, S, W and Space |
+| `unit-bar-unit-nightstalker.png` | NightStalker, `set startunits x`: one Explorer, one chip |
+| `unit-bar-stack-system.png` | System, the same stack on the light bar |
+| `unit-bar-window-nightstalker.jpg` | The whole window with the bar in place under the map |
+
+Not exercised: clicks on chips, buttons and the portrait, the hover colour, and a unit moving (the shell has no
+Accessibility grant for scripted input, and that setting is John's); the "+N" chip; a wounded unit; the option
+switched off; the Classic and Necrophos themes. The client log repeats `qt.svg: Invalid path data; path
+truncated.` from an icon the bar does not draw (unverified which).
