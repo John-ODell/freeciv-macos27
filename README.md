@@ -47,16 +47,18 @@ scripts/dmg.sh ~/freeciv-builds/apps/Freeciv.app   # Freeciv-<version>-arm64.dmg
 ```
 
 `build.sh gtk` / `build.sh sdl2` and `bundle.sh gtk4|gtk3.22|sdl2` do the same for the other clients.
-`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004, 0006 and 0008 to 0011: sandbox
+`test.sh ... --ruleset civ45` runs the autogame on civ45, the ruleset of Freeciv45 (patches 0003, 0004, 0006 and 0008 to 0012: sandbox
 plus stacks of units on a square map, siege units that wound whole stacks, fights to the death, six ways to win, upgrades
-that keep veterancy, draft units raised from a citizen and a tech tree in seven eras, see
+that keep veterancy, draft units raised from a citizen, a tech tree in seven eras and a roster of 76 units with one
+strength number and class counters, see
 `port/freeciv/data/civ45/README.civ45` after applying the patches); `--lua FILE` loads a script before the game starts,
 for example `scripts/civ45-combat-log.lua`, which logs every attack, bombardment, unit lost and city taken for counting
 (`scripts/civ45-combat-summary.py`), or `scripts/civ45-draft-log.lua`, which logs draft units built, cities shrunk by a
 build and units disbanded into a build (`scripts/civ45-draft-summary.py`, which also reads city sizes from a save), or
 `scripts/civ45-tech-log.lua`, which logs every tech learned (`scripts/civ45-tech-summary.py` gives the turn each era was
 reached); `scripts/tech-tree-check.py --ruleset port/freeciv/data/civ45/techs.ruleset` compares the ruleset's tree with
-the design note's;
+the design note's; `scripts/civ45-roster-summary.py LOG SAVE...` counts the units alive in a save by type and by era of
+the roster, the largest stack, and the attackers and casualties by type in a combat log;
 `test.sh` reads the installed data unless given `--data port/freeciv/data`, and its result line names the directory
 the ruleset came from. `--ruleset civ54` does the same for civ54, the copy of civ45's earlier one-unit-per-tile hex
 rules kept for the later Civ5-style game (patch 0005, `data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz`
@@ -71,7 +73,10 @@ and the ways to win: the victory settings, the domination script's counting and 
 `--extra "set endturn 6"` the score winner the ruleset names at the last turn; and the draft: the draft units and their tech
 gate, an upgrade in the Tester's own city that keeps the unit hardened and costs the computed price, and a Levy disbanded
 into the build, whose 30 shields the runner reads from the next autosave; and the tech tree: the six new techs, the
-three dropped ones and the cost of a root tech, Gunpowder and Fusion Power.
+three dropped ones and the cost of a root tech, Gunpowder and Fusion Power; and the roster: the renamed, dropped and
+new units, the class flags, Pikemen beating attacking War Elephants in at least 11 of 20 fights (the counter doubles
+them), and City Walls adding 100 against Melee and Siege attackers and nothing against Gun ones or the Howitzer; the
+runner also checks the 76 unit types for one strength and firepower 1.
 `--extra "set killstack enabled"` is the control run, which must fail. `scripts/civ54-rules-test.sh ~/freeciv-builds/qt` checks civ54's rules
 directly: it loads `scripts/civ54-rules-test.lua` into a civ54 game with one human-controlled player, moves a land
 unit, a fighter and destroyers at a coastal city at turn 12, runs the turn-start sweep, and exits 0 only if every case

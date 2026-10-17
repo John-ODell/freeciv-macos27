@@ -665,3 +665,95 @@ change what the AI builds.
   `a.machinery`, `a.compass` and `a.printing`.
 - Players start with no tech, so nobody irrigates before Agriculture (30 bulbs); the AI's opening was not
   measured separately.
+
+## 10. Roster slice: 76 units with one strength and class counters (2026-10-17, patch 0012)
+
+Built from `notes/freeciv45/design/units-and-upgrades.md` (PR 90) as issue 111, after the tech slice gave it Hunting,
+Archery, Machinery and Compass. Line numbers are the fork's at commit `c89dbfe` (upstream S3_2 `44e6898` plus patches
+0001 to 0012). The ruleset was generated from the design's tables by a script kept outside the repo; the tables are
+the source, `units.ruleset` the result.
+
+### What the ruleset says now
+
+| Rule | Freeciv form | Where |
+|---|---|---|
+| 76 unit types | The design's 72 (46 kept, 11 renamed, 16 new, with Settlers, Workers, Migrants, Engineers, Caravan, Freight, Diplomat, Spy and the three draft units among them) plus civ45's Fanatics, Leader, Barbarian Leader and Storm. Dropped: Jaguar Warrior, Immortal, Alpine Troops, Crusaders, Mechanic (Engineers take its Heal Unit enabler) | `data/civ45/units.ruleset`, 76 `[unit_*]`; `actions.ruleset:959` |
+| Renames keep the rule name | `name` is the shown name, `rule_name` the old one: Phalanx shows as Spearmen, Legion as Swordsmen, Elephants as War Elephants, Armor as Tank, Nuclear as Atom Bomb, Mech. Inf. as Mechanized Infantry, Helicopter as Gunship, AWACS as Radar Plane, AEGIS Cruiser as Missile Cruiser, SSBN as Missile Submarine, ICBM as Nuclear Missile; saves, the nuclear effects and the test scripts keep loading | each renamed `[unit_*]`; `effects.ruleset:531,541` (`UnitType Nuclear`) |
+| New units borrow art | `graphic` is `u.<name>` for the tileset session to draw; `graphic_alt` is the template's sprite (Scout from Explorer, Axemen from Phalanx, Horse Bowmen from Horsemen, War Galley from Trireme, Macebearers from Legion, Longbowmen and Crossbowmen from Archers, Trebuchet from Catapult, Grenadiers from Musketeers, Ship of the Line from Frigate, Infantry, Machine Gunners and Air Defence Infantry from Riflemen, Armoured Cars and Main Battle Tank from Armor, Jet Fighter from Fighter) | the 16 new `[unit_*]` |
+| One strength | `attack = defense` everywhere except attack 0 (Scout, Explorer, Transport, Carrier, Machine Gunners, Air Defence Infantry, Radar Plane) and defence 0 (Cruise Missile, Atom Bomb, Nuclear Missile); the runner checks it | `units.ruleset`; `scripts/civ45-rules-test.sh` |
+| Hit points and firepower | 10 in eras I to III, 20 in IV to VI, 30 for Tank, Battleship, Carrier and every era VII unit; `firepower = 1` throughout (Battleship and Carrier had 2) | each `[unit_*]` |
+| Class flags | Melee, Archer, Mounted, Gun, Siege, Armour, Naval, Recon: 8 more user flags, 35 of 50 used | `units.ruleset:57-64` |
+| Counters | Two `bonuses` rows on the unit that has the counter, both keyed on the target class: `DefenseMultiplierPct` N (its defence when that class attacks it) and `DefenseDividerPct` N (the target's defence when it attacks that class). Spearmen and Pikemen 100 against Mounted; War Elephants 50 against Mounted; Riflemen 25 against Mounted; Axemen, Macebearers and Crossbowmen 50 against Melee; Horsemen, Horse Bowmen, Knights, Dragoons and Cavalry 50 against Siege; Grenadiers 50 against Gun; Mechanized Infantry 50 and Gunship 100 against Armour; Machine Gunners 50 against Gun and Melee (defence only); Catapult −50 against Mounted (defence only); Air Defence Infantry ×4 against AirAttacker, Destroyer ×2 against Submarine and Missile Cruiser ×5 against AirAttacker as before | `common/combat.c:645-690` (`defense_multiplication`: the defender's rows against the attacker's flags, then the attacker's rows against the defender's flags, lines 681-684); each `[unit_*]` |
+| City attack | `Attack_Bonus` with `UnitType` and `CityTile Center Tile`: Swordsmen, Tank, Marines and Main Battle Tank 25; Catapult, Ship of the Line and Cruiser 50; Trebuchet, Cannon, Artillery, Battleship and Howitzer 100. Armoured Cars get 50 with `CityTile Center Tile FALSE` (the open field) | `effects.ruleset:2160-2323` |
+| City and terrain defence | `Fortify_Defense_Bonus` (fortified units and units in cities): Archers and Longbowmen 50 in a city, Longbowmen 25 on Hills, Partisan 50 on Hills and in Forest | `effects.ruleset`, the `effect_*_defence_*` sections |
+| Walls | `Defend_Bonus` 100 from City Walls keyed on the attacker's Melee, Archer, Mounted or Siege flag, the Siege one with `UnitType Howitzer FALSE`; the old row keyed on the Ground class is gone, so Gun, Armour, air and sea attackers get no wall against them. Great Wall and the 50 every city gives against Ground attackers are unchanged | `effects.ruleset:2122-2158` |
+| Resources | `Extra` reqs at `City` range on the extras the map has: Iron for Swordsmen, Macebearers, Crossbowmen, Knights, Cannon, Ship of the Line and Ironclad (Coal too), Ivory for War Elephants, Oil for Armoured Cars, Tank, Main Battle Tank, Mechanized Infantry, Gunship, the aircraft and the modern warships; Horses, Copper, Aluminium and Uranium wait for slice 4 | each `[unit_*]` `reqs` |
+| Transports | Trireme 2 (Land, Small Land), Caravel 1 (Small Land, fuel 0, no longer a barbarian boat: the server wants room for a leader and one man), Galleon 3, Frigate 1, Transport 8, Carrier 4 (air, missiles, helicopters), Missile Cruiser 2 and Missile Submarine 8 missiles | each `[unit_*]` |
+
+### What stock Freeciv cannot express
+
+- The counter as the design wrote it. The note said the divider row goes on every unit of the target class keyed on
+  a flag of the holder; the server reads the attacker's rows against the defender's flags (`common/combat.c:681-684`),
+  so that row cancelled the multiplier. The first build scored 8 Pikemen wins of 20 against War Elephants
+  (`logs/civ45-rules-20261017-165742`); with both rows on the holder it scored 14 of 20. The design note's row is
+  corrected in this slice, and no counter flags are needed.
+- A negative `DefenseMultiplierPct` (Catapult −50 against Mounted) loads; its effect in a fight was not measured.
+
+### Tests
+
+`scripts/civ45-rules-test.sh ~/freeciv-builds/qt --data port/freeciv/data`: 38/38 Lua cases and thirteen shell checks
+(`logs/civ45-rules-20261017-170246`). New: the eleven renames (`Unit_Type:name_translation`), the five dropped and the
+sixteen new types (`find.unit_type`), the class flags (`has_flag`), twenty fights of War Elephants (strength 8,
+Mounted, no Withdraws) against Pikemen (6, doubled to 12) on open grassland, won by the Pikemen at least 11 times
+(0.998 with the counter, 0.006 without; 14 observed), and City Walls read through `effects.unit_bonus` on units standing in
+Testerburg before and after `City:create_building`: +100 for Warriors and Catapult, +0 for Musketeers and Howitzer. The
+upgrade case now expects 225 gold (Musketeers 60 less half of Spearmen's 20, missing 50). The runner counts the 76 types,
+checks attack = defence unless one is 0 and firepower 1, and the four walls sections. On the installed slice 1 copy
+(the control) 13/25 Lua cases pass with 12 failures and the runner exits 1 (`logs/civ45-rules-20261017-170443`).
+`scripts/harness-test.sh` passes (`logs/harness-civ45-20261017-165453`).
+
+### Autogame
+
+Two 400-turn games, 10 AIs, seeds 42/42, with `scripts/civ45-combat-log.lua`, read by `scripts/civ45-roster-summary.py`
+(units alive by era of the design's tables, largest stack, attackers and casualties by type): one with diplomacy off
+(`logs/test-qt-20261017-170345`, the score winner at turn 400) and one with it allowed
+(`logs/test-qt-20261017-170345-73055`, cultural domination victory at turn 379). No Lua errors in either.
+
+| | Diplomacy off | Diplomacy allowed |
+|---|---|---|
+| attack-type actions, whole game | 894 | 477 |
+| in the first 200 turns (slice 2's 200-turn war game: 183) | 315 | 198 |
+| units killed in combat, whole game | 1,857 lost in all | 1,241 lost in all |
+| cities taken | 40 | 19 |
+| attackers, most used | Galleon 268, Spearmen 155, Riflemen 111, Frigate 92, Axemen 71, Pikemen 71, Musketeers 65 | Spearmen 204, Musketeers 85, Galleon 64, Pikemen 58, Militia 25, Dragoons 11, Axemen 9 |
+| killed in combat, most | Spearmen 295, Galleon 139, Settlers 117, Workers 97, Pikemen 48, Frigate 45, Axemen 34 | Spearmen 247, Workers 105, Settlers 63, Galleon 51, Pikemen 48, Musketeers 22, Dragoons 20 |
+
+Units alive by era (the design's tables; "other" is Settlers, Workers, Engineers, Diplomat, Caravan, Storm and the like):
+
+| Turn | Diplomacy off: I / II / III / IV / V / other | Diplomacy allowed: I / II / III / IV / V / other |
+|---|---|---|
+| 100 | 82 / 0 / 0 / 0 / 0 / 66 | 85 / 0 / 9 / 0 / 0 / 125 |
+| 200 | 105 / 3 / 47 / 35 / 0 / 76 | 211 / 2 / 10 / 15 / 0 / 132 |
+| 300 | 4 / 2 / 3 / 70 / 48 / 67 | 86 / 1 / 45 / 151 / 0 / 149 |
+| final | 0 / 2 / 0 / 27 / 146 / 72 (turn 401) | 25 / 0 / 11 / 236 / 49 / 132 (turn 379) |
+
+Observed: the AI builds and fights with the new units (Axemen, Horse Bowmen, Knights, Pikemen, Dragoons appear in both
+games); nobody fielded an era VI or VII unit, as the tech pace of section 9 predicts (era V from turn 302). Spearmen are
+the AI's most used attacker and most killed unit in both games: with attack equal to defence the default AI sends its
+cheapest unit, which is the first evidence on decision 7. Galleons (strength 4) made 268 attacks in the war game,
+hunting boats. The largest stack was 42 units on one tile at turn 379 in the diplomacy game (a port holding most of
+one player's 144 Galleons); 11 at turn 200. Era IV units carried the middle game in both (236 alive at the end of the
+diplomacy game).
+
+### Open
+
+- The design note's five questions for John are decision 11 in the plan: three draft units, hit points by era,
+  Cruiser and Ship of the Line both kept, Alpine Troops and Crusaders dropped, Transport cargo 8.
+- Sprites for civ45-tileset: `u.scout`, `u.axemen`, `u.horse_bowmen`, `u.war_galley`, `u.macebearers`, `u.longbowmen`,
+  `u.crossbowmen`, `u.trebuchet`, `u.grenadiers`, `u.ship_of_the_line`, `u.infantry`, `u.machine_gunners`,
+  `u.armoured_cars`, `u.main_battle_tank`, `u.air_defence_infantry`, `u.jet_fighter` (and the matching `m_`/`f_` sound
+  tags, which fall back to the generic ones).
+- The late roster (eras VI and VII) is untested in play until the AI reaches it; the counters above era III
+  (Grenadiers, Mechanized Infantry, Gunship, Machine Gunners) were checked only by the loader.
+- The AI's choice of attackers under one strength (decision 7), and the Catapult's negative row.
+- Horses, Copper, Aluminium and Uranium gating waits for the resources slice (4).

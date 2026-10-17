@@ -67,6 +67,17 @@ for u in levy militia conscripts; do
   if sed -n "/^\[unit_$u\]/,/^\[unit_/p" "$DATA/civ45/units.ruleset" | grep -q '^pop_cost      = 1'; then
     echo "FC45TEST PASS units.ruleset: $u costs one citizen"; else echo "FC45TEST FAIL units.ruleset: $u lacks pop_cost 1"; RC=1; fi
 done
+# The roster's shape (units.ruleset): 76 unit types, one strength number for attack and defence unless one of
+# them is 0, firepower 1 everywhere, and City Walls keyed on the attacker's class flag rather than the Ground class.
+UR="$DATA/civ45/units.ruleset"
+NU=$(grep -c '^\[unit_' "$UR")
+UNEVEN=$(awk '/^\[unit_/{n=$0} /^attack  *=/{a=$3} /^defense  *=/{d=$3} /^firepower  *=/{if ((a!=0 && d!=0 && a!=d) || $3!=1) print n}' "$UR" | tr '\n' ' ')
+if [ "$NU" = 76 ] && [ -z "$UNEVEN" ]; then echo "FC45TEST PASS units.ruleset: 76 unit types, one strength each, firepower 1"
+else echo "FC45TEST FAIL units.ruleset: $NU unit types, uneven or firepower not 1: $UNEVEN"; RC=1; fi
+NW=$(grep -c '^\[effect_city_walls_\(melee\|archer\|mounted\|siege\)\]' "$DATA/civ45/effects.ruleset")
+if [ "$NW" = 4 ] && ! grep -q '^\[effect_city_walls_0\]' "$DATA/civ45/effects.ruleset"; then
+  echo "FC45TEST PASS effects.ruleset: City Walls are keyed on the attacker's class flag"
+else echo "FC45TEST FAIL effects.ruleset: City Walls are not keyed on the attacker's class flag"; RC=1; fi
 # The 30 shields a disbanded Levy gave Testerburg, in the first autosave written after the test (the server
 # autosaves right after a turn's start, so that save holds the test's actions but not yet the city's own
 # production or a finished build, which would reset the count).
