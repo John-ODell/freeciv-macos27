@@ -57,6 +57,11 @@ for want in 'victory_min_points = 8000' 'victory_lead_pct   = 50' '"endturn", 47
             'upgrade_veteran_loss     = 0' 'autoupgrade_veteran_loss = 0'; do
   if grep -qF "$want" "$RS"; then echo "FC45TEST PASS game.ruleset has $want"; else echo "FC45TEST FAIL game.ruleset lacks $want"; RC=1; fi
 done
+# The tech tree's shape (techs.ruleset; Lua has no class getter): seven era classes, and every advance in one.
+TR="$DATA/civ45/techs.ruleset"
+NC=$(grep -c '^\[techclass_' "$TR"); NA=$(grep -c '^\[advance_' "$TR"); NCL=$(grep -c '^class    = "' "$TR")
+if [ "$NC" = 7 ] && [ "$NA" = 92 ] && [ "$NCL" = 92 ]; then echo "FC45TEST PASS techs.ruleset: 7 era classes, 92 advances, each in a class"
+else echo "FC45TEST FAIL techs.ruleset: $NC classes, $NA advances, $NCL with a class (want 7, 92, 92)"; RC=1; fi
 # The draft units cost a citizen (units.ruleset; Lua has no pop_cost getter).
 for u in levy militia conscripts; do
   if sed -n "/^\[unit_$u\]/,/^\[unit_/p" "$DATA/civ45/units.ruleset" | grep -q '^pop_cost      = 1'; then
