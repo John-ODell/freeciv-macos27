@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
--- Freeciv45 (civ45) stack, map, combat, victory, draft, tech and roster rules test. Load it into a civ45 server before the game starts with
+-- Freeciv45 (civ45) stack, map, combat, victory, draft, tech, roster and great people rules test. Load it into a civ45 server before the game starts with
 --   lua file scripts/civ45-rules-test.lua
 -- (scripts/civ45-rules-test.sh does that; an autogame reads no console input once it runs). It runs at the
 -- first turn start from turn 5 on, checks one more thing a turn later, and prints
@@ -155,6 +155,125 @@ function fc45_rules_test_run()
   if tester ~= nil then fc45_draft_test_run(tester, used) end
   if tester ~= nil then fc45_tech_test_run(tester) end
   if tester ~= nil and animals ~= nil then fc45_roster_test_run(tester, animals, used) end
+  if tester ~= nil then fc45_gp_test_run(tester, used) end
+end
+
+-- Great people (slice 11, notes/freeciv45/design/great-people.md): points, deeds, the golden age and the
+-- settling enabler, in Testerburg; the birth, the settling and the age's end are checked a turn later.
+function fc45_gp_test_run(tester, used)
+  local city = fc45_test.city
+  if city == nil then
+    log.normal("FC45TEST SKIP no Testerburg for the great people cases")
+    return
+  end
+  local deed, pledge = find.action("User Action 3"), find.action("User Action 4")
+  local function known_techs(p)
+    local n = 0
+    for i = 0, 300 do
+      local t = find.tech_type(i)
+      if t ~= nil and p:knows_tech(t) then n = n + 1 end
+    end
+    return n
+  end
+  local function gp(kind) return edit.create_unit(tester, city.tile, find.unit_type("Great " .. kind), 0, city, -1) end
+
+  -- Points: a Library gives 1 a turn, a University 2 more.
+  city:create_building(find.building_type("Library"))
+  local r1 = effects.city_bonus(city, "User_Effect_3")
+  city:create_building(find.building_type("University"))
+  local r2 = effects.city_bonus(city, "User_Effect_3")
+  check("great-person points: 1 a turn with a Library, 3 with a University too", r1 == 1 and r2 == 3)
+
+  -- Deeds, each by a fresh great person standing in the city.
+  local techs = known_techs(tester)
+  local sage = gp("Sage")
+  local did = sage:perform_action(deed)
+  check("a Great Sage's deed gives one tech", did and known_techs(tester) == techs + 1)
+  local gold = tester:gold()
+  local magnate = gp("Magnate")
+  did = magnate:perform_action(deed)
+  check("a Great Magnate's trade mission in its own city brings 100 gold plus 30 per citizen",
+        did and tester:gold() == gold + 100 + 30 * city.size)
+  local culture = city:culture()
+  local virtuoso = gp("Virtuoso")
+  did = virtuoso:perform_action(deed)
+  check("a Great Virtuoso's masterwork adds 400 to the city's culture", did and city:culture() == culture + 400)
+  local content = effects.city_bonus(city, "Make_Content")
+  local oracle = gp("Oracle")
+  did = oracle:perform_action(deed)
+  check("a Great Oracle founds the Sanctum, which makes one more citizen content",
+        did and city:has_building(find.building_type("Sanctum")) and effects.city_bonus(city, "Make_Content") == content + 1)
+
+  -- The Commander drills the stack on a free tile.
+  local spot = free_spot(0, used)
+  if spot == nil then
+    log.normal("FC45TEST SKIP no free land for the Commander case")
+  else
+    local w1 = edit.create_unit(tester, spot, find.unit_type("Warriors"), 0, nil, -1)
+    local w2 = edit.create_unit(tester, spot, find.unit_type("Warriors"), 0, nil, -1)
+    local commander = edit.create_unit(tester, spot, find.unit_type("Great Commander"), 0, nil, -1)
+    did = commander:perform_action(deed)
+    local v1, v2 = -1, -1
+    for u in spot:units_iterate() do
+      if u.id == w1.id then v1 = u.veteran end
+      if u.id == w2.id then v2 = u.veteran end
+    end
+    log.normal("FC45TEST commander: deed %s, veteran levels %d and %d", tostring(did), v1, v2)
+    check("a Great Commander's drill raises two green Warriors one veteran level", did and v1 == 1 and v2 == 1)
+  end
+
+  -- A golden age: one pledge starts the first, the second then needs two.
+  local pid = tester.id
+  local pledger = gp("Sage")
+  did = pledger:perform_action(pledge)
+  local golden = find.building_type("Golden Age")
+  local until_turn = rawget(_G, fc45_gp_key("fc45_golden_until_", pid))
+  log.normal("FC45TEST golden age: pledge %s, building %s, until %s, points percent %d", tostring(did),
+             tostring(city:has_building(golden)), tostring(until_turn), effects.city_bonus(city, "User_Effect_4"))
+  check("one pledge starts a golden age in the capital for ten turns, doubling great-person points",
+        did and city:has_building(golden) and until_turn == game.turn() + 10
+        and effects.city_bonus(city, "User_Effect_4") == 100)
+  local again = gp("Sage")
+  did = again:perform_action(pledge)
+  check("the second golden age needs two pledges: one counts and starts nothing",
+        did and rawget(_G, fc45_gp_key("fc45_golden_pledges_", pid)) == 1 and rawget(_G, fc45_gp_key("fc45_golden_count_", pid)) == 1)
+  -- End the age next turn, and put the city one turn short of a birth: both are checked then.
+  fc45_gp_set(fc45_gp_key("fc45_golden_until_", pid), game.turn() + 2)
+  fc45_gp_set(fc45_gp_key("fc45_gp_pool_", city.id), 148)
+  fc45_test.gp_city, fc45_test.gp_born = city.id, fc45_gp_get(fc45_gp_key("fc45_gp_born_", pid))
+end
+
+-- A turn later: the birth from the pool, the settling, and the age's end.
+function fc45_gp_test_later()
+  local city = find.city(nil, fc45_test.gp_city)
+  if city == nil then
+    log.normal("FC45TEST SKIP Testerburg is gone")
+    return
+  end
+  local tester, pid = city.owner, city.owner.id
+  local born = nil
+  for u in city.tile:units_iterate() do
+    if u.utype:rule_name() == "Great Sage" and u.owner.id == pid then born = u end
+  end
+  log.normal("FC45TEST birth: pool %s, born %s, sage %s", tostring(rawget(_G, fc45_gp_key("fc45_gp_pool_", city.id))),
+             tostring(rawget(_G, fc45_gp_key("fc45_gp_born_", pid))), tostring(born ~= nil))
+  check("a city one turn short of 150 points bears a Great Sage (its sources are a Library and a University), and the pool resets",
+        born ~= nil and fc45_gp_get(fc45_gp_key("fc45_gp_pool_", city.id)) == 0
+        and fc45_gp_get(fc45_gp_key("fc45_gp_born_", pid)) == fc45_test.gp_born + 1)
+  check("the golden age has ended a turn later", not city:has_building(find.building_type("Golden Age"))
+        and rawget(_G, fc45_gp_key("fc45_golden_until_", pid)) == nil)
+  if born ~= nil then
+    local join = find.action("Join City")
+    local size = city.size
+    local did = born:perform_action(join, city)
+    local resident = find.building_type("Resident Sage")
+    check("the Sage settles: the city grows by one and has a Resident Sage",
+          did and city.size == size + 1 and city:has_building(resident))
+    local second = edit.create_unit(tester, city.tile, find.unit_type("Great Sage"), 0, city, -1)
+    local joined = second:perform_action(join, city)
+    local deed = second:perform_action(find.action("User Action 3"))
+    check("a second Sage cannot settle where a Resident Sage is, but can do its deed", not joined and deed)
+  end
 end
 
 -- The tech tree: the six new techs exist and the three dropped ones do not, and the cost of a tech is what
@@ -508,6 +627,7 @@ function fc45_rules_test_turn(turn, year)
     fc45_rules_test_run()
   elseif fc45_test.stack_turn ~= nil and turn > fc45_test.stack_turn and fc45_test.done == nil then
     fc45_test.done = true
+    if fc45_test.gp_city ~= nil then fc45_gp_test_later() end
     -- Run with --extra "set endturn <this turn>": the ruleset names the best score the winner at the
     -- start of the last turn, and the runner checks the server's victory line against this one.
     if fc45_best_score ~= nil and tonumber(server.setting.get("endturn")) == turn then
