@@ -7,7 +7,9 @@ with the AI-asks hook: open the issue and build it with a random chooser. No mod
 the Mac lock exist." No model has been run. Everything below was tested with `scripts/harness-chooser.py`, which
 answers at random or always takes the AI's own pick.
 
-Line numbers are for the fork at patch 0007 (commit `ad3099a`, upstream S3_2 `44e6898` plus patches 0001 to 0007).
+Line numbers are for the fork at the first version of patch 0007 (commit `ad3099a`, upstream S3_2 `44e6898` plus
+patches 0001 to 0007). The review fixes of 2026-10-17 (issues 67 and 68, fork commit `09481ff`) add 2 lines before
+`harness_load` and 16 more inside it, so later lines sit about 18 further down.
 
 ## Why Freeciv needs a hook
 
@@ -29,7 +31,7 @@ chooser first.
 | --- | --- |
 | `FREECIV_HARNESS_DIR` | Directory for the exchange files. Unset or empty: the hook is off and the server behaves as before. |
 | `FREECIV_HARNESS_PLAYERS` | Comma-separated names of the players whose choices go to the chooser (case-insensitive). Required. |
-| `FREECIV_HARNESS_TIMEOUT` | Seconds to wait for each answer, default 60; 0 never waits, which records the questions only. |
+| `FREECIV_HARNESS_TIMEOUT` | Seconds to wait for each answer, default 60; 0 never waits, which records the questions only. A whole number from 0 to 86400 and nothing else: `abc`, `60s`, `-5` or more than a day are logged (`harness: FREECIV_HARNESS_TIMEOUT 'abc' isn't a number of seconds, so the hook stays off.`) and leave the hook off. |
 
 The variables are read once, on the first AI pass (`harness_load`, `ai/default/daiharness.c:119`). The server log
 then says `harness: on for Tested; files in DIR; an answer may take up to 60 s.`. Mistakes are logged and leave the
@@ -40,7 +42,8 @@ taken over.
 
 ## The files
 
-All three live in `FREECIV_HARNESS_DIR`. On start the hook removes a leftover `question.json` and `answer.txt`.
+All three live in `FREECIV_HARNESS_DIR`. On start the hook removes a leftover `question.json` and `answer.txt` and
+truncates `applied.jsonl`, so the record holds one server run and its ids start at 1 once.
 
 - `question.json`: one question at a time. It is written to `question.json.tmp` and renamed, so a reader never sees
   half a file, and it is removed once the question is settled (`harness_ask`, `:428`). Fields: `id` (1, 2, 3, ... per
@@ -51,7 +54,8 @@ All three live in `FREECIV_HARNESS_DIR`. On start the hook removes a leftover `q
   renamed. Anything after the two numbers is ignored (`sscanf`, `:498`), so a chooser may append its reason there; the
   hook doesn't record it. An answer for another id is logged and dropped. A line that isn't two numbers, a choice
   outside 1 to N, or no answer within the timeout keeps the AI's pick (the "fallback").
-- `applied.jsonl`: the hook's own record, one line per question:
+- `applied.jsonl`: the hook's own record, one line per question, appended before that question's `question.json`
+  is removed, so a watcher that reads the record when the question disappears sees its line:
   `{"id", "turn", "player", "kind", "reason", "city", "options", "choice", "value", "ai_value", "fallback", "secs"}`.
   A pick with only one option is applied without a question, so it gets no id and no line.
 
@@ -131,7 +135,11 @@ state with each.
 
 ## Testing
 
-`scripts/harness-test.sh ~/freeciv-builds/qt` plays a 50-turn civ45 game on a small map. It has one created AI
+`scripts/harness-test.sh ~/freeciv-builds/qt` plays a 50-turn civ45 game on a small map. It first prints the build
+under test (the server's path, version and file time, and the commit `port/freeciv` is at with whether its tree is
+clean), so a finding can name the commit it ran on; everything it prints is also kept in the run folder's
+`output.txt`. Ctrl-C, SIGTERM or an early exit kills the server and the chooser, and a server that dies before the
+game starts is reported as a FAILED line pointing at its `server.log`. The game has one created AI
 player, Tested, and two more from aifill, with seeds 7 and 7. The hook is on for Tested and
 `scripts/harness-chooser.py` answers. The chooser leaves question 3 unanswered and answers question 5 with an option
 that doesn't exist, so both fallbacks run, with a 3-second timeout. `scripts/harness-check.py` then checks:

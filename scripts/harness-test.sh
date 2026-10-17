@@ -11,10 +11,12 @@
 #   --mode     the chooser: random (default), or first, always the AI's own pick
 #   --ruleset  default civ45, read from --data, default port/freeciv/data (the source tree)
 # The chooser leaves question 3 unanswered and answers question 5 with an option that doesn't exist, so both
-# fallbacks run. No model is involved. Logs go to logs/harness-<ruleset>-<time>/.
+# fallbacks run. No model is involved. Logs go to logs/harness-<ruleset>-<time>/; output.txt there is a copy of
+# everything printed, starting with the server build and fork commit under test. Ctrl-C kills the server and
+# the chooser.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-[ $# -ge 1 ] || { sed -n '3,14p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+[ $# -ge 1 ] || { sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 P="$1"; shift
 BIN="$P"; [ -d "$P/bin" ] && BIN="$P/bin"
 TURNS=50; MODE=random; RULESET=civ45; DATA="$ROOT/port/freeciv/data"; PORT=5720
@@ -25,14 +27,53 @@ while [ $# -gt 0 ]; do case "$1" in
 DATA="$(cd "$DATA" 2>/dev/null && pwd)"
 [ -f "$DATA/$RULESET/game.ruleset" ] || { echo "no $RULESET/game.ruleset in ${DATA:-the --data directory}"; exit 1; }
 OUT="$ROOT/logs/harness-$RULESET-$(date +%Y%m%d-%H%M%S)"; [ -e "$OUT" ] && OUT="$OUT-$$"
-PLAYER=Tested; SKIP=3; BAD=5; FAIL=0
+PLAYER=Tested; SKIP=3; BAD=5; FAIL=0; SPID=""; CPID=""
 mkdir -p "$OUT/game/harness" "$OUT/control"
+
+# Everything printed from here on is also kept in the run folder, so a finding can quote it.
+exec > >(tee "$OUT/output.txt") 2>&1
+
+# stop_server: SIGTERM makes the server save and exit (server/srv_signal.c), but it saves from inside the signal
+# handler, and a save that lands in the middle of an AI pass can hang (seen once under are_reqs_active); after
+# 5 s it is killed outright.
+stop_server() {
+  local i
+  [ -n "$SPID" ] && kill "$SPID" 2>/dev/null || return 0
+  for i in 1 2 3 4 5; do kill -0 "$SPID" 2>/dev/null || return 0; sleep 1; done
+  kill -9 "$SPID" 2>/dev/null
+}
+# Whatever ends the script (Ctrl-C, SIGTERM, an error, the normal end) kills the server and the chooser it
+# started and closes the FIFO, so nothing is left listening on the ports. A broken pipe (writing to a server
+# that died) reports instead of killing the script.
+cleanup() {
+  [ -n "$CPID" ] && kill "$CPID" 2>/dev/null
+  stop_server
+  exec 3>&- 2>/dev/null
+  return 0
+}
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+trap 'rc=$?; cleanup; exit $rc' EXIT
+trap '' PIPE
+
 echo "== harness test: $RULESET from $DATA, $TURNS turns, chooser $MODE -> $OUT"
+# The build under test: which server, and which fork commit it should have come from.
+echo "server: $BIN/freeciv-server"
+echo "version: $("$BIN/freeciv-server" --version 2>&1 | head -1)"
+echo "built: $(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$BIN/freeciv-server")"
+if git -C "$ROOT/port/freeciv" rev-parse --short HEAD >/dev/null 2>&1; then
+  STATUS="$(git -C "$ROOT/port/freeciv" status --short)"
+  echo "fork: port/freeciv at $(git -C "$ROOT/port/freeciv" rev-parse --short HEAD), ${STATUS:+uncommitted changes:}${STATUS:-clean}"
+  [ -z "$STATUS" ] || echo "$STATUS" | sed 's/^/  /'
+else
+  echo "fork: port/freeciv is not a checkout"
+fi
 
 # start_game NAME TURNS PORT [VAR=VALUE...]: an autogame with one created AI player and two from aifill. Only the
-# variables given turn the hook on; any FREECIV_HARNESS_* in the caller's environment are dropped.
+# variables given turn the hook on; any FREECIV_HARNESS_* in the caller's environment are dropped. Returns 1,
+# with FAIL set, if the server died before the game could start.
 start_game() {
-  local dir="$OUT/$1" turns="$2" port="$3"; shift 3
+  local name="$1" dir="$OUT/$1" turns="$2" port="$3"; shift 3
   cat > "$dir/game.serv" <<EOS
 rulesetdir $RULESET
 set minplayers 0
@@ -52,7 +93,13 @@ EOS
   SPID=$!
   # 'start' has to come on the console after the settings file; keep the FIFO open until the server exits.
   exec 3>"$dir/fifo"
-  sleep 4; echo start >&3
+  sleep 4
+  # A server that died meanwhile (port in use, ruleset or data path error, a crash) has no stdin to write to.
+  if ! kill -0 "$SPID" 2>/dev/null || ! echo start >&3; then
+    echo "$name: FAILED, server exited at start (see $dir/server.log)"; FAIL=1
+    exec 3>&-; wait "$SPID" 2>/dev/null; SPID=""; rm -f "$dir/fifo"
+    return 1
+  fi
 }
 
 # wait_game NAME LIMIT: wait for the server to end the game and exit.
@@ -61,30 +108,35 @@ wait_game() {
   start=$(date +%s)
   while kill -0 "$SPID" 2>/dev/null; do
     if [ $(( $(date +%s) - start )) -gt "$limit" ]; then
-      echo "$1: FAILED, no end after ${limit}s, killing"; kill "$SPID"; FAIL=1; break
+      echo "$1: FAILED, no end after ${limit}s, killing"; FAIL=1
+      [ -n "$CPID" ] && kill "$CPID" 2>/dev/null
+      stop_server; break
     fi
     sleep 2
   done
-  wait "$SPID"; rc=$?
+  wait "$SPID"; rc=$?; SPID=""
   exec 3>&-; rm -f "$dir/fifo"
   [ "$rc" = 0 ] || { echo "$1: FAILED, server exit $rc (see $dir/server.log)"; FAIL=1; }
 }
 
 # 1. The harness game.
 START=$(date +%s)
-start_game game "$TURNS" "$PORT" FREECIV_HARNESS_DIR="$OUT/game/harness" FREECIV_HARNESS_PLAYERS="$PLAYER" \
-  FREECIV_HARNESS_TIMEOUT=3
-python3 "$ROOT/scripts/harness-chooser.py" "$OUT/game/harness" --mode "$MODE" --seed 7 \
-  --log "$OUT/game/chooser.jsonl" --keep "$OUT/game/questions" --skip "$SKIP" --bad "$BAD" --pid "$SPID" \
-  > "$OUT/game/chooser.out" 2>&1 &
-CPID=$!
-wait_game game 1200
-wait "$CPID" || { echo "chooser: FAILED (see $OUT/game/chooser.out)"; FAIL=1; }
+if start_game game "$TURNS" "$PORT" FREECIV_HARNESS_DIR="$OUT/game/harness" FREECIV_HARNESS_PLAYERS="$PLAYER" \
+     FREECIV_HARNESS_TIMEOUT=3; then
+  python3 "$ROOT/scripts/harness-chooser.py" "$OUT/game/harness" --mode "$MODE" --seed 7 \
+    --log "$OUT/game/chooser.jsonl" --keep "$OUT/game/questions" --skip "$SKIP" --bad "$BAD" --pid "$SPID" \
+    > "$OUT/game/chooser.out" 2>&1 &
+  CPID=$!
+  wait_game game 1200
+  wait "$CPID" || { echo "chooser: FAILED (see $OUT/game/chooser.out)"; FAIL=1; }
+  CPID=""
+fi
 SECS=$(( $(date +%s) - START ))
 
 # 2. The control game: the same settings and seeds, without the harness variables.
-start_game control "$TURNS" "$((PORT+1))"
-wait_game control 1200
+if start_game control "$TURNS" "$((PORT+1))"; then
+  wait_game control 1200
+fi
 
 echo "game: ${SECS}s, $(grep -c 'harness: q' "$OUT/game/server.log") decisions in the server log"
 if grep -q "harness: on for $PLAYER" "$OUT/game/server.log"; then echo "hook: ok, on for $PLAYER"

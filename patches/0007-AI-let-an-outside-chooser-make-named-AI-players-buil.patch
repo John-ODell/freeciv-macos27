@@ -1,4 +1,4 @@
-From ad3099a94a67440846a0593e80908f32a88e8242 Mon Sep 17 00:00:00 2001
+From 09481fff2fb736fb44c1390ab4f2168649078c63 Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Fri, 16 Oct 2026 19:51:28 -0500
 Subject: [PATCH] AI: let an outside chooser make named AI players' build and
@@ -24,10 +24,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  ai/default/Makefile.am  |    2 +
  ai/default/aitech.c     |   24 +-
  ai/default/daicity.c    |   12 +
- ai/default/daiharness.c | 1110 +++++++++++++++++++++++++++++++++++++++
+ ai/default/daiharness.c | 1129 +++++++++++++++++++++++++++++++++++++++
  ai/default/daiharness.h |   37 ++
  meson.build             |    1 +
- 6 files changed, 1183 insertions(+), 3 deletions(-)
+ 6 files changed, 1202 insertions(+), 3 deletions(-)
  create mode 100644 ai/default/daiharness.c
  create mode 100644 ai/default/daiharness.h
 
@@ -146,10 +146,10 @@ index 89990e2..d1ddcdb 100644
  }
 diff --git a/ai/default/daiharness.c b/ai/default/daiharness.c
 new file mode 100644
-index 0000000..1b8f5a9
+index 0000000..0ebf997
 --- /dev/null
 +++ b/ai/default/daiharness.c
-@@ -0,0 +1,1110 @@
+@@ -0,0 +1,1129 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -167,6 +167,7 @@ index 0000000..1b8f5a9
 +#include <fc_config.h>
 +#endif
 +
++#include <errno.h>
 +#include <stdio.h>
 +#include <stdlib.h>
 +#include <string.h>
@@ -205,6 +206,7 @@ index 0000000..1b8f5a9
 +
 +#define HARNESS_MAX_OPTIONS 8
 +#define HARNESS_DEFAULT_TIMEOUT 60      /* Seconds to wait for an answer */
++#define HARNESS_MAX_TIMEOUT 86400       /* A day; more is a typo */
 +#define HARNESS_POLL_USEC 20000
 +#define HARNESS_THREAT_RADIUS 3
 +#define HARNESS_CONVERT_TURNS 5         /* Coinage turns before asking again */
@@ -293,7 +295,21 @@ index 0000000..1b8f5a9
 +  }
 +  timeout = getenv("FREECIV_HARNESS_TIMEOUT");
 +  if (timeout != NULL && timeout[0] != '\0') {
-+    harness.timeout = MAX(0, atoi(timeout));
++    char *end;
++    long secs;
++
++    /* A plain number of seconds, 0 to a day. atoi() would read "abc", "-5"
++     * or "2147483648" as 0, which is "never wait": every question would
++     * then fall back to the AI's pick and the game would look healthy. */
++    errno = 0;
++    secs = strtol(timeout, &end, 10);
++    if (end == timeout || *end != '\0' || errno != 0
++        || secs < 0 || secs > HARNESS_MAX_TIMEOUT) {
++      log_error("harness: FREECIV_HARNESS_TIMEOUT '%s' isn't a number of "
++                "seconds, so the hook stays off.", timeout);
++      return;
++    }
++    harness.timeout = (int) secs;
 +  }
 +  fc_strlcpy(harness.dir, dir, sizeof(harness.dir));
 +
@@ -326,8 +342,9 @@ index 0000000..1b8f5a9
 +  harness_path(path, sizeof(path), "answer.txt");
 +  fc_remove(path);
 +
++  /* One server run per record: ids start at 1 again in each run. */
 +  harness_path(path, sizeof(path), "applied.jsonl");
-+  f = fc_fopen(path, "a");
++  f = fc_fopen(path, "w");
 +  if (f == NULL) {
 +    log_error("harness: can't write in %s, so the hook stays off.",
 +              harness.dir);
@@ -669,8 +686,6 @@ index 0000000..1b8f5a9
 +      fc_usleep(HARNESS_POLL_USEC);
 +    }
 +  }
-+  fc_remove(qpath);
-+
 +  log_normal("harness: q%d turn %d %s %s%s%s: %d options, %s %d (%s)%s%s",
 +             id, game.info.turn, player_name(pplayer), kind,
 +             pcity != NULL ? " " : "",
@@ -710,6 +725,10 @@ index 0000000..1b8f5a9
 +    fclose(f);
 +    astr_free(&line);
 +  }
++  /* The record is complete before the question disappears, so a watcher
++   * that reads applied.jsonl the moment question.json goes is never a line
++   * short. */
++  fc_remove(qpath);
 +
 +  return chosen;
 +}
