@@ -7,7 +7,7 @@ with the AI-asks hook: open the issue and build it with a random chooser. No mod
 the Mac lock exist." No model has been run. Everything below was tested with `scripts/harness-chooser.py`, which
 answers at random or always takes the AI's own pick.
 
-Line numbers are for the fork at patch 0007 (commit `eec5fcb`, upstream S3_2 `44e6898` plus patches 0001 to 0007).
+Line numbers are for the fork at patch 0007 (commit `ad3099a`, upstream S3_2 `44e6898` plus patches 0001 to 0007).
 
 ## Why Freeciv needs a hook
 
@@ -31,7 +31,7 @@ chooser first.
 | `FREECIV_HARNESS_PLAYERS` | Comma-separated names of the players whose choices go to the chooser (case-insensitive). Required. |
 | `FREECIV_HARNESS_TIMEOUT` | Seconds to wait for each answer, default 60; 0 never waits, which records the questions only. |
 
-The variables are read once, on the first AI pass (`harness_load`, `ai/default/daiharness.c:115`). The server log
+The variables are read once, on the first AI pass (`harness_load`, `ai/default/daiharness.c:119`). The server log
 then says `harness: on for Tested; files in DIR; an answer may take up to 60 s.`. Mistakes are logged and leave the
 hook off: the players variable missing or empty, or a directory it can't write in. A listed name that is no player of
 the game, or a player that isn't AI-controlled, is logged once (`harness: there is no player named X.`,
@@ -43,12 +43,12 @@ taken over.
 All three live in `FREECIV_HARNESS_DIR`. On start the hook removes a leftover `question.json` and `answer.txt`.
 
 - `question.json`: one question at a time. It is written to `question.json.tmp` and renamed, so a reader never sees
-  half a file, and it is removed once the question is settled (`harness_ask`, `:424`). Fields: `id` (1, 2, 3, ... per
+  half a file, and it is removed once the question is settled (`harness_ask`, `:428`). Fields: `id` (1, 2, 3, ... per
   server run), `game` (`"freeciv"`), `ruleset`, `turn`, `year`, `player`, `kind` (`build` or `research`), `reason`
   (see below), `city` (null for research), `question` (one sentence of context), `options` (2 to 8, each with `n`,
   `label`, `value`, the rule name, and `ai`, true only for option 1, the AI's own pick) and `state` (the status page).
 - `answer.txt`: the chooser writes one line, `ID CHOICE`, for example `7 2`, best written to a temporary file and
-  renamed. Anything after the two numbers is ignored (`sscanf`, `:494`), so a chooser may append its reason there; the
+  renamed. Anything after the two numbers is ignored (`sscanf`, `:498`), so a chooser may append its reason there; the
   hook doesn't record it. An answer for another id is logged and dropped. A line that isn't two numbers, a choice
   outside 1 to N, or no answer within the timeout keeps the AI's pick (the "fallback").
 - `applied.jsonl`: the hook's own record, one line per question:
@@ -79,7 +79,7 @@ Between decisions the chooser's pick stays. For a listed player's city the AI's 
 decision is due (`ai/default/daicity.c:266-270`), the same way it already does for a player who is away
 (`:259-264`).
 
-A city's build is due (`harness_build_reason`, `daiharness.c:602`) when:
+A city's build is due (`harness_build_reason`, `daiharness.c:606`) when:
 
 | Reason | When |
 | --- | --- |
@@ -94,13 +94,14 @@ without touching `turn_last_built` (`server/cityturn.c:2612-2627`; `turn_last_bu
 building is built). Without the rule, the first test's Stockholm stayed on Coinage from turn 21 to the end.
 
 When a build is due, the AI computes its choice as usual. Just before it would change the build, the hook puts the
-menu to the chooser (`dai_harness_choose_build`, `daiharness.c:854`, called at `daicity.c:355-358`). With only one
+menu to the chooser (`dai_harness_choose_build`, `daiharness.c:858`, called at `daicity.c:355-358`). With only one
 option there is nothing to ask, and the pick is recorded without a question.
 
-The research is due (`dai_harness_research_due`, `:906`) the first time (`first`), after every new tech
-(`discovery`), and when something else changed it (`changed`). The hook replaces the AI's own switch rule
-(`ai/default/aitech.c:362-374`); the AI still sets its long-term tech goal. A pick made on the turn after a
-discovery loses nothing. The server keeps the bulbs left over from the discovery as free bulbs
+The research is due (`dai_harness_research_due`, `:910`) the first time (`first`), after every new tech
+(`discovery`), and when something else changed it (`changed`). The hook remembers a pick per research, not per
+player, so teammates who pool their research (the default) are asked once between them. The hook replaces the AI's
+own switch rule (`ai/default/aitech.c:362-374`); the AI still sets its long-term tech goal. A pick made on the turn
+after a discovery loses nothing. The server keeps the bulbs left over from the discovery as free bulbs
 (`server/techtools.c:411-415`) until just after the AI pass (`server/srv_main.c:1489`), and `choose_tech` charges
 `techpenalty` only on bulbs beyond those (`server/techtools.c:1046-1059`). A `changed` pick in the middle of a tech
 pays the usual penalty (derived from the same lines).
@@ -109,7 +110,7 @@ Everything else stays with the AI: unit moves, city sites, workers, taxes and ra
 
 ## The menus
 
-Build (`harness_build_options`, `:750`), at most 8, each one the city can build now, no repeats:
+Build (`harness_build_options`, `:754`), at most 8, each one the city can build now, no repeats:
 1. the AI's pick;
 2. the current build;
 3. the two buildings the advisor wants most (`building_want` above 0);
@@ -119,11 +120,11 @@ Build (`harness_build_options`, `:750`), at most 8, each one the city can build 
 Labels give the cost and turns, plus attack, defence and moves for units and gold upkeep for buildings. Coinage's
 label says it converts the shields.
 
-Research (`harness_research_options`, `:991`): the AI's pick first, then every tech that can be researched now, in the
+Research (`harness_research_options`, `:995`): the AI's pick first, then every tech that can be researched now, in the
 AI's own order of value, 8 at most. Labels give bulbs, turns at last turn's rate (left out when no bulbs came in) and
 up to four things the tech leads to: units, buildings, then techs.
 
-The status page (`harness_status`, `:324`) has the same layout for every question: turn and year, leader, nation and
+The status page (`harness_status`, `:328`) has the same layout for every question: turn and year, leader, nation and
 government; gold, income, rates and score; research and bulbs; one line per city (surpluses, build and progress,
 citizens' moods, units there, enemy units within 3 tiles); unit counts by type; other players and the diplomatic
 state with each.
@@ -150,8 +151,8 @@ score in both games is printed, not checked. `--mode first` makes the chooser al
 
 | Run (2026-10-16, `logs/`, git-ignored) | Decisions | Builds | Research | Score with hook | Score in control |
 | --- | --- | --- | --- | --- | --- |
-| random, `harness-civ45-20261016-195035` | 20 | 16 | 4 | 24 | 23 |
-| AI's pick, `harness-civ45-20261016-195051` | 19 | 13 | 6 | 23 | 23 |
+| random, `harness-civ45-20261016-195835` | 20 | 16 | 4 | 24 | 23 |
+| AI's pick, `harness-civ45-20261016-195851` | 19 | 13 | 6 | 23 | 23 |
 
 Both passed every check. Each 50-turn game took about 10 seconds; every answered question took under a second
 (`secs` 0) and the unanswered one the full 3. Reasons in the random run: 10 finished, 5 new, 3 discovery, 1 first,
@@ -164,17 +165,27 @@ Both passed every check. Each 50-turn game took about 10 seconds; every answered
 2. City names with accents lost their letters in the JSON (`Lödöse` came out as `Ldse`). In 3.2, `fc_strlcpy`
    copies through ICU, which drops invalid UTF-8 (`utility/support.c:791-830`), and `astr_add` copies with it
    (`utility/astring.c:258`). The JSON writer added one byte at a time, so each half of a two-byte letter was dropped.
-   It now copies text in runs (`harness_json_string`, `daiharness.c:236`). The checker had missed it because it
+   It now copies text in runs (`harness_json_string`, `daiharness.c:240`). The checker had missed it because it
    skipped save cities no decision named; it now matches every named city against the saves.
 3. Research labels at 0 bulbs a turn read "about never at this rate"; the turns are now left out then.
 4. The control check counted the word "harness" in the log, which also matched the log folder's name in two paths.
    It now counts `harness: `.
+5. The review found that the hook remembered research picks per player. Two named teammates sharing a research
+   would each have seen the other's pick as a change, and asked again every turn, paying the switch penalty each
+   time. Picks are now kept per research (`research_number()`), in an array sized for player and team slots
+   (`common/research.c:51`).
+6. The checker reported the two fallbacks as tested even in a game too short to reach question 5. It now fails then
+   (checked with `--turns 5`: 2 decisions, `answers: FAILED, no question 3,5 to test a fallback on`).
 
 ## Limits
 
 - Builds and research only. City sites and war or peace, which the PM's first plan also listed, would need hooks
   of their own.
 - A long build is asked again only when it finishes or the game changes it.
+- A city in danger is asked every turn while the AI would build something else, so a war can bring a question per
+  city per turn.
+- With pooled research, a named player's teammates should be named too: an unnamed teammate's AI can change the
+  shared research, and the named player is then asked again (`changed`).
 - The picks live in the server's memory. A game loaded from a save asks about every city and the research again
   once.
 - One question at a time per server. With several players named, their questions take turns.

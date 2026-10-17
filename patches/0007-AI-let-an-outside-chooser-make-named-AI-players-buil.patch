@@ -1,4 +1,4 @@
-From eec5fcbdc04b7ef1c77300798c7d3a034dd0aa3b Mon Sep 17 00:00:00 2001
+From ad3099a94a67440846a0593e80908f32a88e8242 Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Fri, 16 Oct 2026 19:51:28 -0500
 Subject: [PATCH] AI: let an outside chooser make named AI players' build and
@@ -24,10 +24,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  ai/default/Makefile.am  |    2 +
  ai/default/aitech.c     |   24 +-
  ai/default/daicity.c    |   12 +
- ai/default/daiharness.c | 1105 +++++++++++++++++++++++++++++++++++++++
+ ai/default/daiharness.c | 1110 +++++++++++++++++++++++++++++++++++++++
  ai/default/daiharness.h |   37 ++
  meson.build             |    1 +
- 6 files changed, 1178 insertions(+), 3 deletions(-)
+ 6 files changed, 1183 insertions(+), 3 deletions(-)
  create mode 100644 ai/default/daiharness.c
  create mode 100644 ai/default/daiharness.h
 
@@ -146,10 +146,10 @@ index 89990e2..d1ddcdb 100644
  }
 diff --git a/ai/default/daiharness.c b/ai/default/daiharness.c
 new file mode 100644
-index 0000000..8c3aed2
+index 0000000..1b8f5a9
 --- /dev/null
 +++ b/ai/default/daiharness.c
-@@ -0,0 +1,1105 @@
+@@ -0,0 +1,1110 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -192,6 +192,7 @@ index 0000000..8c3aed2
 +#include "player.h"
 +#include "requirements.h"
 +#include "research.h"
++#include "team.h"
 +#include "tech.h"
 +#include "unit.h"
 +#include "unitlist.h"
@@ -222,7 +223,8 @@ index 0000000..8c3aed2
 +  struct universal target;
 +};
 +
-+/* A player's research when the chooser last picked for it. */
++/* A research when the chooser last picked for it: a player's, or a team's
++ * when the team pools its research. */
 +struct harness_research {
 +  bool asked;
 +  int techs;
@@ -250,7 +252,9 @@ index 0000000..8c3aed2
 +  struct harness_pick *picks;
 +  int pick_count;
 +  int pick_alloc;
-+  struct harness_research research[MAX_NUM_PLAYER_SLOTS];
++  /* By research_number(), so teammates who pool research share one. */
++  struct harness_research research[MAX(MAX_NUM_PLAYER_SLOTS,
++                                       MAX_NUM_TEAM_SLOTS)];
 +} harness;
 +
 +/**********************************************************************//**
@@ -1059,7 +1063,7 @@ index 0000000..8c3aed2
 +{
 +  const struct research *presearch = research_get(pplayer);
 +  const struct harness_research *rec
-+    = &harness.research[player_index(pplayer)];
++    = &harness.research[research_number(presearch)];
 +
 +  return (!rec->asked || presearch->techs_researched != rec->techs
 +          || presearch->researching != rec->tech);
@@ -1213,7 +1217,8 @@ index 0000000..8c3aed2
 +{
 +  struct harness_option options[HARNESS_MAX_OPTIONS];
 +  const struct research *presearch = research_get(pplayer);
-+  struct harness_research *rec = &harness.research[player_index(pplayer)];
++  struct harness_research *rec
++    = &harness.research[research_number(presearch)];
 +  char question[512];
 +  const char *reason;
 +  int count, chosen = 0;

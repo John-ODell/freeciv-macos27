@@ -160,6 +160,9 @@ def main():
         if not ok:
             problems.append("q%d: applied %s (choice %d, fallback %s), chooser %s"
                             % (d["id"], d["value"], d["choice"], d["fallback"], c.get("action")))
+    missing = sorted((args.skip | args.bad) - {d["id"] for d in applied})
+    if missing:
+        problems.append("no question %s to test a fallback on" % ",".join(map(str, missing)))
     check("answers", not problems,
           "; ".join(problems[:5]) if problems else "%d applied as answered; q%s timed out and q%s had a bad answer, "
           "both kept the AI's pick" % (answered, ",".join(map(str, sorted(args.skip))),
