@@ -21,8 +21,11 @@ Evidence lives in `logs/` (git-ignored); GitHub: issues 5, 7, 8, 14 and PRs 9, 1
   Launcher is named `<App>-launcher` where `<App>` would collide case-insensitively with the client binary (APFS).
 - `Contents/MacOS/freeciv-<client>, freeciv-server, freeciv-mp-<x>[, freeciv-ruledit]`.
 - `Contents/Frameworks/`: closure of Homebrew dylibs (+ Qt frameworks minus Headers), ids/loads `@rpath/...`,
-  rpaths `@executable_path/../Frameworks` + `@loader_path/../Frameworks`; `libSDL3.0.dylib` + `libSDL3.dylib` symlink
-  for sdl2-compat's dlopen. `Contents/PlugIns/` (Qt): platforms/qcocoa, styles/qmacstyle, imageformats gif/ico/jpeg.
+  rpaths `@executable_path/../Frameworks` + `@loader_path/../Frameworks` and none that lead out of the bundle
+  (issue 61: Homebrew left the Qt plugins `@loader_path/../../../../lib`, /Applications/lib for an app in
+  /Applications, and libSDL2 `@loader_path/../../../../opt/sdl3/lib`, /opt/sdl3/lib there; fix-dylibs.py deletes
+  them and fails on any left); `libSDL3.0.dylib` + `libSDL3.dylib` symlink for sdl2-compat's dlopen.
+  `Contents/PlugIns/` (Qt): platforms/qcocoa, styles/qmacstyle, imageformats gif/ico/jpeg.
 - `Contents/Resources/share/freeciv` (46 MB data), `share/locale` (25 MB), GTK: `share/glib-2.0/schemas/gschemas.compiled`,
   `etc/fonts` (dereferenced conf.d, Homebrew cache dir removed), empty `etc/gdk-pixbuf-loaders.cache`.
 - Info.plist: version from fc_version, `NSHighResolutionCapable`, `.sav*` document types, category strategy-games.
