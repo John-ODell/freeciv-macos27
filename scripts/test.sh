@@ -8,7 +8,8 @@
 #   --data DIR  data path for the autogame server only, e.g. port/freeciv/data for the source tree's rulesets;
 #               without it the server reads FREECIV_DATA_PATH or its installed data. The client probes keep theirs.
 #   --lua FILE  a Lua script the autogame server loads before the game starts (e.g. an observer that logs combat)
-#   --extra CMD a server command added to the autogame's setup, e.g. --extra "set diplomacy DISABLED" for a war game
+#   --extra CMD a server command added to the autogame's setup, e.g. --extra "set diplomacy DISABLED" for a war game,
+#               or --extra "set victories SPACERACE|CULTURE" to run civ45 past the ten AIs' allied win (issue 84)
 # Output: <repo>/logs/test-<name>-<timestamp>/ ; exit status non-zero on any failure. The result line names the
 # directory the autogame's ruleset was read from.
 set -uo pipefail
@@ -58,6 +59,7 @@ rm -f "$OUT/fifo"; mkfifo "$OUT/fifo"
 env ${SENV[@]+"${SENV[@]}"} "$BIN/freeciv-server" -p "$((PORT+1))" --Announce none --read "$OUT/autogame.serv" --saves "$OUT" -e < "$OUT/fifo" > "$OUT/autogame.log" 2>&1 &
 SPID=$!
 exec 3>"$OUT/fifo"
+trap '' PIPE   # a server that quits at startup (a ruleset it cannot read) must not kill this script mid-write
 sleep 4; [ -z "$LUA" ] || { echo "lua file $LUA" >&3; sleep 1; }   # loads only in pregame, before start
 echo start >&3
 LIMIT=${AUTOGAME_LIMIT:-900}
@@ -70,8 +72,15 @@ exec 3>&-; rm -f "$OUT/fifo"
 # The game ends at the turn limit or, earlier, by a victory (allied, conquest, culture, spaceship, or a
 # ruleset script's "Scenario victory"); either is a finished game.
 END=$(grep -oE "Game ended as the turn limit was exceeded|Game ended in [a-z ]*victory for .*|(Scenario|Allied|Team) victory to .*" "$OUT/autogame.log" | head -1)
+# The final save is named for the turn after the last one played (endturn 20 writes freeciv-T0021-...-final).
+LAST=$(ls "$OUT" | sed -n 's/^.*-T0*\([0-9][0-9]*\)-.*final.*$/\1/p' | tail -1)
+[ -z "$LAST" ] || LAST=$((LAST - 1))
+case "$END" in
+  "Game ended as the turn limit was exceeded") HOW="reached the turn limit" ;;
+  *) HOW="ended by a victory in turn ${LAST:-?}" ;;
+esac
 if [ $SRC = 0 ] && [ -n "$END" ]; then
-  echo "autogame: ok, up to $TURNS turns, 10 AIs, $(( $(date +%s) - START )) s; $END"
+  echo "autogame: ok, $HOW, up to $TURNS turns, 10 AIs, $(( $(date +%s) - START )) s; $END"
 else
   echo "autogame: FAILED (exit $SRC; see $OUT/autogame.log)"; grep -E "Starting game|rror|Turn" "$OUT/autogame.log" | tail -3; FAIL=1
 fi

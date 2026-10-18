@@ -152,6 +152,12 @@ Notes, all derived unless marked:
   `pplayers_allied()`), all of them win together. It fires only after everyone outside the alliance is gone, so it
   is "the last alliance standing", not a vote. Keep it on: it is what lets a human and an AI partner finish a
   game together, and it changes conquest as 2.1 says.
+- In AI-only games (issue 84, decided 2026-10-17 as plan decision 13): ten AIs can ally into a single alliance
+  long before anyone is beaten, and then they all win at once: turn 142 on seeds 42/42 with no attack in the whole
+  game, where on seeds 11/11 the AIs kept 10 to 20 pairs at war through turn 400. The rule stays as it is; it
+  needs every living player in the alliance, so a human decides whether it can fire. Autogames that must run
+  to their end turn ALLIED off with `--extra "set victories SPACERACE|CULTURE"`, and `scripts/test.sh` reports a
+  game that ends by a victory as a pass that names the turn.
 - A real vote needs Lua, and Lua cannot read diplomatic states or the AI's attitude: `tolua_game.pkg` and
   `tolua_server.pkg` have no diplstate, alliance or "love" getter (grep for those words, 2026-10-17, observed
   absence). The one known door is an effect with a `DiplRel` requirement read through
