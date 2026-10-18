@@ -51,7 +51,7 @@ until the one-strength decision (7) is confirmed from the roster autogames (sect
 Open from the victory slice: the design note's five questions (decision 8), and no AI came near the domination
 thresholds in 437 turns, so that rule is untested in play.
 
-Open from slice 3: no unhappiness or limit follows a draft (#107); the AI's drafting is whatever the autogame shows
+Open from slice 3: no unhappiness or limit follows a draft (#107, built as patch 0024: unrest that cancels content from buildings and a per-turn draft quota, section 13 of the mechanics note); the AI's drafting is whatever the autogame shows
 (section 8 of the mechanics note); the draft units are the first with one strength number (decision 7).
 
 Open from the tech slice: the design's four questions (decision 10); the six new techs borrow icons; the cost
