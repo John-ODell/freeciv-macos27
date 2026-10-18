@@ -445,3 +445,71 @@ Not checked:
 - desert, tundra and swamp in a generated map's real layout;
 - other clients;
 - any zoom level.
+
+## Wandering edges and variant fades (issues 148 and 152, 2026-10-18)
+
+Two faults were left after the blending of issue 141:
+
+- **Issue 148:** the edge between two terrains ran as a straight soft band.
+- **Issue 152:** inside a field of one terrain, two different variants side by side stopped dead at the tile edge.
+  Mountains showed it most: every ridge cut off at the tile edge, so a range read as a grid of rock squares.
+
+Both are fixed in the client (fork patch 0028), with masks from the tileset builder.
+
+**Tileset.** `blend.png` holds five masks (`tilesets/freeciv45test/RECORD.md`, "Wandering edges and variant fades"):
+- four wandering masks for the fade between two terrains;
+- one straight 36 px band, `t.blend_mask_same`, for two variants of one terrain.
+
+**What the client does (patch 0028, `client/tilespec.c`):**
+- **One mask per edge.** For each edge between two terrains, the client picks one of the tileset's masks
+  (`t.blend_mask`, `t.blend_mask_2` and up). The choice comes from the edge's position: the west or north tile's
+  index and the edge's direction. Both tiles of an edge get the same mask, so their fades meet. The corners are the
+  same in every mask.
+- **Variant fades.** Between two different variants of one terrain, the neighbour's variant fades in across the
+  shared edge and corner, through `t.blend_mask_same`. This applies to the layer the tileset blends. A corner is
+  left out when a tile beside it already shows that variant.
+- **Memory.** These pieces are cut to the quarter tile next to the neighbour, and each is made the first time it is
+  drawn. At most that is 182 cells x 8 directions, about 33 MB at 192 px.
+- **Other tilesets.** A tileset without the new tags draws exactly as before.
+
+**How it was checked (observed).** `tileset-t0/range.txt` ran offscreen at `QT_SCALE_FACTOR=2` on the patched driver
+build. The before run used the tileset from before this change; the after run used the new masks.
+- `tileset-t0/blend-edge-before-1to1.png` and `-after-`: the forest/grassland edge north of the range.
+- `tileset-t0/blend-range-before-1to1.png` and `-after-`: inside the mountain range.
+- `tileset-t0/blend-window-before.jpg` and `-after-`: the whole window, half size.
+
+![Edge before, 1:1](tileset-t0/blend-edge-before-1to1.png)
+![Edge after, 1:1](tileset-t0/blend-edge-after-1to1.png)
+![Range before, 1:1](tileset-t0/blend-range-before-1to1.png)
+![Range after, 1:1](tileset-t0/blend-range-after-1to1.png)
+
+What the pictures show:
+
+1. **The tile grid inside a terrain is gone at 1:1.** Before, the grassland showed tile lines and the mountains a
+   grid of rock squares. After, the textures cross the edges. `scripts/tile-edge-steps.py` (its new pixel-step
+   measure) puts numbers on it. The table gives the mean luma step between the two pixels on either side of a tile
+   edge, then the same across the tiles' middle lines, at origin 1566,484 and tile 192:
+
+   | Area | Before (edge / middle) | After (edge / middle) |
+   |---|---|---|
+   | Mountains | 43.0 / 23.1 | 12.6 / 21.5 |
+   | Grassland | 24.2 / 15.1 | 9.0 / 14.3 |
+   | Forest | 49.0 / 27.9 | 13.5 / 25.9 |
+
+   The tone step at the mountain edges also halved, from 6.7 to 3.4, against 7.2 to 7.6 across the middles.
+2. **The edge between two terrains wanders.** The forest/grassland edge pushes in and out along its length, by up to
+   about 30 px either way, and the band is patchy instead of an even veil. The edge as a whole still follows the
+   tile line, as it has to, and it pinches back to the plain band at every tile corner. Over a long edge that pinch
+   is a faint rhythm.
+3. **What is still there.**
+   - Where two variants cross-fade, the line is a little softer than the texture around it: the after values above
+     are below the middles. At 1:1 this reads as a faint blur rather than a cut, and it is hardest to see in forest
+     and grassland.
+   - A few short lines remain in the range. These are corners where a variant's neighbour on one side shows that
+     same variant, so the corner piece is left out.
+
+**Other tilesets (observed).** I ran trident and amplio2 (isometric) on the build before and after. Their start
+views are identical except the blinking focus-unit box (60 x 60 px on trident, 152 x 84 px on amplio2).
+
+**Not checked:** other clients (patch 0028 is in `client/tilespec.c`, which every client uses, but only the Qt client
+was run), a long game, and scroll speed with the extra pieces.

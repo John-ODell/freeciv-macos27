@@ -101,6 +101,9 @@ A "what next" button above the minimap asks for research, then unit orders, then
 (patch 0026, `notes/freeciv45/ui/whatnext-slice.md`).
 The old sidebar's wheel and right-click shortcuts sit on the matching edge buttons and its four indicators in the strip
 (patch 0027, `notes/freeciv45/ui/extras-slice.md`).
+In overhead view the edge between two terrains wanders instead of running as a straight band, and two variants of
+one terrain fade into each other at the tile edge, when the tileset gives the masks for it (patch 0028,
+`notes/freeciv45/tileset-t0.md`, "Wandering edges and variant fades").
 
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It

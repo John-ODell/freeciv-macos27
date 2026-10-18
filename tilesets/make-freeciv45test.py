@@ -30,14 +30,16 @@ the shore over it until the coastline builder exists (issue 81).
 Neighbouring land terrains fade into each other at the tile edge: they get blend_layer = 1, and blend.spec holds
 t.blend_mask, a generated 3 x 3 tile alpha mask that says how strongly a terrain shows in each tile around it
 (BLEND_PEAK at the shared edge, nothing BLEND_DEPTH pixels in). Freeciv 3.2 blends only in isometric view; the
-fork's patch 0019 uses this mask in overhead view, fading variant 1 of each terrain. --no-blend leaves it out.
+fork's patch 0019 uses this mask in overhead view, fading variant 1 of each terrain. The fork's patch 0028 picks one of
+BLEND_MASKS masks per edge, each with a band that wanders along the edge, and fades two variants of one terrain into
+each other with t.blend_mask_same (issues 148 and 152). --no-blend leaves it all out.
 
 usage: make-freeciv45test.py --data ~/freeciv-builds/qt/share/freeciv
                              --art ~/Desktop/asset_generator/freeciv45/01_terrain_ground [--cutter SEAMLESS.py]
                              [--out tilesets] [--olive-pine] [--no-tone-match] [--no-level] [--no-blend] [--tile 96]
 Needs Pillow (python3.14 on this Mac has it).
 """
-import argparse, importlib.util, os, re
+import argparse, importlib.util, math, os, random, re
 from PIL import Image, ImageCms, ImageStat
 
 NAME = "freeciv45test"
@@ -49,8 +51,8 @@ MASTER = 192                     # seamless.py master size; painted cells are sc
 def set_tile(tile):
     """Switch the build to TILE px tiles: 192 (the default, pixel_ratio 2, sharp on a Retina screen) or 96 (pixel_ratio
     1, the build before issue 161)."""
-    global TILE, SCALE, BLEND_DEPTH
-    TILE, SCALE, BLEND_DEPTH = tile, tile / SRC_TILE, round(24 * tile / 96)
+    global TILE, SCALE, BLEND_DEPTH, SAME_DEPTH
+    TILE, SCALE, BLEND_DEPTH, SAME_DEPTH = tile, tile / SRC_TILE, round(24 * tile / 96), round(18 * tile / 96)
 
 def pixel_ratio():
     """Tileset pixels per screen point: 96 px tiles are 96 points, 192 px tiles are 96 points at twice the density."""
@@ -90,6 +92,16 @@ OVERRIDDEN = {"t.l0.grassland1", "t.l0.inaccessible1"}    # terrain45.spec provi
 BLEND_TERRAINS = ("arctic", "desert", "forest", "grassland", "hills", "jungle", "mountains", "plains", "swamp", "tundra")
 BLEND_DEPTH = 48      # px into the neighbouring tile where the fade reaches nothing (a quarter tile; set_tile)
 BLEND_PEAK = 0.5      # opacity at the shared edge; both sides blend, so the edge itself is half and half
+# The band wanders (issue 148): BLEND_MASKS masks, the client picking one per edge (fork patch 0028). Along each edge
+# the depth moves by up to BLEND_WANDER times BLEND_DEPTH and the opacity at the edge by up to BLEND_SWAY, the two
+# sides of an edge moving opposite ways so they still add up to one; BLEND_CLUMPS is patchy noise inside the band.
+BLEND_MASKS = 4
+BLEND_WANDER = 0.6
+BLEND_SWAY = 0.25
+BLEND_CLUMPS = 0.6
+# Two variants of one terrain (issue 152): t.blend_mask_same, a straight band SAME_DEPTH px deep (within the quarter
+# tile the client cuts for it).
+SAME_DEPTH = 36
 
 # Spec files from misc/ whose sprites the client draws on the map: re-cut at the map's density so they keep their size
 # on screen (the misc/ files that only widgets show stay trident's, read from the installed data). The overlay colour
@@ -268,31 +280,85 @@ def painted(panels, cutter, out_dir, record, plan, tone_match=True, level=True):
     record.append("| tone match | %s | mean luma per variant at %d px, min-max |" % ("on" if tone_match else "off", TILE)
                   + " %s |" % "; ".join(tones))
 
-def blend_mask(out_dir, record):
-    """Write blend.png and blend.spec: t.blend_mask, 3 x 3 tiles, white with an alpha that is the opacity of the middle
-    tile's terrain where it fades into each of its eight neighbours. Across an edge the opacity falls from BLEND_PEAK
-    at the edge to 0 at BLEND_DEPTH (smoothstep, so it starts and ends flat); in a corner tile it is the product of
-    the two edge fades over BLEND_PEAK, which joins the edge fades of the tiles beside it without a seam. The
-    middle tile is never used and stays transparent."""
+def smoothstep_fade(d, depth):
+    """Opacity factor at d px from the shared edge: 1 at the edge, 0 from depth on, flat at both ends."""
+    u = min(max(d / depth, 0.0), 1.0); return 1.0 - u * u * (3 - 2 * u)
+
+def edge_wave(rng):
+    """One edge's wander, a value in -1..1 for each pixel s along the edge: a few random harmonics of the tile, times
+    sin(pi s / TILE) so it is 0 at the tile corners, where every mask must agree."""
+    terms = [(rng.uniform(0.5, 1.0) / j, j, rng.uniform(0, 2 * math.pi)) for j in (1, 2, 3, 5)]
+    raw = [sum(a * math.sin(2 * math.pi * j * (s + 0.5) / TILE + ph) for a, j, ph in terms)
+           * math.sin(math.pi * (s + 0.5) / TILE) for s in range(TILE)]
+    top = max(abs(v) for v in raw); return [v / top for v in raw]
+
+def clump_noise(rng):
+    """Smooth value noise in -1..1 that repeats every TILE px both ways (two octaves), as a function of (x, y)."""
+    octaves = [(g, a, [[rng.uniform(-1, 1) for _ in range(g)] for _ in range(g)]) for g, a in ((4, 0.7), (8, 0.3))]
+    def at(x, y):
+        v = 0.0
+        for g, a, grid in octaves:
+            fx, fy = (x % TILE) / TILE * g, (y % TILE) / TILE * g
+            i, j = int(fx), int(fy); tx, ty = fx - i, fy - j
+            tx, ty = tx * tx * (3 - 2 * tx), ty * ty * (3 - 2 * ty)
+            v00, v10 = grid[j % g][i % g], grid[j % g][(i + 1) % g]
+            v01, v11 = grid[(j + 1) % g][i % g], grid[(j + 1) % g][(i + 1) % g]
+            v += a * ((v00 * (1 - tx) + v10 * tx) * (1 - ty) + (v01 * (1 - tx) + v11 * tx) * ty)
+        return v
+    return at
+
+def one_mask(depth, rng=None):
+    """A 3 x 3 tile mask, white with an alpha that is the opacity of the middle tile's terrain in each of its eight
+    neighbours. Edge tiles: BLEND_PEAK at the shared edge falling to 0 at depth (smoothstep); with rng the band wanders
+    (edge_wave: the east and south edges move one way, west and north the other, so the two masks that meet at an
+    edge add up to one there) and gets clumps (clump_noise, none at the edge itself or at the tile corners). Corner
+    tiles: the product of two plain edge fades over BLEND_PEAK, the same in every mask, so whichever masks the edges
+    beside a corner use, it joins them without a seam. The middle tile stays transparent."""
     side = 3 * TILE; mask = Image.new("RGBA", (side, side), (255, 255, 255, 0)); px = mask.load()
-    def fade(d):                     # d: distance in px from the shared edge, at the pixel centre
-        u = min(d / BLEND_DEPTH, 1.0); return 1.0 - u * u * (3 - 2 * u)
+    vertical = edge_wave(rng) if rng else [0.0] * TILE      # east and west edges, by y
+    horizontal = edge_wave(rng) if rng else [0.0] * TILE    # north and south edges, by x
+    clump = clump_noise(rng) if rng else (lambda x, y: 0.0)
     def dist(v):                     # distance of pixel row/column v outside the middle tile, 0 inside it
         return TILE - v - 0.5 if v < TILE else v + 0.5 - 2 * TILE if v >= 2 * TILE else 0.0
     for y in range(side):
         for x in range(side):
             dx, dy = dist(x), dist(y)
-            if dx or dy: px[x, y] = (255, 255, 255, round(255 * BLEND_PEAK * fade(dx) * fade(dy)))
-    mask.save(os.path.join(out_dir, "blend.png"), optimize=True)
+            if dx and dy:
+                a = BLEND_PEAK * smoothstep_fade(dx, depth) * smoothstep_fade(dy, depth)
+            elif dx or dy:
+                d, s = (dx, y - TILE) if dx else (dy, x - TILE)
+                n = (vertical if dx else horizontal)[s] * (1 if (x >= 2 * TILE or y >= 2 * TILE) else -1)
+                envelope = math.sin(math.pi * (s + 0.5) / TILE)
+                lumps = 1 + BLEND_CLUMPS * clump(x, y) * envelope * min(d / (TILE / 16), 1.0)
+                a = (BLEND_PEAK + BLEND_SWAY * n) * smoothstep_fade(d, depth * (1 + BLEND_WANDER * n)) * lumps
+            else:
+                continue
+            px[x, y] = (255, 255, 255, max(0, min(255, round(255 * a))))
+    return mask
+
+def blend_mask(out_dir, record):
+    """Write blend.png and blend.spec: t.blend_mask and t.blend_mask_2 .. BLEND_MASKS, wandering masks (one_mask with
+    a fixed seed each) for the fade between two terrains, and t.blend_mask_same, a straight SAME_DEPTH band for the
+    fade between two variants of one terrain. The client picks a mask per edge (fork patch 0028); a client with only
+    patch 0019 uses t.blend_mask everywhere."""
+    side = 3 * TILE
+    tags = ["t.blend_mask"] + ["t.blend_mask_%d" % k for k in range(2, BLEND_MASKS + 1)] + ["t.blend_mask_same"]
+    masks = [one_mask(BLEND_DEPTH, random.Random(k)) for k in range(1, BLEND_MASKS + 1)] + [one_mask(SAME_DEPTH)]
+    sheet = Image.new("RGBA", (side * len(masks), side), (255, 255, 255, 0))
+    for i, m in enumerate(masks): sheet.paste(m, (i * side, 0))
+    sheet.save(os.path.join(out_dir, "blend.png"), optimize=True)
     with open(os.path.join(out_dir, "blend.spec"), "w") as f:
-        f.write("; Blend mask for the Freeciv45 test tileset, generated by tilesets/make-%s.py (blend_mask):\n"
-                "; 3 x 3 tiles, how strongly a terrain shows in each tile around it. Used by blend_layer in\n"
-                "; overhead view (fork patch 0019).\n\n"
+        f.write("; Blend masks for the Freeciv45 test tileset, generated by tilesets/make-%s.py (blend_mask):\n"
+                "; 3 x 3 tiles each, how strongly a terrain shows in each tile around it. Used by blend_layer in\n"
+                "; overhead view (fork patches 0019 and 0028).\n\n"
                 '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    Generated (no artist)\n"\n\n'
                 '[file]\ngfx = "%s/blend"\n\n[grid_main]\n\nx_top_left = 0\ny_top_left = 0\ndx = %d\ndy = %d\n\n'
-                'tiles = { "row", "column", "tag"\n  0, 0, "t.blend_mask"\n}\n' % (NAME, NAME, side, side))
-    record.append("| `%s/blend.spec` | generated: `t.blend_mask`, peak %g at the edge, %d px deep | none | %dx%d |"
-                  % (NAME, BLEND_PEAK, BLEND_DEPTH, side, side))
+                'tiles = { "row", "column", "tag"\n%s\n}\n'
+                % (NAME, NAME, side, side, "\n".join('  0, %d, "%s"' % (i, tag) for i, tag in enumerate(tags))))
+    record.append("| `%s/blend.spec` | generated: `t.blend_mask` and `_2`-`_%d`, peak %g +- %g at the edge, %d px +- %d%% "
+                  "deep, clumps %g; `t.blend_mask_same`, %d px | none | %dx%d |"
+                  % (NAME, BLEND_MASKS, BLEND_PEAK, BLEND_SWAY, BLEND_DEPTH, round(100 * BLEND_WANDER), BLEND_CLUMPS,
+                     SAME_DEPTH, side * len(masks), side))
 
 def tilespec(data, out_root, files, blend=True):
     """trident.tilespec with sizes, offsets, name and file list changed; the PAINTED terrains as plain variants;
