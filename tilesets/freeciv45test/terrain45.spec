@@ -62,4 +62,26 @@ tiles = { "row", "column", "tag"
   7, 2, "t.l0.jungle8"   ; panel4_retake r4c3
   7, 3, "t.l0.jungle9"   ; panel4_retake r4c4
   7, 4, "t.l0.jungle10"   ; panel4_retake r4c5
+  8, 0, "t.l0.hills1"   ; panel5 r1c2
+  8, 1, "t.l0.hills2"   ; panel5 r1c3
+  8, 2, "t.l0.hills3"   ; panel5 r1c4
+  8, 3, "t.l0.hills4"   ; panel5 r1c5
+  8, 4, "t.l0.hills5"   ; panel5 r2c2
+  9, 0, "t.l0.hills6"   ; panel5 r2c3
+  9, 1, "t.l0.hills7"   ; panel5 r2c4
+  9, 2, "t.l0.hills8"   ; panel5 r2c5
+  9, 3, "t.l0.hills9"   ; panel5 r3c2
+  9, 4, "t.l0.hills10"   ; panel5 r3c4
+  10, 0, "t.l0.hills11"   ; panel5 r3c1
+  10, 1, "t.l0.hills12"   ; panel5 r3c3
+  10, 2, "t.l0.hills13"   ; panel5 r3c5
+  11, 0, "t.l0.mountains1"   ; panel5 r4c1
+  11, 1, "t.l0.mountains2"   ; panel5 r4c2
+  11, 2, "t.l0.mountains3"   ; panel5 r4c4
+  11, 3, "t.l0.mountains4"   ; panel5 r4c5
+  11, 4, "t.l0.mountains5"   ; panel5 r5c1
+  12, 0, "t.l0.mountains6"   ; panel5 r5c2
+  12, 1, "t.l0.mountains7"   ; panel5 r5c3
+  12, 2, "t.l0.mountains8"   ; panel5 r5c4
+  12, 3, "t.l0.mountains9"   ; panel5 r5c5
 }

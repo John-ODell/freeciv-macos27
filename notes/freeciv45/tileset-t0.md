@@ -305,3 +305,69 @@ Hex2t differs only where AI units stand on another tile in each run; its terrain
 - Not checked here: desert, jungle, mountains, swamp and tundra edges (they blend by the same rule), a long game, the
   GTK and SDL clients (they share `tilespec.c` and the same `crop_sprite` mask formula, but were not run), and
   performance (eight extra sprites per blending terrain at load; at most eight extra draws per tile).
+
+## Hills and mountains from panel 5 (issue 151, 2026-10-17)
+
+Panel 5 of the terrain sheet is in `freeciv45test` now: thirteen hills from run 7 rows 1-3 and nine mountains from
+rows 4-5, cut and wired like the other painted terrains. Hills and mountains lose trident's 16 edge-matched sprites
+and their `t.blend.*` aliases, draw numbered variants, are tone matched per terrain (hills luma 85-149 to 121,
+mountains 96-157 to 124) and blend at the edges through patch 0019 like grassland and forest. Left out: r1c1, r2c1
+and r4c3, the three cells the art log names for a shared diagonal ridge rhythm; ten green hills, three dry brown
+ones and nine mountains remain, so no weak cell was needed. Sources in `tilesets/freeciv45test/RECORD.md`.
+
+### How it was checked
+
+`notes/freeciv45/tileset-t0/range.txt` paints a patch around the start stack from the server's Lua console: a
+13 x 2 mountain range with a row of hills above it and nine hills below, forest west of the stack and grassland east
+of it, so hills and mountains meet both; fog of war off on a `revealmap START` civ45 game. The server was
+`~/freeciv-builds/qt` (fork 016a41b, patches 0001-0020); the client was the same fork plus
+`notes/freeciv45/ui/bar-test/uidrive.diff`, built in a scratch prefix, run offscreen on a 1600 x 1000 virtual
+screen at 1 px per tileset pixel (no window on screen; ports 5751-5753):
+
+    FREECIV_DRIVE_PREFIX=<prefix with that server and client> FREECIV_DRIVE_TILESET=freeciv45test \
+    FREECIV_DRIVE_TILESETS=$PWD/tilesets FREECIV_DRIVE_SERV="set fogofwar DISABLED" \
+    FREECIV_DRIVE_QPA="offscreen:configfile=$PWD/notes/freeciv45/tileset-t0/screen-1600x1000.json" \
+    scripts/ui-drive.sh notes/freeciv45/tileset-t0/range.txt <outdir> 5751
+
+once with main's tileset (trident hills and mountains) and once with this build (byte-identical to the committed
+tileset); same seed, so the same tiles. The client loaded it with no sprite error or warning. A first build left
+the three dry brown hills out, expecting a brown patchwork like the olive pine; a run with them in showed no
+patchwork (below), so they are in.
+
+- `tileset-t0/hills-mountains-1to1.png`: 1:1 crop of the patch: forest top left, grassland right, the hills row
+  with the unit, the range, the lower hills.
+- `tileset-t0/hills-mountains-map.jpg`: the whole window.
+- `tileset-t0/hills-mountains-closeup.jpg`: 1:1, the east end of the range before (trident, left) and after.
+
+![Hills and mountains at 1:1](tileset-t0/hills-mountains-1to1.png)
+
+### What it shows
+
+1. **Mountains read right at 96 px.** The range is grey broken rock with snow on the crests and dark gullies, seen
+   straight down; it reads as high country at a glance and as a range, not as a row of pasted peaks. The slight
+   oblique faces the art log mentions do not show at this size.
+2. **No ridge rhythm across the range.** With r4c3 out, no cell's ridge pattern repeats as a visible beat along 13
+   tiles; ridges run in many directions. What all cells share is the light from the upper left, which gives the
+   range one even grain. That is right for a map, but it makes the range a uniform slab (point 5).
+3. **Hills read as hills only up close.** At 1:1 the folds and valleys are clear and they look like rolling
+   country. At map scale they are hard to tell from the grassland next to them: mean colour of the hills row
+   L 134, a -3, b 30 against the grassland's L 138, a -8, b 40 (CIE Lab), a difference of about 12, where forest is
+   about 44 from grassland and mountains about 37; across the hills-grassland edge the mean luma goes 121 to 133.
+   Trident's dark green humps (closeup, left) were easier to spot. Finding, Brothers-Keeper-Art issue 37: hills need
+   their own value or hue at map scale, which a greener grassland (issue 26) would also help.
+4. **The dry hills mix in.** The tone match moves r3c1, r3c3 and r3c5 to the hills' shared mean, so they show as
+   warmer variants, not brown squares, and pull the hills slightly towards ochre and away from the grassland.
+5. **Blending.** Hills fade into grassland and forest, and mountains into hills, grassland and forest, over the 24 px
+   band with no hard line; the forest's crowns thin out over the rock at the range's west end. But a range drawn
+   from whole mountain tiles is a rectangle of rock with soft edges: no foothills, no ridge running out into the
+   plain. The mask is the only transition, the same straight band as issue 148 (comment added there).
+6. **Variant edges.** The tone steps at tile edges inside the range are below the tiles' own variation (7.9 against
+   8.7, `scripts/tile-edge-steps.py`, 31 segments), so no checkerboard; but sharp ridge lines stop dead at tile edges,
+   so the grid shows faintly as texture breaks, more than in grassland or forest. Finding, issue 152.
+7. **The wrap line.** Run 7's cells are lighter on the left than the right (24 of 25 cells, up to +31 luma between
+   the outer 20 px bands; top minus bottom +8 or more in 13), from the upper-left light. The cutter's half-shift puts
+   that seam inside the tile, so a faint vertical as well as a horizontal light line can show mid-tile; at 96 px it is
+   faint in this patch. Comment on Brothers-Keeper-Art issue 35.
+- Not checked: a long game, other clients (GTK, SDL), hills and mountains next to desert, tundra or swamp (trident
+  placeholders, which blend by the same rule), and the lone mountain and lone hill tiles in the script, which were
+  off the view.
