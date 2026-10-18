@@ -27,9 +27,17 @@ set -u
 SCRIPT="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; OUT="$2"; PORT="${3:-5720}"; THEME="${4:-NightStalker}"
 BIN="${FREECIV_DRIVE_PREFIX:?set FREECIV_DRIVE_PREFIX to the install prefix of the driver build}/bin"
 mkdir -p "$OUT"; OUT="$(cd "$OUT" && pwd)"
-rm -rf "$OUT"/*; mkdir -p "$OUT/home/.freeciv"
-sed -e "s/^gui_qt_default_theme_name=.*/gui_qt_default_theme_name=\"$THEME\"/" \
-    ~/.freeciv/freeciv-client-rc-3.2 > "$OUT/home/.freeciv/freeciv-client-rc-3.2"
+# Only an empty folder or an earlier run's output is cleared
+if [ -n "$(ls -A "$OUT")" ] && [ ! -f "$OUT/drive.log" ] && [ ! -f "$OUT/game.serv" ]; then
+  echo "$OUT is not empty and holds no earlier run; pick a new folder"; exit 1
+fi
+rm -rf "${OUT:?}"/*; mkdir -p "$OUT/home/.freeciv"
+if [ -f ~/.freeciv/freeciv-client-rc-3.2 ]; then
+  sed -e "s/^gui_qt_default_theme_name=.*/gui_qt_default_theme_name=\"$THEME\"/" \
+      ~/.freeciv/freeciv-client-rc-3.2 > "$OUT/home/.freeciv/freeciv-client-rc-3.2"
+else
+  printf '[client]\ngui_qt_default_theme_name="%s"\n' "$THEME" > "$OUT/home/.freeciv/freeciv-client-rc-3.2"
+fi
 mkfifo "$OUT/fifo"
 cat > "$OUT/game.serv" <<SERV
 rulesetdir civ45
