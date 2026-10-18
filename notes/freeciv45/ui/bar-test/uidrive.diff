@@ -20,10 +20,10 @@ index 5e6de95..a5ca1a9 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..e902c24
+index 0000000..691a6b0
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,718 @@
+@@ -0,0 +1,771 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -51,6 +51,9 @@ index 0000000..e902c24
 +    wait MS                 extra delay
 +    hover portrait|chip N|action TEXT|button TEXT|label TEXT|tip TEXT
 +    click portrait|chip N|action TEXT|button TEXT|label TEXT|tip TEXT [shift]
++    rclick ...              the same with the right button
++    wheel DELTA tip TEXT    a wheel step of DELTA (120 a notch up, -120 down)
++                            on the button whose tooltip contains TEXT
 +                            (button: any visible button in the window whose
 +                            text contains TEXT; label: a visible label whose
 +                            text is TEXT; tip: any visible button whose
@@ -91,13 +94,16 @@ index 0000000..e902c24
 +#include <QDir>
 +#include <QFile>
 +#include <QLabel>
++#include <QMenu>
 +#include <QMessageBox>
 +#include <QPainter>
 +#include <QPointer>
++#include <QWheelEvent>
 +#include <QWindow>
 +#include <QTest>
 +#include <QTextStream>
 +#include <QTimer>
++#include <QToolButton>
 +#include <QToolTip>
 +#include <algorithm>
 +
@@ -339,6 +345,18 @@ index 0000000..e902c24
 +      }
 +      s += QString("\n   top strip %1x%2 [%3]").arg(strip->width())
 +           .arg(strip->height()).arg(stexts.join(" | "));
++      {
++        QToolButton *ind = strip->findChild<QToolButton *>("strip_indicators");
++
++        if (ind != nullptr) {
++          QPoint at = ind->mapTo(gui(), QPoint(0, 0));
++
++          s += QString("\n   indicators %1,%2 %3x%4 icon %5x%6 tip \"%7\"")
++               .arg(at.x()).arg(at.y()).arg(ind->width()).arg(ind->height())
++               .arg(ind->iconSize().width()).arg(ind->iconSize().height())
++               .arg(ind->toolTip().replace('\n', " / "));
++        }
++      }
 +    } else {
 +      s += "\n   top strip hidden";
 +    }
@@ -347,8 +365,9 @@ index 0000000..e902c24
 +
 +      foreach (QAbstractButton *b, col->findChildren<QAbstractButton *>()) {
 +        if (b->isVisible()) {
-+          tips << (b->text().isEmpty() ? b->toolTip()
-+                                       : b->text() + " " + b->toolTip());
++          tips << (b->text().isEmpty()
++                   ? b->toolTip().replace('\n', " / ")
++                   : b->text() + " " + b->toolTip().replace('\n', " / "));
 +        }
 +      }
 +      s += QString("\n   edge column %1,%2 %3x%4 [%5]").arg(col->x())
@@ -393,9 +412,24 @@ index 0000000..e902c24
 +      if (w->isVisible() && w != gui() && !w->inherits("QTipLabel")) {
 +        QMessageBox *mb = qobject_cast<QMessageBox *>(w);
 +
++        QMenu *menu = qobject_cast<QMenu *>(w);
++        QString items;
++
++        if (menu != nullptr) {
++          QStringList names;
++
++          foreach (QAction *a, menu->actions()) {
++            if (!a->isSeparator()) {
++              names << a->text() + (a->isEnabled() ? "" : " (off)");
++            }
++          }
++          items = QString(" [%1 items: %2]").arg(names.size())
++                  .arg(QStringList(names.mid(0, 6)).join(", "));
++        }
 +        tops << QString(w->metaObject()->className())
 +                + (w->isModal() ? " (modal)" : "")
-+                + (mb != nullptr ? " \"" + mb->text().left(80) + "\"" : "");
++                + (mb != nullptr ? " \"" + mb->text().left(80) + "\"" : "")
++                + items;
 +      }
 +    }
 +    s += QString("\n   other windows [%1]").arg(tops.join(", "));
@@ -456,7 +490,24 @@ index 0000000..e902c24
 +  } else if (cmd == "wait" && w.size() > 1) {
 +    drive_timer->setInterval(pace + w[1].toInt());
 +    return;
-+  } else if (cmd == "hover" || cmd == "click") {
++  } else if (cmd == "wheel" && w.size() > 3) {
++    QStringList tw({ "wheel", w[2], QStringList(w.mid(3)).join(' ') });
++    QWidget *t = find_target(tw);
++
++    if (t == nullptr) {
++      drive_log("   !! no such target");
++    } else {
++      QPoint local = t->rect().center();
++      QWheelEvent we(QPointF(local), QPointF(t->mapToGlobal(local)),
++                     QPoint(), QPoint(0, w[1].toInt()), Qt::NoButton,
++                     Qt::NoModifier, Qt::NoScrollPhase, false);
++
++      drive_log(QString("   wheel %1 on %2 \"%3\"").arg(w[1])
++                .arg(t->metaObject()->className())
++                .arg(t->toolTip().left(40)));
++      QApplication::sendEvent(t, &we);
++    }
++  } else if (cmd == "hover" || cmd == "click" || cmd == "rclick") {
 +    QStringList tw = w;
 +    bool shift = tw.last() == "shift";
 +    QWidget *t;
@@ -492,7 +543,9 @@ index 0000000..e902c24
 +                  .arg(under != nullptr ? under->toolTip() : QString()));
 +      }
 +      QTest::mouseMove(win, c);
-+      if (cmd == "click") {
++      if (cmd == "rclick") {
++        QTest::mouseClick(win, Qt::RightButton, Qt::NoModifier, c);
++      } else if (cmd == "click") {
 +        QTest::mouseClick(win, Qt::LeftButton,
 +                          shift ? Qt::ShiftModifier : Qt::NoModifier, c);
 +      }

@@ -1,0 +1,125 @@
+# Freeciv45 edges: the old sidebar's extras in their new homes. The indicators in the top strip and their
+# government menu; the wheel on Cities, Nations and Units; right-click on Units, Research and Nations. Run with
+# FREECIV_DRIVE_SERV="set fogofwar DISABLED", so the revealed map shows the other nations' cities and units.
+pace 1000
+wait 4000
+dismiss
+wait 1000
+option popup_new_cities off
+chat /lua cmd edit.create_city(find.unit(nil, 107).owner, find.tile(35, 2), "Testburg")
+wait 2500
+chat /lua cmd edit.create_building(find.tile(35, 2):city(), find.building_type("Palace"))
+wait 1500
+dismiss
+wait 500
+state start
+shot 01-start
+# the indicators: four icons, the game summary as the tooltip, the government menu on a click or a right-click
+hover tip change the government
+wait 1500
+shot 02-indicators-tip
+click tip change the government
+wait 1000
+state gov-menu-click
+shot 03-gov-menu
+dismiss
+wait 500
+rclick tip change the government
+wait 1000
+state gov-menu-rclick
+dismiss
+wait 500
+# end turn 1, so the AIs have founded their cities
+endturn
+wait 8000
+dismiss
+wait 1000
+click tip Map
+wait 1000
+state turn2
+# Cities: up the other nations' cities, down your own
+wheel 120 tip your cities (down)
+wait 800
+state cities-up-1
+shot 04-cities-wheel-up
+wheel 120 tip your cities (down)
+wait 800
+state cities-up-2
+wheel 120 tip your cities (down)
+wait 800
+state cities-up-3
+wheel -120 tip your cities (down)
+wait 800
+state cities-down
+# a touchpad: three steps of 40 make one notch
+wheel -40 tip other nations' cities
+wait 300
+state touch-1
+scroll 300 200
+wait 500
+state touch-scrolled
+wheel -40 tip other nations' cities
+wait 300
+wheel -40 tip other nations' cities
+wait 800
+state touch-3
+# Nations: up the other nations' capitals, down your capital
+wheel 120 tip your capital (down)
+wait 800
+state nations-up
+shot 05-nations-wheel-up
+wheel 120 tip your capital (down)
+wait 800
+state nations-up-2
+wheel -120 tip your capital (down)
+wait 800
+state nations-down
+# Units: up the other nations' units, down wait and the next unit
+wheel 120 tip wait and next unit
+wait 800
+state units-up
+wheel -120 tip wait and next unit
+wait 800
+state units-down
+# right-click Units: centre on the focus unit
+scroll 400 300
+wait 800
+state scrolled
+rclick tip centre on the focus unit
+wait 800
+state units-rclick
+# right-click Research: a menu of the advances that can be researched now
+rclick tip choose the research from a menu
+wait 1000
+state research-rclick
+shot 06-research-menu
+dismiss
+wait 500
+# right-click Nations: the open diplomacy meeting; none is open, so nothing happens
+rclick tip the open diplomacy meeting
+wait 800
+state nations-rclick
+# the wheel from a report goes back to the map
+click tip your cities (down)
+wait 1500
+state cities-report
+wheel -120 tip your cities (down)
+wait 1000
+state wheel-from-report
+# the wheel from the city overlay closes it
+opencity Testburg
+wait 2000
+state overlay
+wheel 120 tip your cities (down)
+wait 1000
+state wheel-from-overlay
+shot 07-after-overlay
+# the switch off: the old sidebar is back with its own indicators
+option gui_qt_freeciv45_edges off
+wait 1000
+state edges-off
+shot 08-sidebar
+option gui_qt_freeciv45_edges on
+wait 1000
+state edges-on
+quit
