@@ -1,8 +1,8 @@
 diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
-index 8b57da8..b7ef893 100644
+index 491e2dd..ca1cb80 100644
 --- a/client/gui-qt/fc_client.cpp
 +++ b/client/gui-qt/fc_client.cpp
-@@ -53,6 +53,7 @@
+@@ -54,6 +54,7 @@
  #include "optiondlg.h"
  #include "sidebar.h"
  #include "sprite.h"
@@ -10,7 +10,7 @@ index 8b57da8..b7ef893 100644
  #include "unitbar.h"
  
  fc_icons* fc_icons::m_instance = 0;
-@@ -272,6 +273,7 @@ void fc_client::fc_main(QApplication *qapp)
+@@ -276,6 +277,7 @@ void fc_client::fc_main(QApplication *qapp)
  
    startTimer(TIMER_INTERVAL);
    connect(qapp, &QCoreApplication::aboutToQuit, this, &fc_client::closing);
@@ -20,10 +20,10 @@ index 8b57da8..b7ef893 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..2c10409
+index 0000000..ff368bc
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,661 @@
+@@ -0,0 +1,664 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -341,7 +341,10 @@ index 0000000..2c10409
 +      QStringList tips;
 +
 +      foreach (QAbstractButton *b, col->findChildren<QAbstractButton *>()) {
-+        tips << b->toolTip();
++        if (b->isVisible()) {
++          tips << (b->text().isEmpty() ? b->toolTip()
++                                       : b->text() + " " + b->toolTip());
++        }
 +      }
 +      s += QString("\n   edge column %1,%2 %3x%4 [%5]").arg(col->x())
 +           .arg(col->y()).arg(col->width()).arg(col->height())
@@ -712,7 +715,7 @@ index 0000000..2a70d55
 +
 +#endif // FC__UIDRIVE_H
 diff --git a/meson.build b/meson.build
-index e9258f7..37e3415 100644
+index ca99a71..b0db987 100644
 --- a/meson.build
 +++ b/meson.build
 @@ -939,7 +939,7 @@ endif
@@ -724,7 +727,7 @@ index e9258f7..37e3415 100644
  else
    qt_mod = import('qt5')
  
-@@ -3568,6 +3568,7 @@ executable('freeciv-qt',
+@@ -3572,6 +3572,7 @@ executable('freeciv-qt',
    'client/gui-qt/spaceshipdlg.cpp',
    'client/gui-qt/sprite.cpp',
    'client/gui-qt/themes.cpp',

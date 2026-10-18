@@ -339,7 +339,8 @@ script in `city-test/`. It went onto the fork unchanged as patch 0017 (issue #13
 
 The first slice of section 8, the top strip and the right-edge column with the overview buttons, went onto the fork
 as patch 0018 (issue #140) behind its own option, `gui_qt_freeciv45_edges`; what it does and how it was checked is in
-`edges-slice.md`, the shots in `edges-test/`. The badges (#143) and the "what next" button (#144) follow.
+`edges-slice.md`, the shots in `edges-test/`. The notification badges (#143) followed as patch 0022
+(`badges-slice.md`, shots in `badges-test/`); the "what next" button (#144) follows.
 
 ## 8. The map's edges: top strip, right-edge column, "what next" and the tile box
 
