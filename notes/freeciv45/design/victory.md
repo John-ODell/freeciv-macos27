@@ -158,6 +158,13 @@ Notes, all derived unless marked:
   needs every living player in the alliance, so a human decides whether it can fire. Autogames that must run
   to their end turn ALLIED off with `--extra "set victories SPACERACE|CULTURE"`, and `scripts/test.sh` reports a
   game that ends by a victory as a pass that names the turn.
+- Changed 2026-10-18 (issue 159): the single bloc came from the AI level. Every game before that day ran at the server's
+  default, Easy, which adds handicaps Normal lacks, among them `H_CEASEFIRE` (a cease-fire offer at first contact),
+  `H_DIPLOMACY` and `H_DEFENSIVE` (`ai/difficulty.c`); which of them builds the bloc was not isolated.
+  civ45's game.ruleset now sets `ailevel` to Normal, and the fork's server gives a ruleset's level to the AIs that
+  aifill made in pregame before the ruleset loaded (`server/settings.c`, `settings_ruleset`). On seeds 42/42, where
+  every pair was allied from T200 to T350 at Easy (balance report 1, b1), 29 to 38 of 55 pairs are at war from T100
+  to the end, with 1,730 attacks (`logs/test-qt-20261018-160612`, `notes/freeciv45/balance-2.md`).
 - A real vote needs Lua, and Lua cannot read diplomatic states or the AI's attitude: `tolua_game.pkg` and
   `tolua_server.pkg` have no diplstate, alliance or "love" getter (grep for those words, 2026-10-17, observed
   absence). The one known door is an effect with a `DiplRel` requirement read through
