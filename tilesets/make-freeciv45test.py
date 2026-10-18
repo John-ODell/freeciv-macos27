@@ -147,7 +147,7 @@ def painted(panels, cutter, out_dir, record, plan):
                       % (NAME, key, os.path.basename(path), used, os.path.basename(cutter), TILE * 5, TILE * (row + 1)))
 
 def tilespec(data, out_root, files):
-    """trident.tilespec with sizes, offsets, name and file list changed, plains as plain variants."""
+    """trident.tilespec with sizes, offsets, name and file list changed; plains, forest and jungle as plain variants."""
     scaled = {"normal_tile_width": TILE, "normal_tile_height": TILE, "stack_size_offset_x": 64,
               "stack_size_offset_y": 32, "citybar_offset_y": 86, "tilelabel_offset_y": 32,
               "unit_upkeep_small_offset_y": 64}
