@@ -87,6 +87,21 @@ CANOPY = {"amplio2/terrain2.spec": ("forest", "jungle")}
 CANOPY_BASE = [("forest", "run15", sq.row(1) + sq.row(2)), ("jungle", "run15", sq.row(1) + sq.row(2))]
 # A CIE Lab offset (L, a, b, as GRADE) for every painted land cell, after GRADE (issue 199; --land-grade).
 LAND_GRADE = (0, 0, 0)
+# Resources (issue 206): the Freeciv45 art pack's isometric props (the art repo's freeciv45/03_resources, --resources),
+# already cut by its tools/props.py to 192x96 tiles standing on the tile's foot point with a soft contact shadow, the
+# size and anchor of amplio2's resource sprites doubled. Only the pick for each of civ45's 21 ts.* tags is copied
+# (RESOURCES.md, "Runs and retakes"; John: "we should only ship the chosen final assets"); they replace amplio2's.
+RESOURCE_RUNS = {"run1": "run1/panel1/post", "run2": "run2/panel2/post"}
+RESOURCES = [
+    ("ts.wheat", "run1", "wheat_1"), ("ts.buffalo", "run1", "buffalo_1"), ("ts.horses", "run1", "horses_1"),
+    ("ts.grassland_resources", "run1", "grassland_resources_2"), ("ts.fruit", "run1", "fruit_1"),
+    ("ts.gems", "run2", "gems_1"), ("ts.oasis", "run1", "oasis_1"), ("ts.oil", "run2", "oil_1"),
+    ("ts.pheasant", "run1", "pheasant_1"), ("ts.silk", "run2", "silk_1"), ("ts.coal", "run2", "coal_2"),
+    ("ts.wine", "run2", "wine_1"), ("ts.gold", "run2", "gold_1"), ("ts.iron", "run2", "iron_1"),
+    ("ts.tundra_game", "run1", "tundra_game_2"), ("ts.furs", "run1", "furs_1"),
+    ("ts.arctic_ivory", "run1", "arctic_ivory_1"), ("ts.peat", "run2", "peat_1"), ("ts.spice", "run2", "spice_1"),
+    ("ts.fish", "run1", "fish_2"), ("ts.whales", "run1", "whales_1"),
+]
 
 def square_point(x, y):
     """The square tile point (u, v) under the diamond's pixel centre (x, y)."""
@@ -243,6 +258,29 @@ def blend(out_dir, record):
                   "per tile; `mask.tile`, the diamond | none | %dx%d |"
                   % (NAME, sq.BLEND_MASKS, sq.BLEND_MASKS, 3 * W * len(masks), 4 * H))
 
+def resources(res_dir, out_dir, record):
+    """resources.png and resources.spec: RESOURCES' picks, five to a row, each as cut (192x96, RGBA)."""
+    cols = 5; rows = (len(RESOURCES) + cols - 1) // cols
+    sheet = Image.new("RGBA", (cols * W, rows * H), (0, 0, 0, 0))
+    for i, (tag, run, pick) in enumerate(RESOURCES):
+        prop = Image.open(os.path.join(res_dir, RESOURCE_RUNS[run], pick + ".png")).convert("RGBA")
+        assert prop.size == (W, H), (pick, prop.size)
+        sheet.paste(prop, ((i % cols) * W, (i // cols) * H))
+    sheet.save(os.path.join(out_dir, "resources.png"), optimize=True)
+    with open(os.path.join(out_dir, "resources.spec"), "w") as f:
+        f.write("; Resources for the Freeciv45 iso tileset: the Freeciv45 art pack's isometric props (freeciv45/03_resources),\n"
+                "; one pick per tag, copied by tilesets/make-%s.py (see RECORD.md).\n\n"
+                '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    John O\'Dell (sheet workflow)\n"\n\n'
+                '[file]\ngfx = "%s/resources"\n\n[grid_main]\n\nx_top_left = 0\ny_top_left = 0\ndx = %d\ndy = %d\n\n'
+                'tiles = { "row", "column", "tag"\n%s\n}\n'
+                % (NAME, NAME, W, H, "\n".join('  %d, %d, "%s"' % (i // cols, i % cols, t)
+                                               for i, (t, _, _) in enumerate(RESOURCES))))
+    record.append("| `%s/resources.spec` | the art pack's resource props (`freeciv45/03_resources`, cut by `tools/props.py`), "
+                  "one pick per tag: %s | none (as cut, %dx%d) | %dx%d |"
+                  % (NAME, ", ".join("%s `%s/%s`" % (t[3:], run, pick) for t, run, pick in RESOURCES), W, H,
+                     cols * W, rows * H))
+    return {t for t, _, _ in RESOURCES}
+
 class Drop:
     """Tags recut() leaves out: the ones this tileset draws itself, and DROP_PREFIX's for the spec being cut."""
     def __init__(self, own): self.own, self.prefixes = own, ()
@@ -379,6 +417,8 @@ def main():
                     help="forest and jungle: the painted canopy, or amplio2's tree overlays over CANOPY_BASE")
     ap.add_argument("--land-grade", default=",".join(map(str, LAND_GRADE)), metavar="L,A,B",
                     help="CIE Lab offset for the painted land, after GRADE")
+    ap.add_argument("--resources", help="the art repo's freeciv45/03_resources (default: next to --art)")
+    ap.add_argument("--no-resources", action="store_true", help="keep amplio2's resource sprites")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
@@ -401,6 +441,9 @@ def main():
     painted_record, amplio_record = [], []
     sq.painted(panels, cutter, out_dir, painted_record, plan, tone_match=not a.no_tone_match, level=not a.no_level)
     own = ground(out_dir, painted_record) | {"mask.tile"}
+    if not a.no_resources:
+        own |= resources(a.resources or os.path.join(os.path.dirname(os.path.abspath(a.art)), "03_resources"),
+                         out_dir, painted_record)
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -423,6 +466,7 @@ def main():
                 open(spec, "w").write(text)
             if rel == "amplio2/terrain1.spec":
                 files += ["%s/terrain45.spec" % NAME, "%s/coast.spec" % NAME] + ([] if a.no_blend else ["%s/blend.spec" % NAME])
+                files += [] if a.no_resources else ["%s/resources.spec" % NAME]
         elif sq.map_misc_scale(rel) and sq.map_misc_scale(rel) != 1:
             drop.prefixes = ()
             sq.recut(a.data, rel, out_dir, amplio_record, scale=sq.map_misc_scale(rel))
@@ -437,6 +481,15 @@ def main():
                 "Cut as `make-freeciv45test.py` cuts them (the same panels, cells, cutter and tone match), then turned "
                 "into diamonds.\n\n| spec | source | scaling | sheet |\n|---|---|---|---|\n"
                 + "\n".join(painted_record) + "\n")
+        if not a.no_resources:
+            f.write("\n## Resources\n\n`resources.spec` / `resources.png`: the %d resource sprites, one per `ts.*` tag of civ45's "
+                    "`terrain.ruleset`, from the Freeciv45 art pack (John O'Dell's sheet workflow with OpenAI image "
+                    "generation through Codex, art repo folder `freeciv45/03_resources`, runs 1 and 2, the picks in its "
+                    "`RESOURCES.md`). Each is an isometric prop on a transparent %dx%d tile, cut by the art repo's "
+                    "`tools/props.py` (standing on the tile's foot point, soft contact shadow) and copied unchanged. Only "
+                    "the picks the tileset draws are copied: no alternates, panels or 1x copies. They replace amplio2's "
+                    "resource sprites of the same tags (issue 206). GPL-2.0-or-later, like the rest of the folder.\n"
+                    % (len(RESOURCES), W, H))
     print("\n".join(amplio_record + painted_record))
 
 if __name__ == "__main__":

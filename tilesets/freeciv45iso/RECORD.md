@@ -24,7 +24,7 @@ are re-cut too, because the client draws them on the map; the other `misc/` file
 
 | spec | source | scaling | sheet |
 |---|---|---|---|
-| `freeciv45iso/terrain1.spec` | `amplio2/terrain1.spec` (62 tags, 1 grids) | nearest 2x | 1728x1536 |
+| `freeciv45iso/terrain1.spec` | `amplio2/terrain1.spec` (41 tags, 1 grids) | nearest 2x | 1728x1536 |
 | `freeciv45iso/maglev.spec` | `amplio2/maglev.spec` (9 tags, 1 grids) | nearest 2x | 1728x96 |
 | `freeciv45iso/terrain2.spec` | `amplio2/terrain2.spec` (32 tags, 1 grids) | nearest 2x | 1536x576 |
 | `freeciv45iso/hills.spec` | `amplio2/hills.spec` (16 tags, 1 grids) | nearest 2x | 768x384 |
@@ -66,8 +66,13 @@ Cut as `make-freeciv45test.py` cuts them (the same panels, cells, cutter and ton
 | `freeciv45iso/terrain45.spec` | `run19` (desert_and_tundra.png): mountains 5, desert 5, tundra 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | tone match | on | mean luma per variant at 192 px, min-max | grassland 92-116 -> 104-104; plains 85-166 -> 128-128; forest 92-116 -> 104-104; jungle 92-116 -> 104-104; hills 132-196 -> 168-169; mountains 176-178 -> 177-177; desert 173-182 -> 176-176; tundra 115-132 -> 123-124; arctic 191-197 -> 193-193; swamp 74-76 -> 75-75; coast 120-130 -> 125-126; lake 73-77 -> 74-75; floor 29-33 -> 32-32; inaccessible 67-69 -> 68-68; forest_tundra 56-63 -> 60-61 |
 | `freeciv45iso/terrain45.spec` | the cells above, each turned 45 degrees and squashed 2:1 (to_iso, 4x4 samples, binary outline); graded in Lab: floor +28 +2 -20 | 192x96 diamonds | 960x3072 |
+| `freeciv45iso/resources.spec` | the art pack's resource props (`freeciv45/03_resources`, cut by `tools/props.py`), one pick per tag: wheat `run1/wheat_1`, buffalo `run1/buffalo_1`, horses `run1/horses_1`, grassland_resources `run1/grassland_resources_2`, fruit `run1/fruit_1`, gems `run2/gems_1`, oasis `run1/oasis_1`, oil `run2/oil_1`, pheasant `run1/pheasant_1`, silk `run2/silk_1`, coal `run2/coal_2`, wine `run2/wine_1`, gold `run2/gold_1`, iron `run2/iron_1`, tundra_game `run1/tundra_game_2`, furs `run1/furs_1`, arctic_ivory `run1/arctic_ivory_1`, peat `run2/peat_1`, spice `run2/spice_1`, fish `run1/fish_2`, whales `run1/whales_1` | none (as cut, 192x96) | 960x480 |
 | `freeciv45iso/coast.spec` | `run14` r1c3 (shores_and_banks.png), through `seamless.py`: beach cells for water tiles next to land, layer 1 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | `run14` r1c3 (shores_and_banks.png), through `seamless.py`: sand cells for land tiles next to water, layer 1 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | `run13` r1c1 (glacier_and_swamp.png), through `seamless.py`: ice cells for water tiles next to glacier, layer 2 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | the shore cells above as isometric corner cells (to_iso, each quarter padded by its own edge) | 96x48 cells | 3072x144 |
 | `freeciv45iso/blend.spec` | generated: freeciv45test's `t.blend_mask` and `_2`-`_4` (seeds 1-4) turned per tile; `mask.tile`, the diamond | none | 2304x384 |
+
+## Resources
+
+`resources.spec` / `resources.png`: the 21 resource sprites, one per `ts.*` tag of civ45's `terrain.ruleset`, from the Freeciv45 art pack (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/03_resources`, runs 1 and 2, the picks in its `RESOURCES.md`). Each is an isometric prop on a transparent 192x96 tile, cut by the art repo's `tools/props.py` (standing on the tile's foot point, soft contact shadow) and copied unchanged. Only the picks the tileset draws are copied: no alternates, panels or 1x copies. They replace amplio2's resource sprites of the same tags (issue 206). GPL-2.0-or-later, like the rest of the folder.
