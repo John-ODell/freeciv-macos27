@@ -342,7 +342,8 @@ The first slice of section 8, the top strip and the right-edge column with the o
 as patch 0018 (issue #140) behind its own option, `gui_qt_freeciv45_edges`; what it does and how it was checked is in
 `edges-slice.md`, the shots in `edges-test/`. The notification badges (#143) followed as patches 0022 and 0023
 (`badges-slice.md`, shots in `badges-test/`), and the "what next" button above the minimap (#144) as patch 0026
-(`whatnext-slice.md`, shots in `whatnext-test/`).
+(`whatnext-slice.md`, shots in `whatnext-test/`). The sidebar's wheel and right-click extras and its indicators
+(#146) followed as patch 0027 (`extras-slice.md`, shots in `extras-test/`).
 
 ## 8. The map's edges: top strip, right-edge column, "what next" and the tile box
 
@@ -357,6 +358,9 @@ switch on these replace the left sidebar (decision 9); with it off nothing here 
   rates as three small numbers (click opens today's rates dialog), culture (the player's points), then, from the
   slice that adds them, strategic resources with counts; at the right end the year and turn and a menu button.
   Each number is a button that opens its report (research, economy, nations); deltas in brackets.
+- Left of the year and turn, the sidebar's four indicators (research progress, global warming, nuclear winter,
+  government) as one flat button at the strip's icon height, the game summary as its tooltip; a click or a
+  right-click offers the government menu, as a right-click on the sidebar's indicators did (#146, patch 0027).
 - Freeciv has no empire-wide happiness or faith number; those `hud-layout.md` entries have no Freeciv45 field and
   are left out until a ruleset slice adds one (inferred).
 - Data: `research_get(client_player())`, `->researching`, `->bulbs_researched`, the per-turn bulbs as the sidebar's
@@ -371,6 +375,13 @@ switch on these replace the left sidebar (decision 9); with it off nothing here 
   top: round 44 px buttons for the screens used every few turns (research, nations and diplomacy, cities,
   units, economy), one "overviews" button that opens a short list of the rest (demographics, the message log,
   spaceship, score, help), and below a gap the notification badges.
+- The sidebar's wheel and right-click extras sit on the matching buttons, with a tooltip line each (#146, patch
+  0027): the wheel on Cities (up the other nations' cities, down your own), on Nations (up the other nations'
+  capitals, down your capital) and on Units (up the other nations' units, down W); a right-click on Units centres
+  on the focus unit, on Research offers the advances to research now, and on Nations opens the current diplomacy
+  meeting (an observer gets the observe menu). The wheel first returns to the map and closes the city overlay. The
+  sidebar's other right-click, back to the map from any button without its own, is dropped on purpose: the Map
+  button does it.
 - Each overview opens as today's report tab (`add_game_tab`, `pages.cpp:811-818`); a modal over the dimmed map as in
   `hud-layout.md` section 4 is a later step, since the reports are tabs of the game stack today (inferred).
 - Badges: one round 36 px badge per unvisited message that has a place to go (a city or a tile), newest at the

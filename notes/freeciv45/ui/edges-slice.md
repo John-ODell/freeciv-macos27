@@ -35,8 +35,9 @@ removes both frames at once, in game.
 - The "what next" button above the minimap: #144, built in patch 0026 (`whatnext-slice.md`). End turn also stays at
   the right end of the strip (decision 12 in `panels.md`).
 - The tile box above the minimap (8.4), strategic resources in the strip (a later ruleset slice), overviews as a
-  modal over a dimmed map (they open as today's report tabs), the sidebar's mouse-wheel and right-click extras
-  (next city, next enemy unit, the indicators menu), and the Classic and Necrophos theme blocks.
+  modal over a dimmed map (they open as today's report tabs), and the Classic and Necrophos theme blocks.
+- The sidebar's mouse-wheel and right-click extras and its four indicators: #146, built in patch 0027
+  (`extras-slice.md`).
 
 ## Files
 

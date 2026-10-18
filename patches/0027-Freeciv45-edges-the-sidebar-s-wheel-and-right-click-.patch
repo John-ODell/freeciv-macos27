@@ -1,0 +1,445 @@
+From bf7d13611933593ba23f31c404c9e0555c9531c0 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 11:04:37 -0500
+Subject: [PATCH] Freeciv45 edges: the sidebar's wheel and right-click extras
+ and its indicators
+
+With gui_qt_freeciv45_edges on the sidebar is hidden, and its extras went
+with it. They now sit on the matching right-edge buttons, each with a
+tooltip line:
+
+- Cities: the wheel goes up through the other nations' cities, down
+  through your own.
+- Nations: the wheel goes up through the other nations' capitals, down to
+  your capital; a right-click opens the current diplomacy meeting (an
+  observer gets the observe menu).
+- Units: the wheel goes up through the other nations' units, down as W
+  does; a right-click centres on the focus unit.
+- Research: a right-click offers the advances to research now.
+
+The wheel first returns to the map and closes the city overlay, so it works
+from a report too. A notch is 120; a touchpad's smaller steps add up to one.
+The same functions as the sidebar's run, unchanged. The sidebar's fallback
+right-click (back to the map from any other button) is not carried over:
+the Map button does it.
+
+The four indicators (research progress, global warming, nuclear winter,
+government) sit in the top strip left of the year and turn, drawn at the
+strip's icon height, with the game summary as their tooltip. A click or a
+right-click offers the government menu, as a right-click on the sidebar's
+indicators did. set_indicator_icons redraws them with the sidebar's.
+
+panels.md sections 8.1 and 8.2, issue 146.
+---
+ client/gui-qt/edgebar.cpp | 193 ++++++++++++++++++++++++++++++++++++++
+ client/gui-qt/edgebar.h   |  26 +++++
+ client/gui-qt/mapview.cpp |   4 +
+ client/gui-qt/pages.cpp   |  25 +++++
+ 4 files changed, 248 insertions(+)
+
+diff --git a/client/gui-qt/edgebar.cpp b/client/gui-qt/edgebar.cpp
+index cf1f87f..64e497a 100644
+--- a/client/gui-qt/edgebar.cpp
++++ b/client/gui-qt/edgebar.cpp
+@@ -16,14 +16,19 @@
+ #endif
+ 
+ // Qt
++#include <QContextMenuEvent>
+ #include <QEvent>
+ #include <QHBoxLayout>
+ #include <QLabel>
+ #include <QMenu>
++#include <QMouseEvent>
++#include <QPainter>
++#include <QPixmap>
+ #include <QPushButton>
+ #include <QStyle>
+ #include <QTimer>
+ #include <QVBoxLayout>
++#include <QWheelEvent>
+ 
+ // utility
+ #include "fcintl.h"
+@@ -54,12 +59,14 @@
+ #include "cityrep.h"
+ #include "edgebar.h"
+ #include "fc_client.h"
++#include "menu.h"
+ #include "messagewin.h"
+ #include "plrdlg.h"
+ #include "qtg_cxxside.h"
+ #include "repodlgs.h"
+ #include "sidebar.h"
+ #include "spaceshipdlg.h"
++#include "sprite.h"
+ 
+ // Logical sizes at 1x (panels.md section 8.5); the same at 2x.
+ static const int STRIP_HEIGHT = 32;
+@@ -76,6 +83,8 @@ static const int WHAT_NEXT_WIDTH = 224;
+ static const int WHAT_NEXT_HEIGHT = 40;
+ static const int WHAT_NEXT_GAP = 8;
+ static const int WHAT_NEXT_REFRESH_MS = 500;
++static const int INDICATOR_GAP = 2;
++static const int WHEEL_NOTCH = 120;
+ 
+ /************************************************************************//**
+   A number with its sign, for per-turn changes
+@@ -170,6 +179,23 @@ top_strip::top_strip(QWidget *parent) : QFrame(parent)
+   rates_btn = add_number(QString(), open_rates);
+   culture_btn = add_number(QString(), popup_players_dialog);
+   row->addStretch(1);
++
++  // The sidebar's four indicators: research, global warming, nuclear
++  // winter and government. A click offers the government menu, as a
++  // right-click on the sidebar's indicators did.
++  indicators_btn = new QToolButton(this);
++  indicators_btn->setObjectName("strip_indicators");
++  indicators_btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
++  indicators_btn->setAutoRaise(true);
++  indicators_btn->setFocusPolicy(Qt::NoFocus);
++  indicators_btn->setCursor(Qt::PointingHandCursor);
++  indicators_btn->setContextMenuPolicy(Qt::PreventContextMenu);
++  indicators_btn->installEventFilter(this);
++  connect(indicators_btn, &QToolButton::clicked, this,
++          &top_strip::indicators_menu);
++  row->addWidget(indicators_btn);
++  gov = new gov_menu(this);
++
+   turn_btn = add_number(QString(), show_map);
+ 
+   // TRANS: the Freeciv45 top strip's end turn button
+@@ -232,6 +258,7 @@ void top_strip::refresh()
+   }
+   turn_btn->setText(s);
+   turn_btn->setToolTip(QString(get_info_label_text_popup()));
++  update_indicators();
+ 
+   if (!playing) {
+     return;
+@@ -278,6 +305,74 @@ void top_strip::refresh()
+                                     "opens the nations report")));
+ }
+ 
++/************************************************************************//**
++  Draw the four indicators side by side at the strip's icon height; called
++  when the client changes them (set_indicator_icons) and with the numbers
++****************************************************************************/
++void top_strip::update_indicators()
++{
++  struct sprite *sprites[4] = {
++    client_research_sprite(), client_warming_sprite(),
++    client_cooling_sprite(), client_government_sprite()
++  };
++  qreal dpr = devicePixelRatioF();
++  QSize size(4 * STRIP_ICON + 3 * INDICATOR_GAP, STRIP_ICON);
++  QPixmap pm(size * dpr);
++  QPainter p;
++  int x = 0;
++
++  pm.setDevicePixelRatio(dpr);
++  pm.fill(Qt::transparent);
++  p.begin(&pm);
++  p.setRenderHint(QPainter::SmoothPixmapTransform);
++  for (struct sprite *sp : sprites) {
++    if (sp != nullptr && sp->pm != nullptr && !sp->pm->isNull()) {
++      QSize fit = sp->pm->size().scaled(STRIP_ICON, STRIP_ICON,
++                                        Qt::KeepAspectRatio);
++
++      p.drawPixmap(QRect(x + (STRIP_ICON - fit.width()) / 2,
++                         (STRIP_ICON - fit.height()) / 2,
++                         fit.width(), fit.height()), *sp->pm);
++    }
++    x += STRIP_ICON + INDICATOR_GAP;
++  }
++  p.end();
++  indicators_btn->setIcon(QIcon(pm));
++  indicators_btn->setIconSize(size);
++  // TRANS: the Freeciv45 top strip's indicators, after the game summary
++  indicators_btn->setToolTip(QString(get_info_label_text_popup()) + "\n"
++                             + QString(_("Click: change the government")));
++}
++
++/************************************************************************//**
++  A right press on the indicators offers the government menu too
++****************************************************************************/
++bool top_strip::eventFilter(QObject *obj, QEvent *event)
++{
++  if (obj == indicators_btn && event->type() == QEvent::MouseButtonPress
++      && static_cast<QMouseEvent *>(event)->button() == Qt::RightButton) {
++    indicators_menu();
++    return true;
++  }
++
++  return QFrame::eventFilter(obj, event);
++}
++
++/************************************************************************//**
++  The government menu under the indicators, for a player who can give
++  orders
++****************************************************************************/
++void top_strip::indicators_menu()
++{
++  if (!can_client_issue_orders()) {
++    return;
++  }
++  gov->create();
++  gov->update();
++  gov->popup(indicators_btn->mapToGlobal(QPoint(0,
++                                                indicators_btn->height())));
++}
++
+ /************************************************************************//**
+   End turn is greyed out while the turn cannot be ended
+ ****************************************************************************/
+@@ -306,6 +401,95 @@ edge_button::edge_button(const QString &icon, const QString &tip,
+   setToolTip(tip);
+   setFocusPolicy(Qt::NoFocus);
+   setCursor(Qt::PointingHandCursor);
++  right_click = nullptr;
++  wheel_up = nullptr;
++  wheel_down = nullptr;
++  wheel_delta = 0;
++}
++
++/************************************************************************//**
++  A line of the tooltip for each extra
++****************************************************************************/
++void edge_button::add_hint(const QString &hint)
++{
++  setToolTip(toolTip() + "\n" + hint);
++}
++
++/************************************************************************//**
++  What a right-click does, as on the sidebar's matching button
++****************************************************************************/
++void edge_button::set_right_click(void (*func)(void), const QString &hint)
++{
++  right_click = func;
++  add_hint(hint);
++}
++
++/************************************************************************//**
++  What the wheel does, up and down, as on the sidebar's matching button
++****************************************************************************/
++void edge_button::set_wheel(void (*up)(void), void (*down)(void),
++                            const QString &hint)
++{
++  wheel_up = up;
++  wheel_down = down;
++  add_hint(hint);
++}
++
++/************************************************************************//**
++  A right-click runs the button's extra; the left button clicks as usual
++****************************************************************************/
++void edge_button::mousePressEvent(QMouseEvent *event)
++{
++  if (event->button() == Qt::RightButton && right_click != nullptr) {
++    event->accept();
++    right_click();
++    return;
++  }
++  QToolButton::mousePressEvent(event);
++}
++
++/************************************************************************//**
++  The press already ran the right-click; keep the context menu event from
++  reaching the map
++****************************************************************************/
++void edge_button::contextMenuEvent(QContextMenuEvent *event)
++{
++  if (right_click != nullptr) {
++    event->accept();
++    return;
++  }
++  QToolButton::contextMenuEvent(event);
++}
++
++/************************************************************************//**
++  One step of the wheel up or down runs the extra on the map: a mouse
++  sends a notch a step, a touchpad smaller steps that add up
++****************************************************************************/
++void edge_button::wheelEvent(QWheelEvent *event)
++{
++  void (*func)(void) = nullptr;
++
++  if (wheel_up == nullptr && wheel_down == nullptr) {
++    QToolButton::wheelEvent(event);
++    return;
++  }
++  wheel_delta += event->angleDelta().y();
++  if (wheel_delta >= WHEEL_NOTCH) {
++    func = wheel_up;
++  } else if (wheel_delta <= -WHEEL_NOTCH) {
++    func = wheel_down;
++  }
++  if (func != nullptr || qAbs(wheel_delta) >= WHEEL_NOTCH) {
++    wheel_delta = 0;
++  }
++  if (func != nullptr) {
++    if (city_overlay_is_open()) {
++      gui()->cityoverlay_wdg->close_overlay();
++    }
++    side_show_map(true);
++    func();
++  }
++  event->accept();
+ }
+ 
+ /************************************************************************//**
+@@ -594,10 +778,19 @@ edge_button *edge_column::add_button(const QString &icon,
+   });
+   layout()->addWidget(btn);
+   layout()->setAlignment(btn, Qt::AlignHCenter);
++  buttons.insert(icon, btn);
+ 
+   return btn;
+ }
+ 
++/************************************************************************//**
++  The column's button with this icon, for its extras; nullptr if none
++****************************************************************************/
++edge_button *edge_column::button(const QString &icon) const
++{
++  return buttons.value(icon, nullptr);
++}
++
+ /************************************************************************//**
+   Whether a unit still needs orders this turn: the units the focus cycles
+   through, as W and the focus advance pick them, waiting ones included
+diff --git a/client/gui-qt/edgebar.h b/client/gui-qt/edgebar.h
+index bd7eed2..139eb2d 100644
+--- a/client/gui-qt/edgebar.h
++++ b/client/gui-qt/edgebar.h
+@@ -21,13 +21,18 @@
+ // Qt
+ #include <QFrame>
+ #include <QList>
++#include <QMap>
+ #include <QPushButton>
+ #include <QSet>
+ #include <QToolButton>
+ 
++class gov_menu;
++class QContextMenuEvent;
+ class QLabel;
++class QMouseEvent;
+ class QTimer;
+ class QVBoxLayout;
++class QWheelEvent;
+ struct city;
+ struct message;
+ struct unit;
+@@ -44,12 +49,18 @@ public:
+   void refresh();
+   void set_turn_done_enabled(bool enabled);
+   void set_turn_done_attention(bool attention);
++  void update_indicators();
++protected:
++  bool eventFilter(QObject *obj, QEvent *event) override;
+ private:
+   QToolButton *add_number(const QString &icon, void (*click)(bool));
++  void indicators_menu();
+   QToolButton *research_btn;
+   QToolButton *gold_btn;
+   QToolButton *rates_btn;
+   QToolButton *culture_btn;
++  QToolButton *indicators_btn;
++  gov_menu *gov;
+   QToolButton *turn_btn;
+   QPushButton *end_turn_btn;
+ };
+@@ -62,6 +73,19 @@ class edge_button : public QToolButton
+   Q_OBJECT
+ public:
+   edge_button(const QString &icon, const QString &tip, QWidget *parent);
++  void set_right_click(void (*func)(void), const QString &hint);
++  void set_wheel(void (*up)(void), void (*down)(void),
++                 const QString &hint);
++protected:
++  void mousePressEvent(QMouseEvent *event) override;
++  void contextMenuEvent(QContextMenuEvent *event) override;
++  void wheelEvent(QWheelEvent *event) override;
++private:
++  void add_hint(const QString &hint);
++  void (*right_click)(void);
++  void (*wheel_up)(void);
++  void (*wheel_down)(void);
++  int wheel_delta;
+ };
+ 
+ /****************************************************************************
+@@ -90,9 +114,11 @@ class edge_column : public QFrame
+ public:
+   edge_column(QWidget *parent);
+   void update_badges();
++  edge_button *button(const QString &icon) const;
+ protected:
+   void resizeEvent(QResizeEvent *event) override;
+ private:
++  QMap<QString, edge_button *> buttons;
+   edge_button *add_button(const QString &icon, const QString &tip,
+                           void (*click)(bool));
+   edge_button *more_btn;
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index b450a79..837196d 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -47,6 +47,7 @@
+ #include "colors.h"
+ #include "fc_client.h"
+ #include "cityoverlay.h"
++#include "edgebar.h"
+ #include "unitbar.h"
+ #include "gui_main.h"
+ #include "mapview.h"
+@@ -1185,6 +1186,9 @@ void set_indicator_icons(struct sprite *bulb, struct sprite *sol,
+                          struct sprite *flake, struct sprite *gov)
+ {
+   gui()->sw_indicators->update_final_pixmap();
++  if (gui()->topstrip_wdg != nullptr) {
++    gui()->topstrip_wdg->update_indicators();
++  }
+ }
+ 
+ /**********************************************************************//**
+diff --git a/client/gui-qt/pages.cpp b/client/gui-qt/pages.cpp
+index dcd33a9..2704f30 100644
+--- a/client/gui-qt/pages.cpp
++++ b/client/gui-qt/pages.cpp
+@@ -814,6 +814,31 @@ void fc_client::create_game_page()
+   edgecolumn_wdg = new edge_column(nullptr);
+   pages_layout[PAGE_GAME]->addWidget(topstrip_wdg, 0, 0, 1, 4);
+   pages_layout[PAGE_GAME]->addWidget(edgecolumn_wdg, 1, 3);
++  // The sidebar's wheel and right-click extras, on the matching buttons
++  edgecolumn_wdg->button("research")->set_right_click(
++    side_right_click_science,
++    // TRANS: a Freeciv45 right-edge button's tooltip line
++    QString(_("Right-click: choose the research from a menu")));
++  edgecolumn_wdg->button("nations")->set_right_click(
++    side_right_click_diplomacy,
++    // TRANS: a Freeciv45 right-edge button's tooltip line
++    QString(_("Right-click: the open diplomacy meeting")));
++  edgecolumn_wdg->button("nations")->set_wheel(
++    center_next_player_capital, key_center_capital,
++    // TRANS: a Freeciv45 right-edge button's tooltip line
++    QString(_("Wheel: other nations' capitals (up), your capital (down)")));
++  edgecolumn_wdg->button("cities")->set_wheel(
++    center_next_enemy_city, center_next_player_city,
++    // TRANS: a Freeciv45 right-edge button's tooltip line
++    QString(_("Wheel: other nations' cities (up), your cities (down)")));
++  edgecolumn_wdg->button("units")->set_right_click(
++    side_center_unit,
++    // TRANS: a Freeciv45 right-edge button's tooltip line
++    QString(_("Right-click: centre on the focus unit")));
++  edgecolumn_wdg->button("units")->set_wheel(
++    cycle_enemy_units, key_unit_wait,
++    // TRANS: a Freeciv45 right-edge button's tooltip line
++    QString(_("Wheel: other nations' units (up), wait and next unit (down)")));
+   pages_layout[PAGE_GAME]->setContentsMargins(0, 0, 0, 0);
+   pages_layout[PAGE_GAME]->setSpacing(0);
+   // Only hide here: the page's layout may not be on a widget yet, and
+-- 
+2.56.0
+
