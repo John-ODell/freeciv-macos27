@@ -238,6 +238,27 @@ The 21 civ45 resources now draw the Freeciv45 art pack's isometric props. They c
 
 ![whales and fish on open water and by the shore, 2x](resources-sea-2x.jpg)
 
+## Desert toward straw (issue 209, 2026-10-18)
+
+John saw the resources picture: the map looks better, but the ground round the start still read as orange sand.
+- **Which terrain:** desert, not plains. amplio2's pale beige in that spot matches the colour of its desert sprite.
+- **Measured in CIE Lab** (Pillow's 0-255 scale, 128 is neutral; observed):
+
+  | | L | a | b |
+  |---|---|---|---|
+  | our desert cells (dunes, rocky and bank alike) | 186 | +16 | +44 |
+  | amplio2's desert sprite | 197 | +1 | +25 |
+
+- **The fix:** `GRADE["desert"] = (0, -12, -14)`, which moves a and b only. The cells now average a +4, b +30: a straw
+  that stays a little warmer than amplio2's.
+  - Lightness is unchanged. Mean luminance in a patch of the start desert was 150.3 before and 150.7 after; amplio2's
+    is 158.3.
+- In the game the patch moved less than the cells (a +12 to +5, b +40 to +33). The beach, the blend into neighbours
+  and the oasis share it.
+- The client log shows no tileset warning.
+
+![amplio2, before, desert toward straw; mapseed 21, 1:1](desert-seed21-1to1.jpg)
+
 ## Not done, and findings
 
 - Hills and mountains had no relief in the first build (issue 194). They now draw amplio2's relief (see above).
