@@ -68,11 +68,48 @@ Offscreen client on the driver build (patch 0033 plus `../ui/bar-test/uidrive.di
   - The ice edge shows where water meets glacier.
   - amplio2's rivers, specials, cities and units draw on the painted ground.
 
+## Relief for hills and mountains (issue 194, 2026-10-18)
+
+A painted square seen from above, once turned into a diamond, reads as flat ground. Its light also swings toward the
+left. That suits grassland, plains, desert, tundra, swamp, glacier and water. Hills and mountains need relief.
+
+**Chosen for now:**
+- Hills and mountains draw amplio2's relief overlays over flat painted ground.
+  - Hills stand on plains cells (run 6 row 3), mountains on rocky desert (run 12 row 5).
+  - The painted hills and mountains stay in freeciv45test.
+- Forest, jungle and the cool pine keep the painted canopy, which reads as forest at the angle (picture above).
+
+**How (observed, source and run):**
+- The overlays come in 16 forms each, matched to same-type neighbours on the four edges.
+  - In the client, a 1 digit in `_n1e0s0w0` means "same type", and hills and mountains join each other.
+  - Mountains are tall (96x66 in amplio2, 192x132 here), 12 px lower.
+- They go on layer 2, because the land tiles' layer 1 holds the beach.
+- So the water tiles' ice edge on layer 2 is now matched as a pair, water against arctic (`t.l2.<water>_cell_u_a_w_w`).
+  - As a "same" match, every hill next to water would have drawn an ice edge.
+  - The run shows ice by the glacier and none by the hills.
+- The painted base was tried too (`--relief-base painted`). amplio2's hill overlay covers the whole diamond and the
+  mountains leave only small gaps, so the two bases look almost the same. The flat base also fades into the
+  neighbours in plain ground colours.
+
+![amplio2, freeciv45iso before, freeciv45iso with relief; 1:1](relief-1to1.jpg)
+
+The whole window, half size: `relief-window.jpg`.
+
+**From the FCW and amplio2 study (the parent session's read-only report), checked here:**
+- Relief is a separate overlay layer: yes, `hills.spec` and `mountains.spec` hold only `t.l1` overlays.
+- Mountains are 96x66: yes.
+- Units are 64x48: yes.
+- "u.freight and u.container carry a real trademark": **not confirmed**. Stock amplio2's freight truck says "GPL" on its
+  side, and the container ship shows no brand at this size. Both stay as stock amplio2 GPL art.
+- Only stock amplio2 is used (from the build's data), nothing from FCW's own additions.
+- Later ideas, not done:
+  - painted iso relief overlays for hills, mountains and forest, as a Codex art job;
+  - sparse transparent detail sprites as extra numbered variants (FCW does this; the 3.2 client picks a variant per
+    tile).
+
 ## Not done, and findings
 
-- **Hills and mountains have no relief.** They are the top-down paintings squashed, while amplio2 stands tall sprites
-  on them. This needs art drawn for the angle (overlay sprites like amplio2's layer 1) or a choice to keep them flat.
-  Filed as a finding.
+- Hills and mountains had no relief in the first build (issue 194). They now draw amplio2's relief (see above).
 - **Inaccessible against deep ocean is a hard edge.** It is the same in freeciv45test, because civ45's Inaccessible
   is not in the water class.
 - **Two variants of one terrain meet without a fade** in iso (see above).

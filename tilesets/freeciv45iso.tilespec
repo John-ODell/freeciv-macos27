@@ -151,6 +151,8 @@ files =
   "freeciv45iso/coast.spec",
   "freeciv45iso/blend.spec",
   "freeciv45iso/maglev.spec",
+  "freeciv45iso/hills.spec",
+  "freeciv45iso/mountains.spec",
   "freeciv45iso/water.spec",
   "freeciv45iso/volcano.spec",
   "freeciv45iso/tiles.spec",
@@ -205,7 +207,7 @@ match_types = "desert", "forest", "grassland", "hills", "jungle", "mountains", "
 match_types = "water", "land", "ice"
 
 [layer2]
-match_types = "water", "arctic"
+match_types = "water", "arctic", "hills"
 
 ; Water graphics referenced by terrain.ruleset
 ;
@@ -218,7 +220,7 @@ layer0_match_type = "water"
 layer1_match_type = "water"
 layer1_match_with = "land"
 layer2_match_type = "water"
-layer2_match_with = "water"
+layer2_match_with = "arctic"
 layer1_sprite_type = "corner"
 layer2_sprite_type = "corner"
 
@@ -230,7 +232,7 @@ layer0_match_type = "water"
 layer1_match_type = "water"
 layer1_match_with = "land"
 layer2_match_type = "water"
-layer2_match_with = "water"
+layer2_match_with = "arctic"
 layer1_sprite_type = "corner"
 layer2_sprite_type = "corner"
 
@@ -242,7 +244,7 @@ layer0_match_type = "water"
 layer1_match_type = "water"
 layer1_match_with = "land"
 layer2_match_type = "water"
-layer2_match_with = "water"
+layer2_match_with = "arctic"
 layer1_sprite_type = "corner"
 layer2_sprite_type = "corner"
 
@@ -254,7 +256,7 @@ layer0_match_type = "water"
 layer1_match_type = "water"
 layer1_match_with = "land"
 layer2_match_type = "water"
-layer2_match_with = "water"
+layer2_match_with = "arctic"
 layer1_sprite_type = "corner"
 layer2_sprite_type = "corner"
 
@@ -308,7 +310,8 @@ layer0_match_type = "hills"
 layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
-layer2_match_type = "water"
+layer2_match_type = "hills"
+layer2_match_with = "hills"
 
 [tile_jungle]
 tag = "jungle"
@@ -328,7 +331,10 @@ layer0_match_type = "mountains"
 layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
-layer2_match_type = "water"
+layer2_match_type = "hills"
+layer2_match_with = "hills"
+layer2_is_tall = TRUE
+layer2_offset_y = 12
 
 [tile_plains]
 tag = "plains"
