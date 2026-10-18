@@ -5,9 +5,9 @@ Labels as in the brief: observed, derived, inferred, unknown. Effort: S about a 
 L a week or more (inferred, each with its test).
 
 Freeciv45 is the game civ45 became on 2026-10-16: an empire game in the style of the fourth game in the series.
-Units travel in stacks on a square map, there are many unit types, and the look is modern, with our own art. It
-is built on Freeciv 3.2 and is GPL. No Firaxis or 2K code, data, art, text or names are used. Mechanics come from
-public descriptions, written in our own words.
+Units travel in stacks on a square map (seen at an angle, topology ISO, since issue 188 on 2026-10-18), there are
+many unit types, and the look is modern, with our own art. It is built on Freeciv 3.2 and is GPL. No Firaxis or 2K
+code, data, art, text or names are used. Mechanics come from public descriptions, written in our own words.
 
 Sources: four research reports, written by separate agents from public sources and the Freeciv tree.
 - `notes/freeciv45/in-freeciv.md`: how each system maps onto Freeciv 3.2, and a slice plan.

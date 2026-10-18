@@ -61,8 +61,8 @@ function fc45_rules_test_run()
   local function setting(name) return string.upper(server.setting.get(name) or "?") end
   local topo, wrap, ks = setting("topology"), setting("wrap"), setting("killstack")
   log.normal("FC45TEST settings: topology '%s', wrap '%s', killstack '%s'", topo, wrap, ks)
-  check("square map seen from above (topology has neither ISO nor HEX)",
-        topo ~= "?" and topo:find("ISO") == nil and topo:find("HEX") == nil)
+  check("square tiles seen at an angle (topology ISO, not HEX)",
+        topo ~= "?" and topo:find("ISO") ~= nil and topo:find("HEX") == nil)
   check("map wraps east to west only", wrap == "WRAPX")
   check("killstack is disabled", ks == "DISABLED")
   check("no one-unit-per-tile sweep is loaded",

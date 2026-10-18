@@ -111,6 +111,8 @@ to another (patch 0030, `notes/freeciv45/tileset-t0.md`, "Cool pine next to tund
 The shore is drawn from the painted beach and glacier, across both tiles of every coast, and the water depths fade
 into each other; land and water no longer blend into each other (patch 0031, `notes/freeciv45/tileset-t0.md`,
 "Coastline from the painted art").
+civ45 maps are seen at an angle (topology ISO; patch 0032, `notes/freeciv45/iso-default.md`): same square tiles and
+rules, isometric tilesets such as amplio2.
 
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It
