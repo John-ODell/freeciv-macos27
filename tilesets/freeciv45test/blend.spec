@@ -19,8 +19,8 @@ gfx = "freeciv45test/blend"
 
 x_top_left = 0
 y_top_left = 0
-dx = 288
-dy = 288
+dx = 576
+dy = 576
 
 tiles = { "row", "column", "tag"
   0, 0, "t.blend_mask"

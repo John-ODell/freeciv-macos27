@@ -1,4 +1,4 @@
-; Re-cut from trident/earth.spec by tilesets/make-freeciv45test.py: every sprite scaled 3.2x with nearest-neighbour
+; Re-cut from trident/earth.spec by tilesets/make-freeciv45test.py: every sprite scaled 6.4x with nearest-neighbour
 ; sampling (placeholders until Freeciv45 art exists). Original artists are credited below.
 [spec]
 ; Format and options of this spec file:
@@ -17,8 +17,8 @@ gfx = "freeciv45test/earth"
 
 x_top_left = 0
 y_top_left = 0
-dx = 96
-dy = 96
+dx = 192
+dy = 192
 
 tiles = { "row", "column", "tag"
    0,  0, "tx.denmark_00"

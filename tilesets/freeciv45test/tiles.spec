@@ -1,4 +1,4 @@
-; Re-cut from trident/tiles.spec by tilesets/make-freeciv45test.py: every sprite scaled 3.2x with nearest-neighbour
+; Re-cut from trident/tiles.spec by tilesets/make-freeciv45test.py: every sprite scaled 6.4x with nearest-neighbour
 ; sampling (placeholders until Freeciv45 art exists). Original artists are credited below.
 
 [spec]
@@ -26,8 +26,8 @@ gfx = "freeciv45test/tiles"
 
 x_top_left = 0
 y_top_left = 0
-dx = 96
-dy = 96
+dx = 192
+dy = 192
 
 tiles = { "row", "column", "tag"
    0,  3, "t.l0.inaccessible1"
@@ -538,9 +538,9 @@ tiles = { "row", "column", "tag"
 [grid_nuke]
 
 x_top_left = 0
-y_top_left = 2208
-dx = 288
-dy = 288
+y_top_left = 4416
+dx = 576
+dy = 576
 
 tiles = { "row", "column", "tag"
    0,  0, "explode.nuke"
@@ -549,9 +549,9 @@ tiles = { "row", "column", "tag"
 [grid_ocean]
 
 x_top_left = 0
-y_top_left = 2496
-dx = 48
-dy = 48
+y_top_left = 4992
+dx = 96
+dy = 96
 
 tiles = { "row", "column", "tag"
    0,  0, "t.l0.coast_cell_u000"

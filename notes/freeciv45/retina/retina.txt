@@ -1,0 +1,46 @@
+# Retina check: the map at the tileset's pixel_ratio, a real mouse click on a tile (the point to canvas pixel
+# conversion), the city overlay and full dialog, the stack chooser, two reports. Run with QT_SCALE_FACTOR=2.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd local t = find.tile($X + 2, $Y + 1); edit.change_terrain(t, find.terrain("Grassland")); edit.create_city(find.unit(nil, $UNIT).owner, t, "Testburg")
+wait 2500
+key escape
+wait 1000
+state start
+shot 01-map
+# the mouse on the city two tiles east and one south must open its overlay
+mousetile 2 1
+wait 1500
+city Testburg
+state overlay
+shot 02-overlay
+key enter
+wait 1500
+state full
+shot 03-full-dialog
+# the overlay again hides the full dialog; Return to map closes it
+clicktile 2 1
+wait 1500
+click button Return to map
+wait 1000
+# a click on the start stack opens the stack chooser
+mousetile 0 0
+wait 1500
+state chooser
+shot 04-chooser
+dismiss
+key escape
+wait 800
+click tip Nations
+wait 1500
+state nations
+shot 05-nations
+click tip Research
+wait 1500
+state research
+shot 06-research
+click tip Map
+wait 1000
+quit

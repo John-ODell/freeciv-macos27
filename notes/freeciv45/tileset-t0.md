@@ -371,3 +371,10 @@ patchwork (below), so they are in.
 - Not checked: a long game, other clients (GTK, SDL), hills and mountains next to desert, tundra or swamp (trident
   placeholders, which blend by the same rule), and the lone mountain and lone hill tiles in the script, which were
   off the view.
+
+## 192 px tiles at pixel_ratio 2 (issue 161)
+
+Since issue 161 the tileset is built at 192 px with `pixel_ratio = 2`: the fork's Qt client (patch 0025) draws the
+map at two pixels per point, so tiles stay 96 points and a Retina screen shows every pixel of the painted masters.
+The 1:1 pictures above were taken with 96 px tiles doubled by the OS. Reasons, pictures and checks:
+`notes/freeciv45/retina.md`.
