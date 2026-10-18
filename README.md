@@ -20,6 +20,12 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 
 ## Download (macOS 27, Apple Silicon)
 
+The easiest way to install: https://northbridgelandmark.com/games/freeciv/, with a one-click download and
+step-by-step install.
+
+For Windows, Linux, Intel Macs and older macOS, get Freeciv from the Freeciv project: https://www.freeciv.org.
+This repo is an unofficial Mac build, not a release of the Freeciv project.
+
 Releases: https://github.com/John-ODell/freeciv-macos27/releases. Each release has `Freeciv-<version>-arm64.dmg`,
 its `.sha256`, and `freeciv-<version>-src.tar.gz`, the exact source the DMG was built from (upstream S3_2 plus
 `patches/`). The app is ad-hoc signed, not notarized, so the first launch of a downloaded copy is refused by
