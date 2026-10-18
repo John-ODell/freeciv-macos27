@@ -129,7 +129,7 @@ What the runs turned up, all fixed in the diff before it was written down:
 - Folding Citizens left the column at its old height: the scroll area kept its own size hint. The buildings list
   is now sized to its rows and the column's layout is redone on a fold.
 - Found reading the diff for review, not in a run: a foreign city's dialog would have opened with an own city's
-  overlay still up. It now closes the overlay first. The clean build and the drive script were run again after
+  overlay still up. It now closes the overlay first. The diff-only build (incrementally) and the drive script ran again after
   this change: same log, line for line.
 
 Noticed, not filed:
