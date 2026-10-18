@@ -76,9 +76,9 @@ widget that has no parent yet would open it as a window of its own.
 | Option on, then a new city | Strip and column with the city overlay; research "+1 0/30 (30 turns)", gold "+1", culture "+1" | `edges-test/12-city-overlay.jpg` |
 
 - The same start in the System theme: `edges-strip-column-system.jpg`.
-- `scripts/ui-drive.sh` now runs the client offscreen by default (a 1600 x 1000 screen through
-  `QT_QPA_PLATFORM=offscreen:configfile=...`), so a drive run opens no window over the desktop; `UI_DRIVE_VISIBLE=1`
-  shows it again.
+- The runs used `scripts/ui-drive.sh` offscreen (it runs the client with `QT_QPA_PLATFORM=offscreen` by default
+  since #142) on a 1600 x 1000 screen: `FREECIV_DRIVE_QPA="offscreen:configfile=<json>"` with one `screens` entry
+  of that size, as `notes/freeciv45/tileset-t0/screen-1600x1000.json` has. No window opened.
 
 Found and fixed during the runs: the start-up crash above; the column's icons drew at about 18 px inside the
 circles because the theme's 100 px icons are mostly padding (now 38 px icons in a 44 px button); and More used the
