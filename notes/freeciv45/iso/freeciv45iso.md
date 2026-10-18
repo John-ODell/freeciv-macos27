@@ -208,6 +208,36 @@ The art repo kept four retakes (BK-Art PR 66, commit 1e805b1). Both builders now
 
 ![forest and jungle blocks of the field: amplio2, painted canopy, amplio2 trees; 1:1](canopy-field-1to1.jpg)
 
+## Our own resources (issue 206, 2026-10-18)
+
+The 21 civ45 resources now draw the Freeciv45 art pack's isometric props. They come from BK-Art PR 64, commit
+7e16455, `freeciv45/03_resources`, using the picks in its `RESOURCES.md`.
+- The art repo's `tools/props.py` cut each one to a 192 x 96 tile. The prop stands on the tile's foot point with a
+  soft contact shadow, which matches amplio2's resource sprites doubled.
+- The builder copies them unchanged into `resources.png`, five to a row. `resources.spec` names them, and amplio2's
+  sprites for the same tags are dropped from `terrain1.spec`.
+- **Only the picks are shipped.** John: "we should only ship the chosen final assets". The tileset gets one
+  192 x 96 sprite per tag: no alternates, panels, qa files, 1x copies or art-repo records. They are credited in
+  `tilesets/freeciv45iso/RECORD.md`, "Resources", under GPL-2.0-or-later.
+  - amplio2's `ts.arctic_oil`, `ts.seals`, `ts.forest_game` and `ts.river_resources` stay, because civ45 doesn't use
+    them.
+  - `ts.grassland_resources` is new to the tileset (amplio2 has none).
+- `--no-resources` keeps amplio2's.
+
+**Check (observed):** mapseed 21, the same window. The client log shows no tileset warning.
+- Each resource sits on the same tile and at about the same height as amplio2's. Seen: wine, horses, oasis, coal,
+  gold, fish and whales.
+- At 2x zoom, the fish and whale water pads read as small splashes, not boxes, both on open water and by the shore.
+- Still to check:
+  - the land resources that aren't in this view;
+  - `ts.oil` on glacier;
+  - whether the 1x size reads on a non-Retina screen. The tileset uses only the 192 x 96 tiles at
+    `pixel_ratio = 2`.
+
+![amplio2, amplio2 resources, ours; mapseed 21, 1:1](resources-seed21-1to1.jpg)
+
+![whales and fish on open water and by the shore, 2x](resources-sea-2x.jpg)
+
 ## Not done, and findings
 
 - Hills and mountains had no relief in the first build (issue 194). They now draw amplio2's relief (see above).

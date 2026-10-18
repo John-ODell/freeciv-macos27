@@ -150,6 +150,7 @@ files =
   "freeciv45iso/terrain45.spec",
   "freeciv45iso/coast.spec",
   "freeciv45iso/blend.spec",
+  "freeciv45iso/resources.spec",
   "freeciv45iso/maglev.spec",
   "freeciv45iso/terrain2.spec",
   "freeciv45iso/hills.spec",
