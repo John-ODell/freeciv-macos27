@@ -1,0 +1,1434 @@
+diff --git a/client/gui-qt/Makefile.am b/client/gui-qt/Makefile.am
+index 18820d7..a3e4574 100644
+--- a/client/gui-qt/Makefile.am
++++ b/client/gui-qt/Makefile.am
+@@ -45,6 +45,7 @@ MOC_FILES = \
+ 	meta_voteinfo_bar.cpp	\
+ 	meta_gotodlg.cpp	\
+ 	meta_hudwidget.cpp	\
++	meta_cityoverlay.cpp	\
+ 	meta_unitbar.cpp
+ 
+ libgui_qt_la_SOURCES = \
+@@ -54,6 +55,8 @@ libgui_qt_la_SOURCES = \
+ 	chatline.h	\
+ 	citydlg.cpp	\
+ 	citydlg.h	\
++	cityoverlay.cpp	\
++	cityoverlay.h	\
+ 	cityrep.cpp	\
+ 	cityrep.h	\
+ 	colors.cpp	\
+diff --git a/client/gui-qt/citydlg.cpp b/client/gui-qt/citydlg.cpp
+index a7a59fc..4d4a642 100644
+--- a/client/gui-qt/citydlg.cpp
++++ b/client/gui-qt/citydlg.cpp
+@@ -57,12 +57,14 @@
+ #include "helpdata.h"
+ #include "mapview_common.h"
+ #include "movement.h"
++#include "options.h"
+ #include "sprite.h"
+ #include "text.h"
+ #include "tilespec.h"
+ 
+ // gui-qt
+ #include "citydlg.h"
++#include "cityoverlay.h"
+ #include "colors.h"
+ #include "fc_client.h"
+ #include "gui_main.h"
+@@ -3817,9 +3819,32 @@ void city_dialog::update_title()
+ 
+ /************************************************************************//**
+   Pop up (or bring to the front) a dialog for the given city.  It may or
+-  may not be modal.
++  may not be modal.  With the Freeciv45 panels on, the player's own city
++  opens as the city overlay on the map instead.
+ ****************************************************************************/
+ void qtg_real_city_dialog_popup(struct city *pcity)
++{
++  if (gui_options.gui_qt_freeciv45_panels
++      && gui()->cityoverlay_wdg != nullptr
++      && client_player() != nullptr
++      && city_owner(pcity) == client_player()) {
++    if (::city_dlg_created && city_dlg->isVisible()) {
++      city_dlg->hide();
++    }
++    gui()->cityoverlay_wdg->open_for(pcity);
++    return;
++  }
++  // A foreign city's dialog does not open over an own city's overlay
++  if (gui()->cityoverlay_wdg != nullptr) {
++    gui()->cityoverlay_wdg->close_overlay();
++  }
++  real_city_dialog_popup_full(pcity);
++}
++
++/************************************************************************//**
++  Pop up (or bring to the front) today's full dialog for the given city.
++****************************************************************************/
++void real_city_dialog_popup_full(struct city *pcity)
+ {
+   if (!::city_dlg_created) {
+     ::city_dlg = new city_dialog(gui()->mapview_wdg);
+@@ -3849,6 +3874,10 @@ void destroy_city_dialog()
+ ****************************************************************************/
+ void qtg_popdown_city_dialog(struct city *pcity)
+ {
++  if (gui()->cityoverlay_wdg != nullptr
++      && gui()->cityoverlay_wdg->shown_city() == pcity) {
++    gui()->cityoverlay_wdg->close_overlay();
++  }
+   if (!::city_dlg_created) {
+     return;
+   }
+@@ -3861,6 +3890,9 @@ void qtg_popdown_city_dialog(struct city *pcity)
+ ****************************************************************************/
+ void qtg_popdown_all_city_dialogs()
+ {
++  if (gui()->cityoverlay_wdg != nullptr) {
++    gui()->cityoverlay_wdg->close_overlay();
++  }
+   destroy_city_dialog();
+ }
+ 
+@@ -3869,6 +3901,11 @@ void qtg_popdown_all_city_dialogs()
+ ****************************************************************************/
+ void qtg_real_city_dialog_refresh(struct city *pcity)
+ {
++  if (gui()->cityoverlay_wdg != nullptr
++      && gui()->cityoverlay_wdg->is_open()
++      && gui()->cityoverlay_wdg->shown_city() == pcity) {
++    gui()->cityoverlay_wdg->refresh();
++  }
+   if (!::city_dlg_created) {
+     return;
+   }
+@@ -3924,6 +3961,11 @@ void qtg_refresh_unit_city_dialogs(struct unit *punit)
+ ****************************************************************************/
+ bool qtg_city_dialog_is_open(struct city *pcity)
+ {
++  if (gui()->cityoverlay_wdg != nullptr
++      && gui()->cityoverlay_wdg->is_open()
++      && gui()->cityoverlay_wdg->shown_city() == pcity) {
++    return true;
++  }
+   if (!::city_dlg_created) {
+     return false;
+   }
+diff --git a/client/gui-qt/citydlg.h b/client/gui-qt/citydlg.h
+index 1ab61c4..36d2c31 100644
+--- a/client/gui-qt/citydlg.h
++++ b/client/gui-qt/citydlg.h
+@@ -565,6 +565,7 @@ protected:
+ };
+ 
+ void destroy_city_dialog();
++void real_city_dialog_popup_full(struct city *pcity);
+ void city_font_update();
+ 
+ #endif // FC__CITYDLG_H
+diff --git a/client/gui-qt/cityoverlay.cpp b/client/gui-qt/cityoverlay.cpp
+new file mode 100644
+index 0000000..9703a6b
+--- /dev/null
++++ b/client/gui-qt/cityoverlay.cpp
+@@ -0,0 +1,863 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++// Qt
++#include <QGridLayout>
++#include <QHBoxLayout>
++#include <QLabel>
++#include <QMessageBox>
++#include <QPainter>
++#include <QProgressBar>
++#include <QPushButton>
++#include <QScrollArea>
++#include <QSet>
++#include <QToolButton>
++#include <QVBoxLayout>
++
++// utility
++#include "fcintl.h"
++#include "support.h"
++
++// common
++#include "city.h"
++#include "game.h"
++#include "improvement.h"
++#include "player.h"
++#include "specialist.h"
++#include "unittype.h"
++
++// client
++#include "citydlg_common.h"
++#include "client_main.h"
++#include "climisc.h"
++#include "control.h"
++#include "mapview_common.h"
++#include "options.h"
++#include "tilespec.h"
++
++// gui-qt
++#include "citydlg.h"
++#include "cityoverlay.h"
++#include "fc_client.h"
++#include "fonts.h"
++#include "hudwidget.h"
++#include "sprite.h"
++#include "unitbar.h"
++
++// Logical sizes at 1x (panels.md section 3.2); the same at 2x.
++static const int EDGE_MARGIN = 12;
++static const int YIELDS_WIDTH = 360;
++static const int SECTIONS_WIDTH = 300;
++static const int PRODUCTION_WIDTH = 380;
++static const int PRODUCTION_IMAGE = 48;
++static const int FOOTER_WIDTH = 340;
++static const int BUILDING_IMAGE = 20;
++
++// Folded sections, by key, kept for the session
++static QSet<QString> folded_sections;
++
++/************************************************************************//**
++  A sprite's pixmap scaled to a logical height, sharp at the widget's
++  pixel ratio.
++****************************************************************************/
++static QPixmap sprite_pixmap(struct sprite *spr, int height, qreal dpr)
++{
++  QPixmap pm;
++
++  if (spr == nullptr || spr->pm == nullptr || spr->pm->isNull()) {
++    return pm;
++  }
++  pm = spr->pm->scaledToHeight(qRound(height * dpr),
++                               Qt::SmoothTransformation);
++  pm.setDevicePixelRatio(dpr);
++
++  return pm;
++}
++
++/************************************************************************//**
++  A part: named for the theme, styled by resource.qss as a frame.
++****************************************************************************/
++city_part::city_part(const char *name, QWidget *parent) : QFrame(parent)
++{
++  setObjectName(name);
++  setFrameShape(QFrame::StyledPanel);
++  setFocusPolicy(Qt::NoFocus);
++  hide();
++}
++
++/************************************************************************//**
++  Yields: a title line, a growth line, then a row of name / value tiles.
++****************************************************************************/
++city_yields::city_yields(QWidget *parent) : city_part("city_yields", parent)
++{
++  QFont small_font = *fc_font::instance()->get_font(fonts::notify_label);
++  QVBoxLayout *box = new QVBoxLayout(this);
++  QGridLayout *grid = new QGridLayout;
++  // TRANS: city overlay yield tiles; keep short
++  const char *names[] = { N_("Food"), N_("Shields"), N_("Trade"),
++                          N_("Gold"), N_("Luxury"), N_("Science"),
++                          N_("Culture") };
++
++  box->setContentsMargins(10, 8, 10, 8);
++  box->setSpacing(2);
++  title_label = new QLabel(this);
++  growth_label = new QLabel(this);
++  growth_label->setFont(small_font);
++  box->addWidget(title_label);
++  box->addWidget(growth_label);
++
++  grid->setHorizontalSpacing(8);
++  grid->setVerticalSpacing(0);
++  for (int i = 0; i < (int) ARRAY_SIZE(names); i++) {
++    QLabel *n = new QLabel(QString(_(names[i])), this);
++    QLabel *v = new QLabel(this);
++    QFont bold = v->font();
++
++    n->setFont(small_font);
++    n->setAlignment(Qt::AlignHCenter);
++    bold.setBold(true);
++    v->setFont(bold);
++    v->setAlignment(Qt::AlignHCenter);
++    grid->addWidget(n, 0, i);
++    grid->addWidget(v, 1, i);
++    name_labels.append(n);
++    value_labels.append(v);
++  }
++  box->addLayout(grid);
++  setFixedWidth(YIELDS_WIDTH);
++}
++
++/************************************************************************//**
++  Fill the yields from the city, the way the full dialog's info panel
++  does (citydlg.cpp, update_info_label).
++****************************************************************************/
++void city_yields::refresh(struct city *pcity)
++{
++  char buf[1024];
++  int turns = city_turns_to_grow(pcity);
++  QString growth;
++  const Output_type_id outputs[] = { O_FOOD, O_SHIELD, O_TRADE, O_GOLD,
++                                     O_LUXURY, O_SCIENCE };
++
++  // TRANS: city overlay title: city name, size
++  title_label->setText(QString(_("<b>%1</b>   size %2"))
++                       .arg(QString(city_name_get(pcity)).toHtmlEscaped(),
++                            QString::number(city_size_get(pcity))));
++
++  if (turns == 0) {
++    growth = QString(_("growth blocked"));
++  } else if (turns == FC_INFINITY) {
++    growth = QString(_("not growing"));
++  } else if (turns < 0) {
++    growth = QString(PL_("starving in %1 turn", "starving in %1 turns",
++                         -turns)).arg(-turns);
++  } else {
++    growth = QString(PL_("grows in %1 turn", "grows in %1 turns",
++                         turns)).arg(turns);
++  }
++  // TRANS: city overlay: growth, then granary stock / size
++  growth_label->setText(QString(_("%1   granary %2/%3"))
++                        .arg(growth,
++                             QString::number(pcity->food_stock),
++                             QString::number(
++                               city_granary_size(city_size_get(pcity)))));
++
++  for (int i = 0; i < (int) ARRAY_SIZE(outputs); i++) {
++    Output_type_id o = outputs[i];
++    QString val;
++
++    if (o == O_LUXURY || o == O_SCIENCE) {
++      val = QString::number(pcity->prod[o]);
++    } else {
++      val = QString::asprintf("%+d", pcity->surplus[o]);
++    }
++    value_labels[i]->setText(val);
++    get_city_dialog_output_text(pcity, o, buf, sizeof(buf));
++    value_labels[i]->setToolTip("<pre>" + QString(buf).toHtmlEscaped()
++                                + "</pre>");
++    name_labels[i]->setToolTip(value_labels[i]->toolTip());
++  }
++  value_labels.last()->setText(QString::number(pcity->client.culture));
++  get_city_dialog_culture_text(pcity, buf, sizeof(buf));
++  value_labels.last()->setToolTip("<pre>" + QString(buf).toHtmlEscaped()
++                                  + "</pre>");
++  name_labels.last()->setToolTip(value_labels.last()->toolTip());
++  adjustSize();
++}
++
++/************************************************************************//**
++  A section: a flat heading button with an arrow, and a body under it.
++****************************************************************************/
++city_section::city_section(const QString &section_key, QWidget *parent)
++  : QWidget(parent)
++{
++  QVBoxLayout *box = new QVBoxLayout(this);
++  QFont bold = font();
++
++  key = section_key;
++  setObjectName("city_section");
++  box->setContentsMargins(0, 0, 0, 0);
++  box->setSpacing(4);
++  heading = new QToolButton(this);
++  heading->setAutoRaise(true);
++  heading->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
++  heading->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
++  heading->setFocusPolicy(Qt::TabFocus);
++  bold.setBold(true);
++  heading->setFont(bold);
++  connect(heading, &QToolButton::clicked, this, &city_section::toggle);
++  body = new QWidget(this);
++  body_box = new QVBoxLayout(body);
++  body_box->setContentsMargins(18, 0, 0, 4);
++  body_box->setSpacing(2);
++  box->addWidget(heading);
++  box->addWidget(body);
++  apply_fold();
++}
++
++/************************************************************************//**
++  Set the heading's text.
++****************************************************************************/
++void city_section::set_title(const QString &t)
++{
++  title = t;
++  heading->setText(title);
++}
++
++/************************************************************************//**
++  Remove the body's widgets. A refresh can come from inside one of them,
++  so they are deleted later.
++****************************************************************************/
++void city_section::clear_body()
++{
++  QLayoutItem *item;
++
++  while ((item = body_box->takeAt(0)) != nullptr) {
++    if (item->widget() != nullptr) {
++      item->widget()->hide();
++      item->widget()->deleteLater();
++    }
++    delete item;
++  }
++}
++
++/************************************************************************//**
++  Fold or unfold, and remember it.
++****************************************************************************/
++void city_section::toggle()
++{
++  if (folded_sections.contains(key)) {
++    folded_sections.remove(key);
++  } else {
++    folded_sections.insert(key);
++  }
++  apply_fold();
++  // The column shrinks or grows with it, now rather than on the next
++  // layout pass, so it is the right size before it repaints
++  layout()->invalidate();
++  layout()->activate();
++  if (parentWidget() != nullptr && parentWidget()->layout() != nullptr) {
++    parentWidget()->layout()->invalidate();
++    parentWidget()->layout()->activate();
++    parentWidget()->adjustSize();
++  }
++}
++
++/************************************************************************//**
++  Show the body and the arrow for the current fold state.
++****************************************************************************/
++void city_section::apply_fold()
++{
++  bool folded = folded_sections.contains(key);
++
++  heading->setArrowType(folded ? Qt::RightArrow : Qt::DownArrow);
++  body->setVisible(!folded);
++}
++
++/************************************************************************//**
++  The right column: Citizens, then Buildings in a scroll area.
++****************************************************************************/
++city_sections::city_sections(QWidget *parent)
++  : city_part("city_sections", parent)
++{
++  QVBoxLayout *box = new QVBoxLayout(this);
++
++  box->setContentsMargins(8, 8, 8, 8);
++  box->setSpacing(6);
++  scroll_max = 400;
++  citizens = new city_section("citizens", this);
++  buildings = new city_section("buildings", this);
++  buildings_list = new QWidget;
++  buildings_list->setObjectName("city_buildings");
++  buildings_box = new QVBoxLayout(buildings_list);
++  buildings_box->setContentsMargins(0, 0, 0, 0);
++  buildings_box->setSpacing(2);
++  buildings_scroll = new QScrollArea(buildings);
++  buildings_scroll->setFrameShape(QFrame::NoFrame);
++  buildings_scroll->setWidgetResizable(true);
++  buildings_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
++  buildings_scroll->viewport()->setAutoFillBackground(false);
++  buildings_scroll->setWidget(buildings_list);
++  buildings->body_layout()->addWidget(buildings_scroll);
++  box->addWidget(citizens);
++  box->addWidget(buildings);
++  setFixedWidth(SECTIONS_WIDTH);
++}
++
++/************************************************************************//**
++  Fill both sections.
++****************************************************************************/
++void city_sections::refresh(struct city *pcity)
++{
++  setUpdatesEnabled(false);
++  fill_citizens(pcity);
++  fill_buildings(pcity);
++  setUpdatesEnabled(true);
++  adjustSize();
++}
++
++/************************************************************************//**
++  The column may not grow past the map; the buildings list scrolls.
++****************************************************************************/
++void city_sections::set_max_height(int h)
++{
++  // Room for the margins, two headings and the citizens row
++  scroll_max = qMax(60, h - 140);
++  buildings_scroll->setFixedHeight(qMin(buildings_list->sizeHint().height(),
++                                        scroll_max));
++  setMaximumHeight(h);
++}
++
++/************************************************************************//**
++  Citizens: the tileset's citizen icons in their final mood, then a
++  count line.
++****************************************************************************/
++void city_sections::fill_citizens(struct city *pcity)
++{
++  enum citizen_category categories[MAX_CITY_SIZE];
++  int n = get_city_citizen_types(pcity, FEELING_FINAL, categories);
++  qreal dpr = devicePixelRatioF();
++  int avail = SECTIONS_WIDTH - 16 - 18;
++  int w = 0, h = 0, per_row, rows;
++  QPixmap row_pix;
++  QLabel *icons, *counts;
++  QStringList parts;
++
++  citizens->clear_body();
++  // TRANS: city overlay section heading
++  citizens->set_title(QString(_("Citizens")));
++
++  if (n > 0) {
++    struct sprite *first = get_citizen_sprite(tileset, categories[0], 0,
++                                              pcity);
++
++    if (first != nullptr && first->pm != nullptr) {
++      w = first->pm->width();
++      h = first->pm->height();
++    }
++  }
++  if (w > 0 && h > 0) {
++    QPainter p;
++
++    per_row = qMax(1, avail / w);
++    rows = (n + per_row - 1) / per_row;
++    row_pix = QPixmap(qRound(qMin(n, per_row) * w * dpr),
++                      qRound(rows * h * dpr));
++    row_pix.setDevicePixelRatio(dpr);
++    row_pix.fill(Qt::transparent);
++    p.begin(&row_pix);
++    for (int i = 0; i < n; i++) {
++      struct sprite *spr = get_citizen_sprite(tileset, categories[i], i,
++                                              pcity);
++
++      if (spr != nullptr && spr->pm != nullptr) {
++        p.drawPixmap((i % per_row) * w, (i / per_row) * h, *spr->pm);
++      }
++    }
++    p.end();
++    icons = new QLabel(this);
++    icons->setPixmap(row_pix);
++    citizens->body_layout()->addWidget(icons);
++    icons->show();
++  }
++
++  if (pcity->feel[CITIZEN_HAPPY][FEELING_FINAL] > 0) {
++    parts << QString(_("%1 happy"))
++             .arg(pcity->feel[CITIZEN_HAPPY][FEELING_FINAL]);
++  }
++  if (pcity->feel[CITIZEN_CONTENT][FEELING_FINAL] > 0) {
++    parts << QString(_("%1 content"))
++             .arg(pcity->feel[CITIZEN_CONTENT][FEELING_FINAL]);
++  }
++  if (pcity->feel[CITIZEN_UNHAPPY][FEELING_FINAL] > 0) {
++    parts << QString(_("%1 unhappy"))
++             .arg(pcity->feel[CITIZEN_UNHAPPY][FEELING_FINAL]);
++  }
++  if (pcity->feel[CITIZEN_ANGRY][FEELING_FINAL] > 0) {
++    parts << QString(_("%1 angry"))
++             .arg(pcity->feel[CITIZEN_ANGRY][FEELING_FINAL]);
++  }
++  specialist_type_iterate(sp) {
++    if (pcity->specialists[sp] > 0) {
++      parts << QString("%1 %2").arg(pcity->specialists[sp])
++               .arg(specialist_plural_translation(specialist_by_number(sp)));
++    }
++  } specialist_type_iterate_end;
++  counts = new QLabel(parts.join(", "), this);
++  counts->setFont(*fc_font::instance()->get_font(fonts::notify_label));
++  counts->setWordWrap(true);
++  citizens->body_layout()->addWidget(counts);
++  counts->show();
++}
++
++/************************************************************************//**
++  Buildings: what the city has, wonders first, upkeep in the heading;
++  each row's tooltip is the building's help, as in the full dialog.
++****************************************************************************/
++void city_sections::fill_buildings(struct city *pcity)
++{
++  struct universal targets[MAX_NUM_PRODUCTION_TARGETS];
++  struct item items[MAX_NUM_PRODUCTION_TARGETS];
++  int used, upkeep = 0;
++  QList<const struct impr_type *> wonders, others;
++  qreal dpr = devicePixelRatioF();
++  QLayoutItem *item;
++
++  while ((item = buildings_box->takeAt(0)) != nullptr) {
++    if (item->widget() != nullptr) {
++      item->widget()->hide();
++      item->widget()->deleteLater();
++    }
++    delete item;
++  }
++
++  used = collect_already_built_targets(targets, pcity);
++  name_and_sort_items(targets, used, items, false, pcity);
++  for (int i = 0; i < used; i++) {
++    const struct impr_type *pimprove = items[i].item.value.building;
++
++    if (items[i].item.kind != VUT_IMPROVEMENT) {
++      continue;
++    }
++    upkeep += city_improvement_upkeep(pcity, pimprove);
++    if (is_wonder(pimprove)) {
++      wonders.append(pimprove);
++    } else {
++      others.append(pimprove);
++    }
++  }
++
++  // TRANS: city overlay section heading: buildings, their upkeep
++  buildings->set_title(QString(_("Buildings (upkeep %1)")).arg(upkeep));
++
++  foreach (const struct impr_type *pimprove, wonders + others) {
++    QWidget *row = new QWidget(buildings_list);
++    QHBoxLayout *h = new QHBoxLayout(row);
++    QLabel *pix = new QLabel(row);
++    QLabel *name = new QLabel(QString(city_improvement_name_translation(
++                                        pcity, pimprove)), row);
++
++    h->setContentsMargins(0, 0, 0, 0);
++    h->setSpacing(6);
++    pix->setFixedSize(BUILDING_IMAGE * 3 / 2, BUILDING_IMAGE);
++    pix->setPixmap(sprite_pixmap(get_building_sprite(tileset, pimprove),
++                                 BUILDING_IMAGE, dpr));
++    if (is_wonder(pimprove)) {
++      QFont bold = name->font();
++
++      bold.setBold(true);
++      name->setFont(bold);
++    }
++    h->addWidget(pix);
++    h->addWidget(name, 1);
++    row->setToolTip(get_tooltip_improvement(pimprove, pcity, true)
++                    .trimmed());
++    buildings_box->addWidget(row);
++    row->show();
++  }
++  if (wonders.isEmpty() && others.isEmpty()) {
++    QLabel *none = new QLabel(QString(_("None yet")), buildings_list);
++
++    buildings_box->addWidget(none);
++    none->show();
++  }
++  // As tall as the list, up to what the map leaves; then it scrolls
++  buildings_scroll->setFixedHeight(qMin(buildings_list->sizeHint().height(),
++                                        scroll_max));
++}
++
++/************************************************************************//**
++  Production: Change and Buy on top, then the build with its image, the
++  shields and turns line, and a progress bar.
++****************************************************************************/
++city_production::city_production(QWidget *parent)
++  : city_part("city_production", parent)
++{
++  QVBoxLayout *box = new QVBoxLayout(this);
++  QHBoxLayout *buttons = new QHBoxLayout;
++  QHBoxLayout *build = new QHBoxLayout;
++  QVBoxLayout *text = new QVBoxLayout;
++  QFont bold;
++
++  city_id = 0;
++  box->setContentsMargins(10, 8, 10, 10);
++  box->setSpacing(6);
++  // TRANS: city overlay production button
++  change_button = new QPushButton(QString(_("Change")), this);
++  change_button->setToolTip(QString(_("Choose what the city builds")));
++  buy_button = new QPushButton(QString(_("Buy")), this);
++  connect(change_button, &QPushButton::clicked,
++          this, &city_production::change);
++  connect(buy_button, &QPushButton::clicked, this, &city_production::buy);
++  buttons->addWidget(change_button);
++  buttons->addWidget(buy_button);
++  buttons->addStretch(1);
++  box->addLayout(buttons);
++
++  pix_label = new QLabel(this);
++  pix_label->setFixedSize(PRODUCTION_IMAGE * 3 / 2, PRODUCTION_IMAGE);
++  pix_label->setAlignment(Qt::AlignCenter);
++  name_label = new QLabel(this);
++  bold = name_label->font();
++  bold.setBold(true);
++  name_label->setFont(bold);
++  turns_label = new QLabel(this);
++  turns_label->setFont(*fc_font::instance()->get_font(fonts::notify_label));
++  progress = new QProgressBar(this);
++  progress->setTextVisible(false);
++  progress->setFixedHeight(6);
++  text->setSpacing(2);
++  text->addWidget(name_label);
++  text->addWidget(turns_label);
++  text->addWidget(progress);
++  build->setSpacing(10);
++  build->addWidget(pix_label);
++  build->addLayout(text, 1);
++  box->addLayout(build);
++  setFixedWidth(PRODUCTION_WIDTH);
++}
++
++/************************************************************************//**
++  Fill from the city's current build, as the full dialog's production
++  bar and Buy button do (citydlg.cpp, update_building and
++  update_buy_button).
++****************************************************************************/
++void city_production::refresh(struct city *pcity)
++{
++  char buf[64];
++  int cost = city_production_build_shield_cost(pcity);
++  int value = pcity->client.buy_cost;
++  struct sprite *spr = nullptr;
++  bool can_buy = city_can_buy(pcity);
++  int gold = (client_player() != nullptr)
++             ? client_player()->economic.gold : 0;
++
++  city_id = pcity->id;
++  if (pcity->production.kind == VUT_UTYPE) {
++    spr = get_unittype_sprite(tileset, pcity->production.value.utype,
++                              ACTIVITY_LAST, direction8_invalid());
++  } else if (pcity->production.kind == VUT_IMPROVEMENT) {
++    spr = get_building_sprite(tileset, pcity->production.value.building);
++  }
++  pix_label->setPixmap(sprite_pixmap(spr, PRODUCTION_IMAGE,
++                                     devicePixelRatioF()));
++  name_label->setText(QString(city_production_name_translation(pcity)));
++  get_city_dialog_production(pcity, buf, sizeof(buf));
++  turns_label->setText(QString(buf).simplified());
++  progress->setRange(0, qMax(1, cost));
++  progress->setValue(qBound(0, pcity->shield_stock, qMax(1, cost)));
++
++  buy_button->setText(QString(PL_("Buy (%1 gold)", "Buy (%1 gold)", value))
++                      .arg(value));
++  change_button->setEnabled(can_client_issue_orders());
++  if (!can_buy) {
++    buy_button->setEnabled(false);
++    if (pcity->did_buy) {
++      buy_button->setToolTip(QString(_("Already bought this turn")));
++    } else if (pcity->turn_founded == game.info.turn) {
++      buy_button->setToolTip(QString(_("Cannot buy in the turn the city "
++                                       "was founded")));
++    } else {
++      buy_button->setToolTip(QString(_("This cannot be bought now")));
++    }
++  } else if (gold < value) {
++    buy_button->setEnabled(false);
++    buy_button->setToolTip(QString(PL_("Treasury contains %1 gold.",
++                                       "Treasury contains %1 gold.",
++                                       gold)).arg(gold));
++  } else {
++    buy_button->setEnabled(true);
++    buy_button->setToolTip(QString(PL_("Treasury contains %1 gold.",
++                                       "Treasury contains %1 gold.",
++                                       gold)).arg(gold));
++  }
++  adjustSize();
++}
++
++/************************************************************************//**
++  Open the full dialog's production chooser for this city; a click
++  there changes the build now.
++****************************************************************************/
++void city_production::change()
++{
++  struct city *pcity = game_city_by_number(city_id);
++  production_widget *pw;
++
++  if (pcity == nullptr || !can_client_issue_orders()) {
++    return;
++  }
++  pw = new production_widget(this, pcity, false, 0, 0, true);
++  pw->show();
++}
++
++/************************************************************************//**
++  Ask, then buy, as the full dialog does.
++****************************************************************************/
++void city_production::buy()
++{
++  char buf[1024], buf2[1024];
++  struct city *pcity = game_city_by_number(city_id);
++  hud_message_box *ask;
++  int id = city_id;
++
++  if (pcity == nullptr || !can_client_issue_orders()) {
++    return;
++  }
++  ask = new hud_message_box(gui()->central_wdg);
++  fc_snprintf(buf2, ARRAY_SIZE(buf2), PL_("Treasury contains %d gold.",
++                                          "Treasury contains %d gold.",
++                                          client_player()->economic.gold),
++              client_player()->economic.gold);
++  fc_snprintf(buf, ARRAY_SIZE(buf), PL_("Buy %s for %d gold?",
++                                        "Buy %s for %d gold?",
++                                        pcity->client.buy_cost),
++              city_production_name_translation(pcity),
++              pcity->client.buy_cost);
++  ask->set_text_title(buf, buf2);
++  ask->setStandardButtons(QMessageBox::Cancel | QMessageBox::Ok);
++  ask->setDefaultButton(QMessageBox::Cancel);
++  ask->setAttribute(Qt::WA_DeleteOnClose);
++  connect(ask, &hud_message_box::accepted, this, [=]() {
++    struct city *bcity = game_city_by_number(id);
++
++    if (bcity != nullptr) {
++      city_buy_production(bcity);
++    }
++  });
++  ask->show();
++}
++
++/************************************************************************//**
++  Footer: Full dialog (Enter) and Return to map (Escape).
++****************************************************************************/
++city_footer::city_footer(QWidget *parent) : city_part("city_footer", parent)
++{
++  QHBoxLayout *box = new QHBoxLayout(this);
++  QPushButton *full, *back;
++
++  box->setContentsMargins(8, 6, 8, 6);
++  box->setSpacing(8);
++  // TRANS: city overlay footer button
++  full = new QPushButton(QString(_("Full dialog")), this);
++  full->setToolTip(QString(_("Open the city dialog (Enter)")));
++  // TRANS: city overlay footer button
++  back = new QPushButton(QString(_("Return to map")), this);
++  back->setToolTip(QString(_("Close the city view (Escape)")));
++  box->addWidget(full);
++  box->addWidget(back);
++  connect(full, &QPushButton::clicked, this, [=]() {
++    gui()->cityoverlay_wdg->full_dialog();
++  });
++  connect(back, &QPushButton::clicked, this, [=]() {
++    gui()->cityoverlay_wdg->close_overlay();
++  });
++  setFixedWidth(FOOTER_WIDTH);
++}
++
++/************************************************************************//**
++  The overlay: four parts on the map view, all hidden until a city opens.
++****************************************************************************/
++city_overlay::city_overlay(QWidget *map_view) : QObject(map_view)
++{
++  map = map_view;
++  city_id = 0;
++  colored_here = false;
++  minimap_was_visible = false;
++  chat_was_visible = false;
++  yields = new city_yields(map);
++  sections = new city_sections(map);
++  production = new city_production(map);
++  footer = new city_footer(map);
++}
++
++/************************************************************************//**
++  The city shown, or nullptr when closed or the city is gone.
++****************************************************************************/
++struct city *city_overlay::shown_city() const
++{
++  return (city_id != 0) ? game_city_by_number(city_id) : nullptr;
++}
++
++/************************************************************************//**
++  Draw or stop drawing the city's worked tiles on the map.
++****************************************************************************/
++void city_overlay::set_colored(struct city *pcity, bool on)
++{
++  if (pcity != nullptr && (pcity->client.colored ? 1 : 0) != (on ? 1 : 0)) {
++    toggle_city_color(pcity);
++  }
++}
++
++/************************************************************************//**
++  Open the overlay for a city, or swap to it when open for another one.
++  The map centres on the city and draws its worked tiles; the unit bar,
++  the minimap and the chat give the edges up until it closes.
++****************************************************************************/
++void city_overlay::open_for(struct city *pcity)
++{
++  struct city *old = shown_city();
++
++  if (pcity == nullptr) {
++    return;
++  }
++  if (old != pcity) {
++    if (old != nullptr && colored_here) {
++      set_colored(old, false);
++    }
++    colored_here = !pcity->client.colored;
++    set_colored(pcity, true);
++  }
++  if (!is_open()) {
++    minimap_was_visible = gui()->minimapview_wdg->isVisible();
++    chat_was_visible = gui()->infotab->isVisible();
++    gui()->minimapview_wdg->hide();
++    gui()->infotab->hide();
++  }
++  city_id = pcity->id;
++  if (gui()->unitbar_wdg != nullptr) {
++    gui()->unitbar_wdg->hide();
++  }
++  center_tile_mapcanvas(city_tile(pcity));
++  refresh();
++}
++
++/************************************************************************//**
++  Fill the parts from the city; close when it is gone or no longer ours.
++****************************************************************************/
++void city_overlay::refresh()
++{
++  struct city *pcity = shown_city();
++
++  if (!is_open()) {
++    return;
++  }
++  if (pcity == nullptr || city_owner(pcity) != client_player()) {
++    close_overlay();
++    return;
++  }
++  if (!pcity->client.colored) {
++    // A new turn turns every city's worked-tile drawing off
++    // (packhand.c, handle_start_phase); keep it on while open.
++    set_colored(pcity, true);
++    colored_here = true;
++  }
++  yields->refresh(pcity);
++  sections->refresh(pcity);
++  production->refresh(pcity);
++  place();
++  yields->show();
++  sections->show();
++  production->show();
++  footer->show();
++  yields->raise();
++  sections->raise();
++  production->raise();
++  footer->raise();
++}
++
++/************************************************************************//**
++  Close: hide the parts, stop drawing the worked tiles if the overlay
++  started it, give the edges back. The map stays where it is.
++****************************************************************************/
++void city_overlay::close_overlay()
++{
++  struct city *pcity = shown_city();
++
++  if (!is_open()) {
++    return;
++  }
++  if (colored_here) {
++    set_colored(pcity, false);
++  }
++  colored_here = false;
++  city_id = 0;
++  yields->hide();
++  sections->hide();
++  production->hide();
++  footer->hide();
++  if (minimap_was_visible) {
++    gui()->minimapview_wdg->show();
++  }
++  if (chat_was_visible) {
++    gui()->infotab->show();
++  }
++  if (gui()->unitbar_wdg != nullptr) {
++    gui()->unitbar_wdg->refresh(get_units_in_focus());
++  }
++}
++
++/************************************************************************//**
++  Close the overlay and open today's full dialog for the same city.
++****************************************************************************/
++void city_overlay::full_dialog()
++{
++  struct city *pcity = shown_city();
++
++  close_overlay();
++  if (pcity != nullptr) {
++    real_city_dialog_popup_full(pcity);
++  }
++}
++
++/************************************************************************//**
++  Put each part on its edge of the map (panels.md section 3.3).
++****************************************************************************/
++void city_overlay::place()
++{
++  int w = map->width();
++  int h = map->height();
++
++  yields->adjustSize();
++  production->adjustSize();
++  footer->adjustSize();
++  sections->set_max_height(h - 2 * EDGE_MARGIN);
++  sections->adjustSize();
++  yields->move(EDGE_MARGIN, EDGE_MARGIN);
++  sections->move(w - sections->width() - EDGE_MARGIN, EDGE_MARGIN);
++  production->move(EDGE_MARGIN, h - production->height() - EDGE_MARGIN);
++  footer->move((w - footer->width()) / 2,
++               h - footer->height() - EDGE_MARGIN);
++}
++
++/************************************************************************//**
++  Whether the overlay is open; the unit bar stays hidden while it is.
++****************************************************************************/
++bool city_overlay_is_open()
++{
++  return gui()->cityoverlay_wdg != nullptr
++         && gui()->cityoverlay_wdg->is_open();
++}
+diff --git a/client/gui-qt/cityoverlay.h b/client/gui-qt/cityoverlay.h
+new file mode 100644
+index 0000000..2457167
+--- /dev/null
++++ b/client/gui-qt/cityoverlay.h
+@@ -0,0 +1,167 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifndef FC__CITYOVERLAY_H
++#define FC__CITYOVERLAY_H
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++// Qt
++#include <QFrame>
++#include <QList>
++#include <QObject>
++
++class QLabel;
++class QProgressBar;
++class QPushButton;
++class QScrollArea;
++class QToolButton;
++class QVBoxLayout;
++struct city;
++
++/****************************************************************************
++  The shared base of the overlay's parts; the theme's resource.qss gives
++  them their translucent box (selector city_part)
++****************************************************************************/
++class city_part : public QFrame
++{
++  Q_OBJECT
++public:
++  city_part(const char *name, QWidget *parent);
++};
++
++/****************************************************************************
++  Top left: name, size, growth, and one tile per yield
++****************************************************************************/
++class city_yields : public city_part
++{
++  Q_OBJECT
++public:
++  city_yields(QWidget *parent);
++  void refresh(struct city *pcity);
++private:
++  QLabel *title_label;
++  QLabel *growth_label;
++  QList<QLabel *> name_labels;
++  QList<QLabel *> value_labels;
++};
++
++/****************************************************************************
++  One folding section of the right column: a heading and a body
++****************************************************************************/
++class city_section : public QWidget
++{
++  Q_OBJECT
++public:
++  city_section(const QString &section_key, QWidget *parent);
++  void set_title(const QString &title);
++  QVBoxLayout *body_layout() { return body_box; }
++  void clear_body();
++private slots:
++  void toggle();
++private:
++  void apply_fold();
++  QToolButton *heading;
++  QWidget *body;
++  QVBoxLayout *body_box;
++  QString key;
++  QString title;
++};
++
++/****************************************************************************
++  Right: the column of sections (Citizens, Buildings)
++****************************************************************************/
++class city_sections : public city_part
++{
++  Q_OBJECT
++public:
++  city_sections(QWidget *parent);
++  void refresh(struct city *pcity);
++  void set_max_height(int h);
++private:
++  void fill_citizens(struct city *pcity);
++  void fill_buildings(struct city *pcity);
++  city_section *citizens;
++  city_section *buildings;
++  QScrollArea *buildings_scroll;
++  QWidget *buildings_list;
++  QVBoxLayout *buildings_box;
++  int scroll_max;
++};
++
++/****************************************************************************
++  Bottom left: the current build, Change and Buy
++****************************************************************************/
++class city_production : public city_part
++{
++  Q_OBJECT
++public:
++  city_production(QWidget *parent);
++  void refresh(struct city *pcity);
++private slots:
++  void change();
++  void buy();
++private:
++  QPushButton *change_button;
++  QPushButton *buy_button;
++  QLabel *pix_label;
++  QLabel *name_label;
++  QLabel *turns_label;
++  QProgressBar *progress;
++  int city_id;
++};
++
++/****************************************************************************
++  Bottom centre: Full dialog and Return to map
++****************************************************************************/
++class city_footer : public city_part
++{
++  Q_OBJECT
++public:
++  city_footer(QWidget *parent);
++};
++
++/****************************************************************************
++  The city overlay: a mode of the map view, not a window
++****************************************************************************/
++class city_overlay : public QObject
++{
++  Q_OBJECT
++public:
++  city_overlay(QWidget *map);
++  void open_for(struct city *pcity);
++  void refresh();
++  void place();
++  bool is_open() const { return city_id != 0; }
++  struct city *shown_city() const;
++public slots:
++  void close_overlay();
++  void full_dialog();
++private:
++  void set_colored(struct city *pcity, bool on);
++  QWidget *map;
++  city_yields *yields;
++  city_sections *sections;
++  city_production *production;
++  city_footer *footer;
++  int city_id;
++  bool colored_here;
++  bool minimap_was_visible;
++  bool chat_was_visible;
++};
++
++bool city_overlay_is_open();
++
++#endif // FC__CITYOVERLAY_H
+diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
+index 8b57da8..f85bf90 100644
+--- a/client/gui-qt/fc_client.cpp
++++ b/client/gui-qt/fc_client.cpp
+@@ -47,6 +47,7 @@
+ #include "connectdlg_common.h"
+ 
+ // gui-qt
++#include "cityoverlay.h"
+ #include "fc_client.h"
+ #include "fonts.h"
+ #include "gui_main.h"
+@@ -126,6 +127,7 @@ fc_client::fc_client() : QMainWindow()
+   update_info_timer = nullptr;
+   unitinfo_wdg = nullptr;
+   unitbar_wdg = nullptr;
++  cityoverlay_wdg = nullptr;
+   battlelog_wdg = nullptr;
+   interface_locked = false;
+   map_scale = 1.0f;
+@@ -1129,6 +1131,10 @@ void fc_game_tab_widget::resizeEvent(QResizeEvent *event)
+     if (gui()->unitbar_wdg != nullptr) {
+       gui()->unitbar_wdg->place();
+     }
++    if (gui()->cityoverlay_wdg != nullptr
++        && gui()->cityoverlay_wdg->is_open()) {
++      gui()->cityoverlay_wdg->place();
++    }
+   }
+   event->setAccepted(true);
+ }
+diff --git a/client/gui-qt/fc_client.h b/client/gui-qt/fc_client.h
+index b881006..6953712 100644
+--- a/client/gui-qt/fc_client.h
++++ b/client/gui-qt/fc_client.h
+@@ -59,6 +59,7 @@ enum connection_state {
+   WAITING_TYPE
+ };
+ 
++class city_overlay;
+ class fc_sidebar;
+ class fc_sidetax;
+ class fc_sidewidget;
+@@ -271,6 +272,7 @@ public:
+   qfc_rally_list rallies;
+   hud_units *unitinfo_wdg;
+   unit_bar *unitbar_wdg;
++  city_overlay *cityoverlay_wdg;
+   hud_battle_log *battlelog_wdg;
+   bool interface_locked;
+   fc_sidewidget *sw_cunit;
+diff --git a/client/gui-qt/gui_main.cpp b/client/gui-qt/gui_main.cpp
+index e1e5a88..37a0367 100644
+--- a/client/gui-qt/gui_main.cpp
++++ b/client/gui-qt/gui_main.cpp
+@@ -57,6 +57,7 @@
+ #include "gui_main.h"
+ #include "helpdlg.h"
+ #include "hudwidget.h"
++#include "cityoverlay.h"
+ #include "unitbar.h"
+ #include "qtg_cxxside.h"
+ 
+@@ -417,6 +418,10 @@ void apply_titlebar(struct option *poption)
+ ****************************************************************************/
+ static void apply_panels(struct option *poption)
+ {
++  if (!gui_options.gui_qt_freeciv45_panels
++      && gui()->cityoverlay_wdg != nullptr) {
++    gui()->cityoverlay_wdg->close_overlay();
++  }
+   if (gui()->unitbar_wdg != nullptr) {
+     gui()->unitbar_wdg->refresh(get_units_in_focus());
+   }
+diff --git a/client/gui-qt/mapctrl.cpp b/client/gui-qt/mapctrl.cpp
+index 5784ea7..7c166b6 100644
+--- a/client/gui-qt/mapctrl.cpp
++++ b/client/gui-qt/mapctrl.cpp
+@@ -37,6 +37,7 @@
+ 
+ // gui-qt
+ #include "citydlg.h"
++#include "cityoverlay.h"
+ #include "fc_client.h"
+ #include "qtg_cxxside.h"
+ #include "shortcuts.h"
+@@ -189,6 +190,9 @@ void map_view::keyPressEvent(QKeyEvent * event)
+       key_recall_previous_focus_unit();
+       return;
+     case Qt::Key_Escape:
++      if (city_overlay_is_open()) {
++        gui()->cityoverlay_wdg->close_overlay();
++      }
+       key_cancel_action();
+       if (gui()->infotab->chat_maximized) {
+         gui()->infotab->restore_chat();
+@@ -196,6 +200,10 @@ void map_view::keyPressEvent(QKeyEvent * event)
+       return;
+     case Qt::Key_Enter:
+     case Qt::Key_Return:
++      if (city_overlay_is_open()) {
++        gui()->cityoverlay_wdg->full_dialog();
++        return;
++      }
+       if (!gui()->infotab->chat_maximized) {
+         gui()->infotab->maximize_chat();
+         gui()->infotab->chtwdg->chat_line->setFocus();
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index 68d327e..e7669e1 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -46,6 +46,7 @@
+ // gui-qt
+ #include "colors.h"
+ #include "fc_client.h"
++#include "cityoverlay.h"
+ #include "unitbar.h"
+ #include "gui_main.h"
+ #include "mapview.h"
+@@ -1047,6 +1048,10 @@ void fc_client::update_info_label(void)
+   }
+   sw_tax->update_final_pixmap();
+   sw_economy->update_final_pixmap();
++  // Gold and the turn change Buy and the worked-tile drawing
++  if (cityoverlay_wdg != nullptr && cityoverlay_wdg->is_open()) {
++    cityoverlay_wdg->refresh();
++  }
+   delete update_info_timer;
+   update_info_timer = nullptr;
+ }
+diff --git a/client/gui-qt/pages.cpp b/client/gui-qt/pages.cpp
+index addd678..f41acf0 100644
+--- a/client/gui-qt/pages.cpp
++++ b/client/gui-qt/pages.cpp
+@@ -50,6 +50,7 @@
+ #include "qtg_cxxside.h"
+ #include "sidebar.h"
+ #include "sprite.h"
++#include "cityoverlay.h"
+ #include "unitbar.h"
+ #include "voteinfo_bar.h"
+ 
+@@ -790,6 +791,7 @@ void fc_client::create_game_page()
+   gtd = new goto_dialog(mapview_wdg);
+   gtd->hide();
+   unitbar_wdg = new unit_bar(mapview_wdg);
++  cityoverlay_wdg = new city_overlay(mapview_wdg);
+ 
+   game_layout->addWidget(mapview_wdg, 1, 0);
+   game_main_widget->setLayout(game_layout);
+diff --git a/client/gui-qt/unitbar.cpp b/client/gui-qt/unitbar.cpp
+index 119c3fa..e45142c 100644
+--- a/client/gui-qt/unitbar.cpp
++++ b/client/gui-qt/unitbar.cpp
+@@ -51,6 +51,7 @@ extern "C" {
+ 
+ // gui-qt
+ #include "canvas.h"
++#include "cityoverlay.h"
+ #include "fc_client.h"
+ #include "fonts.h"
+ #include "menu.h"
+@@ -425,7 +426,7 @@ void unit_bar::refresh(struct unit_list *punits)
+   int focus_count;
+ 
+   if (punit == nullptr || !gui_options.gui_qt_freeciv45_panels
+-      || !can_client_change_view()) {
++      || !can_client_change_view() || city_overlay_is_open()) {
+     hide();
+     return;
+   }
+diff --git a/data/themes/gui-qt/NightStalker/resource.qss b/data/themes/gui-qt/NightStalker/resource.qss
+index 9076e78..fb0b5aa 100644
+--- a/data/themes/gui-qt/NightStalker/resource.qss
++++ b/data/themes/gui-qt/NightStalker/resource.qss
+@@ -897,3 +897,30 @@ unit_action_button {
+   selection-background-color: #4f5b6d;
+   qproperty-hint_color: #f2c14e;
+ }
++
++/* Freeciv45 city overlay (client/gui-qt/cityoverlay.cpp): the parts on the
++   map's edges while a city is open. city_part matches all four. */
++city_part {
++  background-color: rgba(30, 34, 41, 225);
++  border: 1px solid #47515f;
++  border-radius: 6px;
++}
++city_part QLabel, city_part QToolButton {
++  color: #e6e9ef;
++  background: transparent;
++}
++city_part QToolButton {
++  border: none;
++}
++city_sections QScrollArea, #city_buildings {
++  background: transparent;
++}
++city_production QProgressBar {
++  background-color: #323843;
++  border: none;
++  border-radius: 3px;
++}
++city_production QProgressBar::chunk {
++  background-color: #f2c14e;
++  border-radius: 3px;
++}
+diff --git a/data/themes/gui-qt/System/resource.qss b/data/themes/gui-qt/System/resource.qss
+index 406cc06..a9669a7 100644
+--- a/data/themes/gui-qt/System/resource.qss
++++ b/data/themes/gui-qt/System/resource.qss
+@@ -118,3 +118,30 @@ unit_action_button {
+   selection-background-color: #c3cfe2;
+   qproperty-hint_color: #9a4f00;
+ }
++
++/* Freeciv45 city overlay (client/gui-qt/cityoverlay.cpp): the parts on the
++   map's edges while a city is open. city_part matches all four. */
++city_part {
++  background-color: rgba(244, 244, 246, 235);
++  border: 1px solid #b8bcc4;
++  border-radius: 6px;
++}
++city_part QLabel, city_part QToolButton {
++  color: #1d1f23;
++  background: transparent;
++}
++city_part QToolButton {
++  border: none;
++}
++city_sections QScrollArea, #city_buildings {
++  background: transparent;
++}
++city_production QProgressBar {
++  background-color: #dfe3e9;
++  border: none;
++  border-radius: 3px;
++}
++city_production QProgressBar::chunk {
++  background-color: #3d7bd9;
++  border-radius: 3px;
++}
+diff --git a/meson.build b/meson.build
+index e9258f7..736350d 100644
+--- a/meson.build
++++ b/meson.build
+@@ -3528,6 +3528,7 @@ mocced_client = qt_mod.preprocess(
+    'client/gui-qt/voteinfo_bar.h',
+    'client/gui-qt/gotodlg.h',
+    'client/gui-qt/hudwidget.h',
++   'client/gui-qt/cityoverlay.h',
+    'client/gui-qt/unitbar.h']
+   )
+ 
+@@ -3536,6 +3537,7 @@ executable('freeciv-qt',
+   'client/gui-qt/canvas.cpp',
+   'client/gui-qt/chatline.cpp',
+   'client/gui-qt/citydlg.cpp',
++  'client/gui-qt/cityoverlay.cpp',
+   'client/gui-qt/cityrep.cpp',
+   'client/gui-qt/colors.cpp',
+   'client/gui-qt/connectdlg.cpp',

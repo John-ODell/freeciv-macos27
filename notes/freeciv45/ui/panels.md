@@ -243,7 +243,9 @@ minimap today.
    "what next" button.
 10. Theme files: `unit_bar`, `city_overlay`, `top_strip` and `edge_column` blocks appended to the three
     `resource.qss` files with the defaults.
-11. `mapview.cpp:1000` `fc_client::update_info_label` (fork `49ba373`): also `top_strip->refresh()`.
+11. `mapview.cpp:1000` `fc_client::update_info_label` (fork `49ba373`): also `top_strip->refresh()`, and the open
+    city overlay's `refresh()` so the treasury and a new turn reach Buy and the worked tiles (the overlay slice
+    does this part).
 12. `messagewin.cpp:404` `real_meswin_dialog_update` (fork `49ba373`): also `edge_column->update_badges()`.
 13. `update_unit_info_label`, `real_science_report_dialog_update` (`repodlgs.cpp:1157`) and
     `update_turn_done_button` (`mapview.cpp:1102`, fork `49ba373`): also `what_next_button->refresh()`.
@@ -264,11 +266,12 @@ option off restores today's panel; both screenshots in the PR. Diff prepared in 
 1. Build (B: found city / road / mine / irrigate), pillage, upgrade, disband and the second action row; key
    hints re-read from `fc_shortcuts`; `[` `]` chip cycling; the previous/next arrows and the veteran badges.
 2. The combat odds tooltip (plan row Q2) and the tile box above the minimap (8.4), which share the tile text.
-3. The city marker and the overlay's first slice: the map centred on the city, yields top left, the sections
-   column on the right, production bottom left with Change and Buy, the footer with Return to map
-   (prepared next as `city-overlay-slice.md` and its diff).
-4. The header with its arrows and status, the queue, the Citizens and Units sections, "Open full dialog" and the
-   popup routing (5.2 item 8).
+3. The overlay's first slice: the map centred on the city, yields top left, the sections column on the right,
+   production bottom left with Change and Buy, the footer with Full dialog and Return to map. Prepared as
+   `city-overlay-slice.md` and `city-overlay-slice.diff` (issue 135), unapplied. It opens through the popup
+   routing (5.2 item 8) instead of the marker, and shows Citizens read-only.
+4. The city marker (3.1, 5.2 items 5 and 6), the header with its arrows and status, the queue, the Units section
+   and specialist clicks in Citizens.
 5. Worked tiles on the map with the click routing (5.2 item 6, second part).
 6. The top strip (8.1) and the right-edge column with the overview buttons (8.2); `fc_sidebar` leaves the grid.
 7. Notification badges (8.2) and the "what next" button (8.3).
@@ -329,6 +332,10 @@ The unit bar of 5.3 was prepared under issue #95 as `first-slice.diff` in this f
 tested and what was not in `first-slice.md`, and screenshots `first-slice-on.png` (the bar), `first-slice-bar.png`
 (the bar alone) and `first-slice-off.png` (the option off, today's panel back). It went onto the fork as patch
 0015 (issue 123), and patch 0016 fixed what clicking it in a game turned up (issue 125, `first-slice.md`).
+
+The city overlay's first slice (5.4 item 3) was prepared the same way under issue #135: `city-overlay-slice.diff`,
+with what it does, how it was built and what a game showed in `city-overlay-slice.md`, and the shots and drive
+script in `city-test/`.
 
 ## 8. The map's edges: top strip, right-edge column, "what next" and the tile box
 

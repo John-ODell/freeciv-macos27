@@ -20,10 +20,10 @@ index 8b57da8..b7ef893 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..c41f82c
+index 0000000..625501f
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,477 @@
+@@ -0,0 +1,597 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -49,8 +49,16 @@ index 0000000..c41f82c
 +
 +    pace MS                 delay between lines (default 900)
 +    wait MS                 extra delay
-+    hover portrait|chip N|action TEXT
-+    click portrait|chip N|action TEXT [shift]
++    hover portrait|chip N|action TEXT|button TEXT|label TEXT
++    click portrait|chip N|action TEXT|button TEXT|label TEXT [shift]
++                            (button: any visible button in the window whose
++                            text contains TEXT; label: a visible label whose
++                            text is TEXT)
++    city NAME               where the city is, its build, stock and gold
++    chooser ROW COL         pick that cell of the open production chooser,
++                            as a click on it does (selection changed)
++    accept                  accept the active modal box (its OK button)
++    endturn                 end the turn, as the Turn Done button does
 +    key K                   g f s w space escape enter, or one letter
 +    scroll DX DY            move the map origin by DX, DY canvas pixels
 +    clicktile DX DY         left click the tile DX, DY from the focus unit
@@ -70,6 +78,8 @@ index 0000000..c41f82c
 +#endif
 +
 +// Qt
++#include <QAbstractButton>
++#include <QAbstractItemView>
 +#include <QApplication>
 +#include <QDialog>
 +#include <QDir>
@@ -86,9 +96,12 @@ index 0000000..c41f82c
 +#include <algorithm>
 +
 +// common
++#include "city.h"
 +#include "game.h"
 +#include "terrain.h"
 +#include "map.h"
++#include "player.h"
++#include "requirements.h"
 +#include "unit.h"
 +#include "unitlist.h"
 +#include "unittype.h"
@@ -173,6 +186,20 @@ index 0000000..c41f82c
 +
 +    return (i >= 0 && i < l.size()) ? l[i] : nullptr;
 +  }
++  if (w.size() >= 3 && w[1] == "button") {
++    foreach (QAbstractButton *b, gui()->findChildren<QAbstractButton *>()) {
++      if (b->isVisible() && b->text().contains(w[2], Qt::CaseInsensitive)) {
++        return b;
++      }
++    }
++  }
++  if (w.size() >= 3 && w[1] == "label") {
++    foreach (QLabel *l, gui()->findChildren<QLabel *>()) {
++      if (l->isVisible() && l->text() == w[2]) {
++        return l;
++      }
++    }
++  }
 +  if (w.size() >= 3 && w[1] == "action") {
 +    foreach (unit_action_button *b, visible_in_bar<unit_action_button>()) {
 +      if (b->toolTip().contains(w[2], Qt::CaseInsensitive)) {
@@ -238,6 +265,38 @@ index 0000000..c41f82c
 +      s += QString("\n   labels [%1]\n   chips [%2]\n   actions [%3]")
 +           .arg(texts.join(" | "), chips.join(" | "), acts.join(" | "));
 +    }
++  }
++  {
++    // The city overlay's parts, found by their theme names
++    QStringList parts;
++    const char *names[] = { "city_yields", "city_sections",
++                            "city_production", "city_footer" };
++
++    for (const char *n : names) {
++      QWidget *p = gui()->findChild<QWidget *>(n);
++
++      if (p != nullptr && p->isVisible()) {
++        parts << QString("%1 %2,%3 %4x%5").arg(n).arg(p->x()).arg(p->y())
++                 .arg(p->width()).arg(p->height());
++      }
++    }
++    if (!parts.isEmpty()) {
++      QStringList otexts;
++
++      foreach (QLabel *l, gui()->findChildren<QLabel *>()) {
++        if (l->isVisible() && !l->text().isEmpty()
++            && l->parentWidget() != nullptr
++            && l->window() == gui()
++            && QString(l->parentWidget()->objectName()).startsWith("city_")) {
++          otexts << l->text().simplified();
++        }
++      }
++      s += QString("\n   city overlay [%1]\n   overlay text [%2]")
++           .arg(parts.join(" | "), otexts.join(" | "));
++    }
++    s += QString("\n   minimap visible %1, chat visible %2")
++         .arg(gui()->minimapview_wdg->isVisible() ? "yes" : "no")
++         .arg(gui()->infotab->isVisible() ? "yes" : "no");
 +  }
 +  s += QString("\n   hud_units visible %1")
 +       .arg(gui()->unitinfo_wdg->isVisible() ? "yes" : "no");
@@ -320,11 +379,9 @@ index 0000000..c41f82c
 +    if (shift) {
 +      tw.removeLast();
 +    }
-+    if (cmd == "click" && tw.size() > 2 && tw[1] == "action") {
-+      // action text may have spaces
-+      tw = QStringList({ tw[0], tw[1], QStringList(tw.mid(2)).join(' ') });
-+    }
-+    if (cmd == "hover" && tw.size() > 2 && tw[1] == "action") {
++    if (tw.size() > 2
++        && (tw[1] == "action" || tw[1] == "button" || tw[1] == "label")) {
++      // the text may have spaces
 +      tw = QStringList({ tw[0], tw[1], QStringList(tw.mid(2)).join(' ') });
 +    }
 +    t = find_target(tw);
@@ -435,6 +492,69 @@ index 0000000..c41f82c
 +                .arg(punit->moves_left)
 +                .arg(punit->has_orders ? "yes" : "no"));
 +    }
++  } else if (cmd == "city" && w.size() > 1) {
++    QString name = QStringList(w.mid(1)).join(' ');
++    bool found = false;
++
++    if (client_player() != nullptr) {
++      city_list_iterate(client_player()->cities, pcity) {
++        if (name == city_name_get(pcity)) {
++          int x, y;
++
++          index_to_map_pos(&x, &y, tile_index(city_tile(pcity)));
++          drive_log(QString("   city %1 at (%2,%3) size %4 builds %5"
++                            " stock %6 bought %7 colored %8 gold %9")
++                    .arg(name).arg(x).arg(y).arg(city_size_get(pcity))
++                    .arg(universal_rule_name(&pcity->production))
++                    .arg(pcity->shield_stock)
++                    .arg(pcity->did_buy ? "yes" : "no")
++                    .arg(pcity->client.colored ? "yes" : "no")
++                    .arg(client_player()->economic.gold));
++          found = true;
++        }
++      } city_list_iterate_end;
++    }
++    if (!found) {
++      drive_log("   no own city " + name);
++    }
++  } else if (cmd == "chooser" && w.size() > 2) {
++    QAbstractItemView *view = nullptr;
++
++    foreach (QWidget *t, QApplication::topLevelWidgets()) {
++      if (t->isVisible() && t->inherits("production_widget")) {
++        view = qobject_cast<QAbstractItemView *>(t);
++      }
++    }
++    if (view == nullptr) {
++      drive_log("   !! no chooser open");
++    } else {
++      QModelIndex idx = view->model()->index(w[1].toInt(), w[2].toInt());
++
++      drive_log(QString("   chooser %1 rows, picking \"%2\"")
++                .arg(view->model()->rowCount())
++                .arg(idx.data(Qt::DisplayRole).toString()));
++      view->selectionModel()->select(idx,
++                                     QItemSelectionModel::ClearAndSelect);
++    }
++  } else if (cmd == "accept") {
++    QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
++
++    if (d == nullptr) {
++      // hud_message_box is shown non-modal; take the newest visible box
++      foreach (QWidget *t, QApplication::topLevelWidgets()) {
++        if (t->isVisible() && qobject_cast<QMessageBox *>(t) != nullptr) {
++          d = qobject_cast<QDialog *>(t);
++        }
++      }
++    }
++    if (d == nullptr) {
++      drive_log("   !! no box to accept");
++    } else {
++      drive_log(QString("   accepting %1").arg(d->metaObject()->className()));
++      d->accept();
++    }
++  } else if (cmd == "endturn") {
++    key_end_turn();
 +  } else if (cmd == "state") {
 +    log_state(w.size() > 1 ? w[1] : QString());
 +  } else if (cmd == "shot" && w.size() > 1) {
