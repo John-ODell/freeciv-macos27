@@ -1,4 +1,4 @@
-; Re-cut from trident/roads.spec by tilesets/make-freeciv45test.py: every sprite scaled 3.2x with nearest-neighbour
+; Re-cut from trident/roads.spec by tilesets/make-freeciv45test.py: every sprite scaled 6.4x with nearest-neighbour
 ; sampling (placeholders until Freeciv45 art exists). Original artists are credited below.
 
 [spec]
@@ -20,8 +20,8 @@ gfx = "freeciv45test/roads"
 
 x_top_left = 0
 y_top_left = 0
-dx = 96
-dy = 96
+dx = 192
+dy = 192
 
 tiles = { "row", "column", "tag"
    0,  0, "road.road_isolated"
@@ -60,9 +60,9 @@ tiles = { "row", "column", "tag"
 [grid_rails]
 
 x_top_left = 0
-y_top_left = 192
-dx = 96
-dy = 96
+y_top_left = 384
+dx = 192
+dy = 192
 
 tiles = { "row", "column", "tag"
    2,  0, "road.rail_isolated"
@@ -105,9 +105,9 @@ tiles = { "row", "column", "tag"
 [grid_maglev]
 
 x_top_left = 0
-y_top_left = 576
-dx = 96
-dy = 96
+y_top_left = 1152
+dx = 192
+dy = 192
 
 tiles = { "row", "column", "tag"
    0,  0, "road.maglev_isolated"

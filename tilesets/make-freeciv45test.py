@@ -38,9 +38,20 @@ import argparse, importlib.util, os, re
 from PIL import Image, ImageCms, ImageStat
 
 NAME = "freeciv45test"
-TILE = 96
+TILE = 192                       # tile size in pixels (--tile); the map shows it as TILE / PIXEL_RATIO points
 SRC_TILE = 30
-SCALE = TILE / SRC_TILE          # 3.2
+SCALE = TILE / SRC_TILE          # 6.4 (3.2 for --tile 96)
+MASTER = 192                     # seamless.py master size; painted cells are scaled from it to TILE
+
+def set_tile(tile):
+    """Switch the build to TILE px tiles: 192 (the default, pixel_ratio 2, sharp on a Retina screen) or 96 (pixel_ratio
+    1, the build before issue 161)."""
+    global TILE, SCALE, BLEND_DEPTH
+    TILE, SCALE, BLEND_DEPTH = tile, tile / SRC_TILE, round(24 * tile / 96)
+
+def pixel_ratio():
+    """Tileset pixels per screen point: 96 px tiles are 96 points, 192 px tiles are 96 points at twice the density."""
+    return TILE / 96
 
 def parse_spec(path):
     """Return (header_lines, grids). grids: list of dict(name, params, cells) in file order; cells is a list of
@@ -75,11 +86,19 @@ OVERRIDDEN = {"t.l0.grassland1"}      # terrain45.spec provides these; dropping 
 # Blending between terrains (patch 0019 in the fork): which terrains take part, and the shape of the fade.
 BLEND_TERRAINS = ("desert", "forest", "grassland", "hills", "jungle", "mountains", "plains", "swamp", "tundra")
 BLEND_ALIASES = {"t.l0.%s_n1e1s1w1" % t: "t.blend.%s" % t for t in ("desert", "swamp", "tundra")}
-BLEND_DEPTH = 24      # px into the neighbouring tile where the fade reaches nothing (a quarter tile)
+BLEND_DEPTH = 48      # px into the neighbouring tile where the fade reaches nothing (a quarter tile; set_tile)
 BLEND_PEAK = 0.5      # opacity at the shared edge; both sides blend, so the edge itself is half and half
 
-def recut(data, spec_rel, out_dir, record, aliases={}):
-    """Re-cut one trident spec file (e.g. trident/tiles.spec) to <out_dir>/<base>.spec and .png."""
+# Spec files from misc/ whose sprites the client draws on the map: re-cut at the map's density so they keep their size
+# on screen (the misc/ files that only widgets show stay trident's, read from the installed data). The overlay colour
+# sprites are cropped to the tile, so they must be at least a tile high (64 px in misc/overlays.png).
+def map_misc_scale(spec_rel):
+    return {"misc/citybar.spec": pixel_ratio(), "misc/overlays.spec": max(1.0, TILE / 64)}.get(spec_rel)
+
+def recut(data, spec_rel, out_dir, record, aliases={}, scale=None):
+    """Re-cut one spec file (e.g. trident/tiles.spec) to <out_dir>/<base>.spec and .png, every sprite scaled by scale
+    (default SCALE, trident's 30 px to TILE) with nearest-neighbour sampling."""
+    scale = SCALE if scale is None else scale
     header, grids = parse_spec(os.path.join(data, spec_rel))
     for g in grids:
         g["cells"] = [(r, c, [t for t in tags if t not in OVERRIDDEN] + [aliases[t] for t in tags if t in aliases])
@@ -92,7 +111,7 @@ def recut(data, spec_rel, out_dir, record, aliases={}):
     for g in grids:
         p = g["params"]; dx, dy, pb = p["dx"], p["dy"], p.get("pixel_border", 0)
         x0, y0 = p.get("x_top_left", 0), p.get("y_top_left", 0)
-        ndx, ndy = round(dx * SCALE), round(dy * SCALE)
+        ndx, ndy = round(dx * scale), round(dy * scale)
         cells = sorted({(r, c) for r, c, _ in g["cells"]})
         rows = max(r for r, _ in cells) + 1; cols = max(c for _, c in cells) + 1
         g["new"] = {"x_top_left": 0, "y_top_left": height, "dx": ndx, "dy": ndy}
@@ -107,7 +126,7 @@ def recut(data, spec_rel, out_dir, record, aliases={}):
     with open(os.path.join(out_dir, base + ".spec"), "w") as f:
         f.write("; Re-cut from %s by tilesets/make-%s.py: every sprite scaled %gx with nearest-neighbour\n"
                 "; sampling (placeholders until Freeciv45 art exists). Original artists are credited below.\n"
-                % (spec_rel, NAME, SCALE))
+                % (spec_rel, NAME, scale))
         for h in header:
             f.write(re.sub(r'gfx\s*=\s*"[^"]+"', 'gfx = "%s/%s"' % (NAME, base), h) + "\n")
         for g in grids:
@@ -120,7 +139,7 @@ def recut(data, spec_rel, out_dir, record, aliases={}):
             f.write("}\n\n")
     ntags = sum(len(t) for g in grids for _, _, t in g["cells"])
     record.append("| `%s/%s.spec` | `%s` (%d tags, %d grids) | nearest %gx | %dx%d |"
-                  % (NAME, base, spec_rel, ntags, len(grids), SCALE, width, height))
+                  % (NAME, base, spec_rel, ntags, len(grids), scale, width, height))
 
 # Painted ground, in sheet order: (terrain, panel key, panel cells). Each terrain's cells become t.l0.<terrain>1..N
 # and start on a new sheet row, five to a row. Panel keys are the --panel options.
@@ -184,7 +203,7 @@ def painted(panels, cutter, out_dir, record, plan, tone_match=True):
             x0, y0, x1, y1 = boxes[key][name]; inset = 3
             cell = images[key].crop((x0 + inset, y0 + inset, x1 - inset, y1 - inset))
             side = min(cell.size)
-            master = seamless.make_seamless(cell.crop((0, 0, side, side)).resize((192, 192), Image.LANCZOS))
+            master = seamless.make_seamless(cell.crop((0, 0, side, side)).resize((MASTER, MASTER), Image.LANCZOS))
             placed.append([master, n % 5, row, terrain])
             lines.append('  %d, %d, "t.l0.%s%d"   ; %s %s' % (row, n % 5, terrain, n + 1, key, name))
     tones = []
@@ -196,19 +215,22 @@ def painted(panels, cutter, out_dir, record, plan, tone_match=True):
         after = luma_range([p[0].resize((TILE, TILE), Image.LANCZOS) for p in group])
         tones.append("%s %.0f-%.0f -> %.0f-%.0f" % (terrain, before[0], before[1], after[0], after[1]))
     sheet = Image.new("RGB", (TILE * 5, TILE * (row + 1)))
-    for master, c, r, _ in placed: sheet.paste(master.resize((TILE, TILE), Image.LANCZOS), (c * TILE, r * TILE))
+    for master, c, r, _ in placed:
+        sheet.paste(master if master.size == (TILE, TILE) else master.resize((TILE, TILE), Image.LANCZOS),
+                    (c * TILE, r * TILE))
     sheet.save(os.path.join(out_dir, "terrain45.png"), optimize=True)
     with open(os.path.join(out_dir, "terrain45.spec"), "w") as f:
         f.write("; Painted ground for the Freeciv45 test tileset, cut from ChatGPT terrain panels by\n"
-                "; tilesets/make-%s.py (see RECORD.md). Each cell: seamless.py 192 px master, then 96 px.\n\n"
+                "; tilesets/make-%s.py (see RECORD.md). Each cell: seamless.py %d px master, then %d px.\n\n"
                 '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    John O\'Dell (sheet workflow)\n"\n\n'
                 '[file]\ngfx = "%s/terrain45"\n\n[grid_main]\n\nx_top_left = 0\ny_top_left = 0\ndx = %d\ndy = %d\n\n'
-                'tiles = { "row", "column", "tag"\n%s\n}\n' % (NAME, NAME, TILE, TILE, "\n".join(lines)))
+                'tiles = { "row", "column", "tag"\n%s\n}\n' % (NAME, MASTER, TILE, NAME, TILE, TILE, "\n".join(lines)))
     for key, path in panels.items():
         used = ", ".join("%s %d" % (t, len(c)) for t, k, c in plan if k == key)
-        record.append("| `%s/terrain45.spec` | `%s` (%s): %s, through `%s` | LANCZOS 192 then 96 | %dx%d |"
-                      % (NAME, key, os.path.basename(path), used, os.path.basename(cutter), TILE * 5, TILE * (row + 1)))
-    record.append("| tone match | %s | mean luma per variant at 96 px, min-max |" % ("on" if tone_match else "off")
+        record.append("| `%s/terrain45.spec` | `%s` (%s): %s, through `%s` | %s | %dx%d |"
+                      % (NAME, key, os.path.basename(path), used, os.path.basename(cutter),
+                         "LANCZOS %d" % MASTER + ("" if TILE == MASTER else " then %d" % TILE), TILE * 5, TILE * (row + 1)))
+    record.append("| tone match | %s | mean luma per variant at %d px, min-max |" % ("on" if tone_match else "off", TILE)
                   + " %s |" % "; ".join(tones))
 
 def blend_mask(out_dir, record):
@@ -240,9 +262,10 @@ def blend_mask(out_dir, record):
 def tilespec(data, out_root, files, blend=True):
     """trident.tilespec with sizes, offsets, name and file list changed; the PAINTED terrains as plain variants;
     with blend, blend_layer 1 for BLEND_TERRAINS."""
-    scaled = {"normal_tile_width": TILE, "normal_tile_height": TILE, "stack_size_offset_x": 64,
-              "stack_size_offset_y": 32, "citybar_offset_y": 86, "tilelabel_offset_y": 32,
-              "unit_upkeep_small_offset_y": 64}
+    k = TILE / 96             # the offsets below were set for 96 px tiles
+    scaled = {"normal_tile_width": TILE, "normal_tile_height": TILE, "stack_size_offset_x": round(64 * k),
+              "stack_size_offset_y": round(32 * k), "citybar_offset_y": round(86 * k), "tilelabel_offset_y": round(32 * k),
+              "unit_upkeep_small_offset_y": round(64 * k), "svg_height": round(44 * k)}
     out, section, in_files = [], None, False
     for raw in open(os.path.join(data, "trident.tilespec"), errors="replace"):
         line = raw.rstrip("\n")
@@ -257,10 +280,16 @@ def tilespec(data, out_root, files, blend=True):
         key = m.group(1) if m else None
         if key == "files":
             out.append("files =\n" + ",\n".join('  "%s"' % f for f in files)); in_files = True; continue
-        if key in scaled: out.append("%s = %d" % (key, scaled[key])); continue
+        if key in scaled:
+            out.append("%s = %d" % (key, scaled[key]))
+            if key == "normal_tile_height" and pixel_ratio() != 1:
+                out.append("\n; Tileset pixels per screen point: the map shows a %d px tile as %d points, so on a 2x (Retina)\n"
+                           "; screen every pixel is drawn (Freeciv45 fork, Qt client); other clients show the tiles at %d points.\n"
+                           "pixel_ratio = %g" % (TILE, TILE / pixel_ratio(), TILE, pixel_ratio()))
+            continue
         if key == "name": out.append('name = "Freeciv45 test"'); continue
         if key == "priority": out.append("priority = 4"); continue
-        if key == "summary": out.append('summary = _("Freeciv45 test tileset: 96 px overhead squares, painted grassland, plains, forest, jungle, hills and mountains, scaled trident placeholders.")'); continue
+        if key == "summary": out.append('summary = _("Freeciv45 test tileset: %d px overhead squares, painted grassland, plains, forest, jungle, hills and mountains, scaled trident placeholders.")' % TILE); continue
         if section and section[5:] in PAINTED and key == "layer0_match_with":
             continue    # <terrain>1..N variants from terrain45.spec, no edge matching
         if blend and key == "blend_layer" and section and section[5:] in BLEND_TERRAINS:
@@ -281,8 +310,11 @@ def main():
     ap.add_argument("--cutter", required=True)
     ap.add_argument("--no-tone-match", action="store_true", help="leave each painted cell's tone as cut (the build before issue 138)")
     ap.add_argument("--no-blend", action="store_true", help="no blending between terrains (the build before issue 141)")
+    ap.add_argument("--tile", type=int, choices=(96, 192), default=192,
+                    help="tile size: 192 px at pixel_ratio 2 (default), or 96 px, the build before issue 161")
     ap.add_argument("--out", default=os.path.dirname(os.path.abspath(__file__)))
     a = ap.parse_args()
+    set_tile(a.tile)
     out_dir = os.path.join(a.out, NAME); os.makedirs(out_dir, exist_ok=True)
     spec_text = open(os.path.join(a.data, "trident.tilespec"), errors="replace").read()
     listed = re.findall(r'"([^"]+\.spec)"', spec_text.split("files =", 1)[1].split("*include", 1)[0])
@@ -294,6 +326,9 @@ def main():
             if rel == "trident/tiles.spec":
                 files.append("%s/terrain45.spec" % NAME)
                 if not a.no_blend: files.append("%s/blend.spec" % NAME)
+        elif map_misc_scale(rel) and map_misc_scale(rel) != 1:
+            recut(a.data, rel, out_dir, record, scale=map_misc_scale(rel))
+            files.append("%s/%s" % (NAME, os.path.basename(rel)))
         else: files.append(rel)
     plan = PLAN + ([OLIVE_PINE] if a.olive_pine else [])
     plan.sort(key=lambda p: [t for t, _, _ in PLAN].index(p[0]))     # keep each terrain's cells together

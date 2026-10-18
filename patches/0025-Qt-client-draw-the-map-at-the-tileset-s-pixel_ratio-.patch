@@ -1,0 +1,704 @@
+From 3d96e081bd2e538a2ee7c1b306ca5c3cdfe304bb Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 23:15:07 -0500
+Subject: [PATCH] Qt client: draw the map at the tileset's pixel_ratio, sharp
+ on Retina
+
+A tileset may now say pixel_ratio = 2 in its [tilespec] section: its pixels
+are meant at two per screen point (192 px tiles shown as 96 point tiles).
+The Qt client then keeps the map canvas at that density: the canvas is the
+map widget's size times the ratio, painted into the widget's points, so on
+a 2x screen every tileset pixel lands on its own screen pixel instead of a
+96 px tile being doubled. Mouse positions are converted from points to
+canvas pixels, map text and lines are drawn at the density, the widgets
+placed from the canvas size (minimap, battle log, tile info) use points,
+and the city dialog's map and the stack chooser show the units and tiles
+at their point size. Tilesets without the key get 1 and draw as before.
+---
+ client/gui-qt/canvas.cpp    |  37 +++++++++++--
+ client/gui-qt/canvas.h      |   1 +
+ client/gui-qt/citydlg.cpp   |  20 +++----
+ client/gui-qt/dialogs.cpp   |  40 ++++++++------
+ client/gui-qt/fc_client.cpp |  14 ++---
+ client/gui-qt/hudwidget.cpp |   5 +-
+ client/gui-qt/mapctrl.cpp   |  18 +++----
+ client/gui-qt/mapview.cpp   | 102 +++++++++++++++++++++++++++++++-----
+ client/gui-qt/mapview.h     |   9 ++++
+ client/gui-qt/menu.cpp      |   2 +-
+ client/tilespec.c           |  30 +++++++++++
+ client/tilespec.h           |   1 +
+ 12 files changed, 219 insertions(+), 60 deletions(-)
+
+diff --git a/client/gui-qt/canvas.cpp b/client/gui-qt/canvas.cpp
+index d731e89..85bd9cb 100644
+--- a/client/gui-qt/canvas.cpp
++++ b/client/gui-qt/canvas.cpp
+@@ -25,11 +25,31 @@
+ #include "colors.h"
+ #include "fc_client.h"
+ #include "fonts.h"
++#include "mapview.h"
+ #include "qtg_cxxside.h"
+ #include "sprite.h"
+ 
+ static QFont *get_font(enum client_font font);
+ 
++/************************************************************************//**
++  The font drawn at the given density: a canvas with two pixels per point
++  needs twice the pixels for the same text size on screen.
++****************************************************************************/
++static QFont font_at_density(const QFont &font, qreal density)
++{
++  QFont f(font);
++
++  if (density != 1.0) {
++    if (f.pixelSize() > 0) {
++      f.setPixelSize(qRound(f.pixelSize() * density));
++    } else {
++      f.setPointSizeF(f.pointSizeF() * density);
++    }
++  }
++
++  return f;
++}
++
+ /************************************************************************//**
+   Create a canvas of the given size.
+ ****************************************************************************/
+@@ -71,6 +91,7 @@ bool qtg_has_zoom_support()
+ ****************************************************************************/
+ void qtg_canvas_mapview_init(struct canvas *store)
+ {
++  store->density = map_density();
+ }
+ 
+ /************************************************************************//**
+@@ -273,6 +294,7 @@ void qtg_canvas_put_line(struct canvas *pcanvas, struct color *pcolor,
+     break;
+   }
+ 
++  pen.setWidthF(pen.widthF() * pcanvas->density);
+   p.begin(&pcanvas->map_pixmap);
+   p.setPen(pen);
+   p.setRenderHint(QPainter::Antialiasing);
+@@ -312,6 +334,7 @@ void qtg_canvas_put_curved_line(struct canvas *pcanvas, struct color *pcolor,
+     break;
+   }
+ 
++  pen.setWidthF(pen.widthF() * pcanvas->density);
+   p.begin(&pcanvas->map_pixmap);
+   p.setRenderHints(QPainter::Antialiasing);
+   p.setPen(pen);
+@@ -335,7 +358,12 @@ void qtg_get_text_size(int *width, int *height,
+   QFontMetrics *fm;
+ 
+   afont = get_font(font);
+-  fm = new QFontMetrics(*afont);
++  if (font == FONT_CITY_NAME || font == FONT_CITY_PROD) {
++    // Map text, measured at the map canvas density
++    fm = new QFontMetrics(font_at_density(*afont, map_density()));
++  } else {
++    fm = new QFontMetrics(*afont);
++  }
+   if (width) {
+     *width = fm->horizontalAdvance(QString::fromUtf8(text));
+   }
+@@ -361,13 +389,16 @@ void qtg_canvas_put_text(struct canvas *pcanvas, int canvas_x, int canvas_y,
+   QColor color(pcolor->qcolor);
+   QFontMetrics *fm;
+ 
++  QFont dfont;
++
+   afont = get_font(font);
++  dfont = font_at_density(*afont, pcanvas->density);
+   pen.setColor(color);
+-  fm = new QFontMetrics(*afont);
++  fm = new QFontMetrics(dfont);
+ 
+   p.begin(&pcanvas->map_pixmap);
+   p.setPen(pen);
+-  p.setFont(*afont);
++  p.setFont(dfont);
+   p.drawText(canvas_x, canvas_y + fm->ascent(), QString::fromUtf8(text));
+   p.end();
+   delete fm;
+diff --git a/client/gui-qt/canvas.h b/client/gui-qt/canvas.h
+index c1297ef..a781b60 100644
+--- a/client/gui-qt/canvas.h
++++ b/client/gui-qt/canvas.h
+@@ -23,6 +23,7 @@ extern "C" {
+ 
+ struct canvas {
+   QPixmap map_pixmap;
++  qreal density = 1.0; // Canvas pixels per screen point (the map: tileset pixel_ratio)
+ };
+ 
+ struct canvas *qtg_canvas_create(int width, int height);
+diff --git a/client/gui-qt/citydlg.cpp b/client/gui-qt/citydlg.cpp
+index 4d4a642..025062f 100644
+--- a/client/gui-qt/citydlg.cpp
++++ b/client/gui-qt/citydlg.cpp
+@@ -1266,13 +1266,13 @@ void city_map::paintEvent(QPaintEvent *event)
+   painter.drawPixmap(0, 0, zoomed_pixmap);
+ 
+   if (cma_is_city_under_agent(mcity, NULL)) {
+-    painter.fillRect(0, 0, zoomed_pixmap.width(), zoomed_pixmap.height(),
++    painter.fillRect(0, 0, rect().width(), rect().height(),
+                      QBrush(QColor(60, 60 , 60 , 110)));
+     painter.setPen(QColor(255, 255, 255));
+     // TRANS: %1 is a custom string chosen by player.
+     str = QString(_("Governor %1"))
+           .arg(cmafec_get_short_descr_of_city(mcity));
+-    painter.drawText(5, zoomed_pixmap.height() - 10, str);
++    painter.drawText(5, rect().height() - 10, str);
+   }
+ 
+   painter.end();
+@@ -1310,7 +1310,9 @@ void city_map::set_pixmap(struct city *pcity, float z)
+   zoomed_pixmap = miniview->map_pixmap.scaled(size * zoom,
+                                               Qt::KeepAspectRatio,
+                                               Qt::SmoothTransformation);
+-  setFixedSize(zoomed_pixmap.size());
++  // A high density tileset's pixels: as many per point as the map uses
++  zoomed_pixmap.setDevicePixelRatio(tileset_pixel_ratio(tileset));
++  setFixedSize(zoomed_pixmap.deviceIndependentSize().toSize());
+   mcity = pcity;
+ }
+ 
+@@ -1319,7 +1321,7 @@ void city_map::set_pixmap(struct city *pcity, float z)
+ ****************************************************************************/
+ QSize city_map::sizeHint() const
+ {
+-  return zoomed_pixmap.size();
++  return zoomed_pixmap.deviceIndependentSize().toSize();
+ }
+ 
+ /************************************************************************//**
+@@ -1327,7 +1329,7 @@ QSize city_map::sizeHint() const
+ ****************************************************************************/
+ QSize city_map::minimumSizeHint() const
+ {
+-  return zoomed_pixmap.size();
++  return zoomed_pixmap.deviceIndependentSize().toSize();
+ }
+ 
+ /************************************************************************//**
+@@ -1343,8 +1345,8 @@ void city_map::mousePressEvent(QMouseEvent *event)
+   }
+ 
+   pos = event->pos();
+-  canvas_x = pos.x() / zoom + delta_x;
+-  canvas_y = pos.y() / zoom + delta_y;
++  canvas_x = pos.x() * zoomed_pixmap.devicePixelRatio() / zoom + delta_x;
++  canvas_y = pos.y() * zoomed_pixmap.devicePixelRatio() / zoom + delta_y;
+ 
+   if (canvas_to_city_pos(&city_x, &city_y, city_map_radius_sq_get(mcity),
+                          canvas_x, canvas_y)) {
+@@ -1378,8 +1380,8 @@ void city_map::context_menu(QPoint point)
+     return;
+   }
+ 
+-  canvas_x = point.x() / zoom + delta_x;
+-  canvas_y = point.y() / zoom + delta_y;
++  canvas_x = point.x() * zoomed_pixmap.devicePixelRatio() / zoom + delta_x;
++  canvas_y = point.y() * zoomed_pixmap.devicePixelRatio() / zoom + delta_y;
+ 
+   if (!canvas_to_city_pos(&city_x, &city_y, city_map_radius_sq_get(mcity),
+                           canvas_x, canvas_y)) {
+diff --git a/client/gui-qt/dialogs.cpp b/client/gui-qt/dialogs.cpp
+index 4598196..edc720e 100644
+--- a/client/gui-qt/dialogs.cpp
++++ b/client/gui-qt/dialogs.cpp
+@@ -4890,6 +4890,9 @@ void units_select::create_pixmap()
+   struct canvas *unit_pixmap;
+   struct unit *punit;
+   float isosize;
++  // A high density tileset's pixels: units are drawn at that many pixels
++  // per point, so item_size is in points and the pixmaps are d times bigger
++  const qreal d = tileset_pixel_ratio(tileset);
+ 
+   if (pix != NULL) {
+     delete pix;
+@@ -4903,32 +4906,34 @@ void units_select::create_pixmap()
+   update_units();
+   if (unit_list.count() > 0) {
+   if (!tileset_is_isometric(tileset)) {
+-    item_size.setWidth(tileset_unit_width(tileset));
+-    item_size.setHeight(tileset_unit_width(tileset));
++    item_size.setWidth(tileset_unit_width(tileset) / d);
++    item_size.setHeight(tileset_unit_width(tileset) / d);
+   } else {
+-    item_size.setWidth(tileset_unit_width(tileset) * isosize);
+-    item_size.setHeight(tileset_unit_width(tileset) * isosize);
++    item_size.setWidth(tileset_unit_width(tileset) * isosize / d);
++    item_size.setHeight(tileset_unit_width(tileset) * isosize / d);
+   }
+   more = false;
+   if (h_pix != nullptr) {
+     delete h_pix;
+   }
+-  h_pix = new QPixmap(item_size.width(), item_size.height());
++  h_pix = new QPixmap(item_size * d);
++  h_pix->setDevicePixelRatio(d);
+   h_pix->fill(palette().color(QPalette::HighlightedText));
+   if (unit_count < 5) {
+     row_count = 1;
+-    pix = new QPixmap((unit_list.size()) * item_size.width(),
+-                      item_size.height());
++    pix = new QPixmap((unit_list.size()) * item_size.width() * d,
++                      item_size.height() * d);
+   } else if (unit_count < 9) {
+     row_count = 2;
+-    pix = new QPixmap(4 * item_size.width(), 2 * item_size.height());
++    pix = new QPixmap(4 * item_size.width() * d, 2 * item_size.height() * d);
+   } else {
+     row_count = 3;
+     if (unit_count > 12) {
+       more = true;
+     }
+-    pix = new QPixmap(4 * item_size.width(), 3 * item_size.height());
++    pix = new QPixmap(4 * item_size.width() * d, 3 * item_size.height() * d);
+   }
++  pix->setDevicePixelRatio(d);
+   pix->fill(Qt::transparent);
+   foreach(punit, unit_list) {
+     unit_pixmap = qtg_canvas_create(tileset_unit_width(tileset),
+@@ -4950,6 +4955,7 @@ void units_select::create_pixmap()
+                                Qt::SmoothTransformation);
+     }
+     pixc = QPixmap::fromImage(img);
++    pixc.setDevicePixelRatio(d);
+     pixp = new QPixmap(pixc);
+     pix_list.push_back(pixp);
+     qtg_canvas_free(unit_pixmap);
+@@ -4999,8 +5005,9 @@ void units_select::create_pixmap()
+     delete tmp_pix;
+   }
+   p.end();
+-  setFixedWidth(pix->width() + 20);
+-  setFixedHeight(pix->height() + 2 * (fm.height() + 6));
++  setFixedWidth(pix->deviceIndependentSize().width() + 20);
++  setFixedHeight(pix->deviceIndependentSize().height()
++                 + 2 * (fm.height() + 6));
+   qDeleteAll(pix_list.begin(), pix_list.end());
+   }
+ }
+@@ -5133,11 +5140,14 @@ void units_select::paint(QPainter *painter, QPaintEvent *event)
+       pen.setColor(palette().color(QPalette::HighlightedText));
+       painter->setBrush(palette().color(QPalette::HighlightedText).darker());
+       painter->setPen(palette().color(QPalette::HighlightedText).darker());
+-      painter->drawRect(pix->width() + 10, h, 8, h + pix->height());
++      painter->drawRect(pix->deviceIndependentSize().width() + 10, h, 8,
++                       h + pix->deviceIndependentSize().height());
+       painter->setPen(pen);
+-      painter->drawRoundedRect(pix->width() + 10,
+-                               h + page_start * pix->height(),
+-                               8, h + page_height * pix->height(), 2, 2);
++      painter->drawRoundedRect(pix->deviceIndependentSize().width() + 10,
++                               h + page_start
++                               * pix->deviceIndependentSize().height(),
++                               8, h + page_height
++                               * pix->deviceIndependentSize().height(), 2, 2);
+     }
+   }
+   if (point_size < 0) {
+diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
+index 491e2dd..6dec099 100644
+--- a/client/gui-qt/fc_client.cpp
++++ b/client/gui-qt/fc_client.cpp
+@@ -1102,7 +1102,7 @@ void fc_game_tab_widget::resizeEvent(QResizeEvent *event)
+   size = event->size();
+   if (C_S_RUNNING <= client_state()) {
+     gui()->sidebar_wdg->resize_me(size.height());
+-    map_canvas_resized(size.width(), size.height());
++    qt_map_canvas_resized(size.width(), size.height());
+     gui()->infotab->resize(qRound((size.width()
+                              * gui()->qt_settings.chat_fwidth)),
+                              qRound((size.height()
+@@ -1113,18 +1113,18 @@ void fc_game_tab_widget::resizeEvent(QResizeEvent *event)
+                                  * gui()->qt_settings.chat_fy_pos)));
+     gui()->infotab->restore_chat();
+     gui()->minimapview_wdg->move(qRound(gui()->qt_settings.minimap_x
+-                                 * mapview.width),
++                                 * map_widget_width()),
+                                  qRound(gui()->qt_settings.minimap_y
+-                                 * mapview.height));
++                                 * map_widget_height()));
+     gui()->minimapview_wdg->resize(qRound(gui()->qt_settings.minimap_width
+-                                   * mapview.width),
++                                   * map_widget_width()),
+                                    qRound(gui()->qt_settings.minimap_height
+-                                   * mapview.height));
++                                   * map_widget_height()));
+     gui()->battlelog_wdg->set_scale(gui()->qt_settings.battlelog_scale);
+     gui()->battlelog_wdg->move(qRound(gui()->qt_settings.battlelog_x
+-                               * mapview.width),
++                               * map_widget_width()),
+                                qRound(gui()->qt_settings.battlelog_y
+-                               * mapview.height));
++                               * map_widget_height()));
+     gui()->x_vote->move(width() / 2 - gui()->x_vote->width() / 2, 0);
+     gui()->update_sidebar_tooltips();
+     side_disable_endturn(get_turn_done_button_state());
+diff --git a/client/gui-qt/hudwidget.cpp b/client/gui-qt/hudwidget.cpp
+index f841760..6ba7231 100644
+--- a/client/gui-qt/hudwidget.cpp
++++ b/client/gui-qt/hudwidget.cpp
+@@ -2101,9 +2101,10 @@ void hud_battle_log::moveEvent(QMoveEvent *event)
+   QPoint p;
+ 
+   p = pos();
+-  gui()->qt_settings.battlelog_x = static_cast<float>(p.x()) / mapview.width;
++  gui()->qt_settings.battlelog_x = static_cast<float>(p.x())
++                                   / map_widget_width();
+   gui()->qt_settings.battlelog_y = static_cast<float>(p.y())
+-                                   / mapview.height;
++                                   / map_widget_height();
+   m_timer.restart();
+ }
+ 
+diff --git a/client/gui-qt/mapctrl.cpp b/client/gui-qt/mapctrl.cpp
+index 7c166b6..332c280 100644
+--- a/client/gui-qt/mapctrl.cpp
++++ b/client/gui-qt/mapctrl.cpp
+@@ -96,11 +96,11 @@ void create_line_at_mouse_pos(void)
+   int x, y;
+ 
+   global_pos = QCursor::pos();
+-  local_pos = gui()->mapview_wdg->mapFromGlobal(global_pos);
++  local_pos = map_canvas_pos(gui()->mapview_wdg->mapFromGlobal(global_pos));
+   x = local_pos.x();
+   y = local_pos.y();
+ 
+-  if (x >= 0 && y >= 0 && x < mapview.width && y < mapview.width) {
++  if (x >= 0 && y >= 0 && x < mapview.width && y < mapview.height) {
+     update_line(x, y);
+   }
+ }
+@@ -232,7 +232,7 @@ void map_view::shortcut_pressed(int key)
+ 
+   md = QApplication::keyboardModifiers();
+   bt = QApplication::mouseButtons();
+-  pos = mapFromGlobal(QCursor::pos());
++  pos = map_canvas_pos(mapFromGlobal(QCursor::pos()));
+ 
+   ctile = canvas_pos_to_tile(pos.x(), pos.y(), map_zoom);
+   pcity = ctile ? tile_city(ctile) : nullptr;
+@@ -494,7 +494,7 @@ void map_view::shortcut_released(Qt::MouseButton bt)
+   fc_shortcut *sc;
+   Qt::KeyboardModifiers md;
+   md = QApplication::keyboardModifiers();
+-  pos = mapFromGlobal(QCursor::pos());
++  pos = map_canvas_pos(mapFromGlobal(QCursor::pos()));
+ 
+   sc = fc_shortcuts::sc()->get_shortcut(SC_POPUP_INFO);
+   if (bt == sc->mouse && md == sc->mod) {
+@@ -544,14 +544,14 @@ void map_view::mouseReleaseEvent(QMouseEvent *event)
+ **************************************************************************/
+ void map_view::mouseMoveEvent(QMouseEvent *event)
+ {
+-  update_line(event->pos().x(), event->pos().y());
++  QPoint pos = map_canvas_pos(event->pos());
++
++  update_line(pos.x(), pos.y());
+ 
+   if (keyboardless_goto_button_down && hover_state == HOVER_NONE) {
+-    maybe_activate_keyboardless_goto(event->pos().x(), event->pos().y());
++    maybe_activate_keyboardless_goto(pos.x(), pos.y());
+   }
+-  control_mouse_cursor(canvas_pos_to_tile(event->pos().x(),
+-                                          event->pos().y(),
+-                                          map_zoom));
++  control_mouse_cursor(canvas_pos_to_tile(pos.x(), pos.y(), map_zoom));
+ }
+ 
+ /**********************************************************************//**
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index e7669e1..b450a79 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -67,6 +67,54 @@ extern int last_center_capital;
+ extern int last_center_player_city;
+ extern int last_center_enemy_city;
+ 
++// Canvas pixels per map widget point; follows the tileset's pixel_ratio
++static qreal map_canvas_density = 1.0;
++
++/**********************************************************************//**
++  How many map canvas pixels make one point of the map widget. A tileset
++  drawn for high density screens (pixel_ratio 2: 192 px tiles meant as
++  96 point tiles) gets a canvas with that many pixels per point, so on a
++  Retina screen every tileset pixel lands on its own screen pixel.
++**************************************************************************/
++qreal map_density(void)
++{
++  return map_canvas_density;
++}
++
++/**********************************************************************//**
++  The map widget is width x height points: resize the map canvas to match,
++  at the current tileset's density.
++**************************************************************************/
++void qt_map_canvas_resized(int width, int height)
++{
++  map_canvas_density = (tileset != nullptr
++                        ? tileset_pixel_ratio(tileset) : 1.0);
++  map_canvas_resized(qRound(width * map_canvas_density),
++                     qRound(height * map_canvas_density));
++}
++
++/**********************************************************************//**
++  A point of the map widget in map canvas pixels.
++**************************************************************************/
++QPoint map_canvas_pos(const QPoint &widget_pos)
++{
++  return QPoint(qRound(widget_pos.x() * map_canvas_density),
++                qRound(widget_pos.y() * map_canvas_density));
++}
++
++/**********************************************************************//**
++  The map canvas size in map widget points.
++**************************************************************************/
++int map_widget_width(void)
++{
++  return qRound(mapview.width / map_canvas_density);
++}
++
++int map_widget_height(void)
++{
++  return qRound(mapview.height / map_canvas_density);
++}
++
+ /**********************************************************************//**
+   Check if point x, y is in area (px -> pxe, py - pye)
+ **************************************************************************/
+@@ -292,9 +340,23 @@ void map_view::paintEvent(QPaintEvent *event)
+ **************************************************************************/
+ void map_view::paint(QPainter *painter, QPaintEvent *event)
+ {
+-  painter->drawPixmap(event->rect(), mapview.store->map_pixmap,
+-                      event->rect());
++  const qreal d = map_canvas_density;
++  QRectF r(event->rect());
++
++  if (d == 1.0) {
++    painter->drawPixmap(event->rect(), mapview.store->map_pixmap,
++                        event->rect());
++  } else {
++    // One canvas pixel per device pixel when d equals the screen's ratio
++    painter->setRenderHint(QPainter::SmoothPixmapTransform);
++    painter->drawPixmap(r, mapview.store->map_pixmap,
++                        QRectF(r.x() * d, r.y() * d,
++                               r.width() * d, r.height() * d));
++  }
++  painter->save();
++  painter->scale(1.0 / d, 1.0 / d);
+   draw_calculated_trade_routes(painter);
++  painter->restore();
+ }
+ 
+ /**********************************************************************//**
+@@ -875,9 +937,9 @@ void minimap_view::resizeEvent(QResizeEvent* event)
+     w_ratio = static_cast<float>(width()) / gui_options.overview.width;
+     h_ratio = static_cast<float>(height()) / gui_options.overview.height;
+     gui()->qt_settings.minimap_width = static_cast<float>(size.width())
+-                                       / mapview.width;
++                                       / map_widget_width();
+     gui()->qt_settings.minimap_height = static_cast<float>(size.height())
+-                                        / mapview.height;
++                                        / map_widget_height();
+   }
+   update_image();
+ }
+@@ -969,9 +1031,10 @@ void minimap_view::mouseMoveEvent(QMouseEvent *event)
+     p = r - p;
+     move(mevent_gpos(event) - cursor);
+     setCursor(Qt::SizeAllCursor);
+-    gui()->qt_settings.minimap_x = static_cast<float>(p.x()) / mapview.width;
++    gui()->qt_settings.minimap_x = static_cast<float>(p.x())
++                                   / map_widget_width();
+     gui()->qt_settings.minimap_y = static_cast<float>(p.y())
+-                                   / mapview.height;
++                                   / map_widget_height();
+   }
+ }
+ 
+@@ -1140,7 +1203,11 @@ struct canvas *get_overview_window(void)
+ static void flush_mapcanvas(int canvas_x, int canvas_y,
+                             int pixel_width, int pixel_height)
+ {
+-  gui()->mapview_wdg->repaint(canvas_x, canvas_y, pixel_width, pixel_height);
++  const qreal d = map_canvas_density;
++  QRectF r(canvas_x / d, canvas_y / d, pixel_width / d, pixel_height / d);
++
++  // Whole points that cover the canvas rectangle
++  gui()->mapview_wdg->repaint(r.toAlignedRect());
+ }
+ 
+ /**********************************************************************//**
+@@ -1184,8 +1251,7 @@ void flush_dirty(void)
+     return;
+   }
+   if (num_dirty_rects == MAX_DIRTY_RECTS) {
+-    flush_mapcanvas(0, 0, gui()->mapview_wdg->width(),
+-                    gui()->mapview_wdg->height());
++    flush_mapcanvas(0, 0, mapview.width, mapview.height);
+   } else {
+     int i;
+ 
+@@ -1278,6 +1344,11 @@ void tileset_changed(void)
+ 
+   update_unit_info_label(get_units_in_focus());
+   destroy_city_dialog();
++  if (tileset_pixel_ratio(tileset) != map_canvas_density
++      && C_S_RUNNING <= client_state()) {
++    qt_map_canvas_resized(gui()->mapview_wdg->width(),
++                          gui()->mapview_wdg->height());
++  }
+   // Update science report if open
+   if (gui()->is_repo_dlg_open("SCI")) {
+     i = gui()->gimme_index_of("SCI");
+@@ -1312,13 +1383,13 @@ void overview_size_changed(void)
+ {
+   gui()->minimapview_wdg->resize(0, 0);
+   gui()->minimapview_wdg->move(gui()->qt_settings.minimap_x
+-                               * mapview.width,
++                               * map_widget_width(),
+                                gui()->qt_settings.minimap_y
+-                               * mapview.height);
++                               * map_widget_height());
+   gui()->minimapview_wdg->resize(gui()->qt_settings.minimap_width
+-                                 * mapview.width,
++                                 * map_widget_width(),
+                                  gui()->qt_settings.minimap_height
+-                                 * mapview.height);
++                                 * map_widget_height());
+ }
+ 
+ /**********************************************************************//**
+@@ -1396,11 +1467,14 @@ void info_tile::calc_size()
+     int ww = width();
+     int pw = parentWidget()->width();
+ 
++    // Canvas pixels to map widget points
++    x /= map_density();
++    y /= map_density();
+     fin_x = x;
+     if (y - wh > 0) {
+       fin_y = y - wh;
+     } else {
+-      fin_y = y + tileset_tile_height(tileset);
++      fin_y = y + tileset_tile_height(tileset) / map_density();
+     }
+     if (x + ww > pw) {
+       fin_x = pw - ww;
+diff --git a/client/gui-qt/mapview.h b/client/gui-qt/mapview.h
+index d0ef6f8..4f85b6e 100644
+--- a/client/gui-qt/mapview.h
++++ b/client/gui-qt/mapview.h
+@@ -47,6 +47,15 @@ bool is_point_in_area(int x, int y, int px, int py, int pxe, int pye);
+ void unscale_point(double scale_factor, int &x, int &y);
+ void draw_calculated_trade_routes(QPainter *painter);
+ 
++/* Freeciv45: the map canvas is drawn in the tileset's own pixels, which can
++   be more than one per screen point (tilespec pixel_ratio). These convert
++   between the map widget's points and canvas pixels. */
++qreal map_density(void);
++void qt_map_canvas_resized(int width, int height);
++QPoint map_canvas_pos(const QPoint &widget_pos);
++int map_widget_width(void);
++int map_widget_height(void);
++
+ /**************************************************************************
+   Struct used for idle callback to execute some callbacks later
+ **************************************************************************/
+diff --git a/client/gui-qt/menu.cpp b/client/gui-qt/menu.cpp
+index e2bbcbe..8bc9360 100644
+--- a/client/gui-qt/menu.cpp
++++ b/client/gui-qt/menu.cpp
+@@ -3855,7 +3855,7 @@ void mr_menu::save_image()
+                + DIR_SEPARATOR + img_name;
+   }
+   map_saved = mapview.store->map_pixmap.save(img_name, "png");
+-  map_canvas_resized(current_width, current_height);
++  qt_map_canvas_resized(current_width, current_height);
+   saved->setStandardButtons(QMessageBox::Ok);
+   saved->setDefaultButton(QMessageBox::Cancel);
+   saved->setAttribute(Qt::WA_DeleteOnClose);
+diff --git a/client/tilespec.c b/client/tilespec.c
+index f6a2d8a..2447be4 100644
+--- a/client/tilespec.c
++++ b/client/tilespec.c
+@@ -491,6 +491,7 @@ struct tileset {
+   char *summary;
+   char *description;
+   float scale;
++  float pixel_ratio;  /* Freeciv45: tileset pixels per screen point */
+ 
+   char *for_ruleset;
+ 
+@@ -933,6 +934,17 @@ float tileset_scale(const struct tileset *t)
+   return tileset->scale;
+ }
+ 
++/************************************************************************//**
++  Returns how many of the tileset's pixels make one screen point. A tileset
++  drawn for high density screens (192 px tiles meant to show as 96 point
++  tiles) says 2; every other tileset says nothing and gets 1. A client that
++  supports it draws the map at this density; the others ignore it.
++****************************************************************************/
++float tileset_pixel_ratio(const struct tileset *t)
++{
++  return t->pixel_ratio;
++}
++
+ /************************************************************************//**
+   Return the small sprite height of the current tileset. The small sprites
+   are used for various theme graphics (e.g., citymap citizens/specialists
+@@ -1910,6 +1922,7 @@ static struct tileset *tileset_read_toplevel(const char *tileset_name,
+   bool svg;
+   enum spec_file_types slist_type;
+   const char *type_name;
++  struct entry *pentry;
+ 
+   fname = tilespec_fullname(tileset_name);
+ 
+@@ -2102,6 +2115,23 @@ static struct tileset *tileset_read_toplevel(const char *tileset_name,
+     t->normal_tile_width = i;
+   }
+   t->normal_tile_height = ceil(t->scale * t->normal_tile_height);
++  pentry = secfile_entry_lookup(file, "tilespec.pixel_ratio");
++  t->pixel_ratio = 1.0;
++  if (pentry != NULL) {
++    int ival;
++
++    /* Both 2 and 2.0 are fine */
++    if (entry_type_get(pentry) == ENTRY_INT && entry_int_get(pentry, &ival)) {
++      t->pixel_ratio = ival;
++    } else if (!entry_float_get(pentry, &t->pixel_ratio)) {
++      t->pixel_ratio = 1.0;
++    }
++  }
++  if (t->pixel_ratio < 1.0 || t->pixel_ratio > 4.0) {
++    log_error("Tileset \"%s\": pixel_ratio %g out of range 1 to 4, using 1.",
++              t->name, t->pixel_ratio);
++    t->pixel_ratio = 1.0;
++  }
+   if (t->type == TS_ISOMETRIC) {
+     t->full_tile_width = t->normal_tile_width;
+     if (tileset_hex_height(t) > 0) {
+diff --git a/client/tilespec.h b/client/tilespec.h
+index 724eedb..6797aa7 100644
+--- a/client/tilespec.h
++++ b/client/tilespec.h
+@@ -444,6 +444,7 @@ int tileset_small_sprite_height(const struct tileset *t);
+ int tileset_citybar_offset_y(const struct tileset *t);
+ int tileset_tilelabel_offset_y(const struct tileset *t);
+ float tileset_scale(const struct tileset *t);
++float tileset_pixel_ratio(const struct tileset *t);
+ const char *tileset_main_intro_filename(const struct tileset *t);
+ int tileset_num_city_colors(const struct tileset *t);
+ void tileset_use_preferred_theme(const struct tileset *t);
+-- 
+2.56.0
+

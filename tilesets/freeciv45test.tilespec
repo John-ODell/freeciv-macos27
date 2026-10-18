@@ -13,7 +13,7 @@ priority = 4
 ;version = ""
 
 ; Summary and full description of the tileset.
-summary = _("Freeciv45 test tileset: 96 px overhead squares, painted grassland, plains, forest, jungle, hills and mountains, scaled trident placeholders.")
+summary = _("Freeciv45 test tileset: 192 px overhead squares, painted grassland, plains, forest, jungle, hills and mountains, scaled trident placeholders.")
 ;description = ""
 
 ; TODO: add more overall information fields on tiles,
@@ -23,13 +23,17 @@ summary = _("Freeciv45 test tileset: 96 px overhead squares, painted grassland, 
 ;for_ruleset = ""
 
 ; Basic tile sizes:
-normal_tile_width = 96
-normal_tile_height = 96
+normal_tile_width = 192
+normal_tile_height = 192
+
+; Tileset pixels per screen point: the map shows a 192 px tile as 96 points, so on a 2x (Retina)
+; screen every pixel is drawn (Freeciv45 fork, Qt client); other clients show the tiles at 192 points.
+pixel_ratio = 2
 small_tile_width   = 15
 small_tile_height  = 20
 
 ; The height svg flags should be drawn to, if they are used
-svg_height = 44
+svg_height = 88
 
 ; Basic tile style.
 type = "overhead"
@@ -64,8 +68,8 @@ select_offset_x = 0
 select_offset_y = 0
 
 ; offset of the unit stack size number sprites
-stack_size_offset_x = 64
-stack_size_offset_y = 32
+stack_size_offset_x = 128
+stack_size_offset_y = 64
 
 ; offset the cities by this amount
 city_offset_x = 0
@@ -77,10 +81,10 @@ city_size_offset_x = 0
 city_size_offset_y = 0
 
 ; offset the city bar text by this amount (from the city tile origin)
-citybar_offset_y = 86
+citybar_offset_y = 172
 
 ; offset the tile label text by this amount
-tilelabel_offset_y = 32
+tilelabel_offset_y = 64
 
 ; offset the upkeep icons by this amount from the top of the unit itself.
 ; The default is the normal tile height, which means that the upkeep icons
@@ -94,7 +98,7 @@ tilelabel_offset_y = 32
 ; not having alternative layout.
 ; Set it to overlay lower part of the unit icon instead of taking extra
 ; space below.
-unit_upkeep_small_offset_y = 64
+unit_upkeep_small_offset_y = 128
 
 ; For tilesets with oriented units, the directional sprite to use to
 ; represent a unit type rather than a specific unit from the map
@@ -145,8 +149,8 @@ main_intro_file    = "misc/intro"
 ; low-color systems, and if there are any duplicate tags (lattermost
 ; tag is used).
 files =
-  "misc/overlays.spec",
-  "misc/citybar.spec",
+  "freeciv45test/overlays.spec",
+  "freeciv45test/citybar.spec",
   "freeciv45test/tiles.spec",
   "freeciv45test/terrain45.spec",
   "freeciv45test/blend.spec",

@@ -1,5 +1,5 @@
 ; Painted ground for the Freeciv45 test tileset, cut from ChatGPT terrain panels by
-; tilesets/make-freeciv45test.py (see RECORD.md). Each cell: seamless.py 192 px master, then 96 px.
+; tilesets/make-freeciv45test.py (see RECORD.md). Each cell: seamless.py 192 px master, then 192 px.
 
 [spec]
 
@@ -18,8 +18,8 @@ gfx = "freeciv45test/terrain45"
 
 x_top_left = 0
 y_top_left = 0
-dx = 96
-dy = 96
+dx = 192
+dy = 192
 
 tiles = { "row", "column", "tag"
   0, 0, "t.l0.grassland1"   ; panel1 r1c1

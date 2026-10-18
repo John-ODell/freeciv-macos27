@@ -23,7 +23,7 @@ new file mode 100644
 index 0000000..ff368bc
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,664 @@
+@@ -0,0 +1,704 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -65,6 +65,10 @@ index 0000000..ff368bc
 +    clicktile DX DY         left click the tile DX, DY from the focus unit
 +                            (through action_button_pressed, which the map's
 +                            mouse release calls, since that reads QCursor)
++    mousetile DX DY         the same click with the mouse: the cursor goes
++                            to the tile's middle in map widget points and a
++                            press and release go through the window, so the
++                            map's point to canvas pixel conversion runs
 +    option [NAME] on|off    a boolean client option through its callback
 +                            (default gui_qt_freeciv45_panels)
 +    chat TEXT               send a chat line or a /command to the server
@@ -84,6 +88,7 @@ index 0000000..ff368bc
 +#include <QAbstractButton>
 +#include <QAbstractItemView>
 +#include <QApplication>
++#include <QCursor>
 +#include <QDialog>
 +#include <QDir>
 +#include <QFile>
@@ -470,6 +475,41 @@ index 0000000..ff368bc
 +        QTest::mouseClick(win, Qt::LeftButton,
 +                          shift ? Qt::ShiftModifier : Qt::NoModifier, c);
 +      }
++    }
++  } else if (cmd == "mousetile" && w.size() > 2) {
++    struct unit *punit = head_of_units_in_focus();
++    int x, y;
++    float cx, cy;
++    struct tile *ptile = nullptr;
++
++    if (punit != nullptr) {
++      index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
++      ptile = map_pos_to_tile(&(wld.map), x + w[1].toInt(),
++                              y + w[2].toInt());
++    }
++    if (ptile == nullptr
++        || !tile_to_canvas_pos(&cx, &cy, map_zoom, ptile)) {
++      drive_log("   !! no focus unit or tile not on the canvas");
++    } else {
++      QWidget *mv = gui()->mapview_wdg;
++      QWindow *win = gui()->windowHandle();
++      QPoint p, c;
++
++      cx += tileset_tile_width(tileset) * map_zoom / 2;
++      cy += tileset_tile_height(tileset) * map_zoom / 2;
++      // Canvas pixels to map widget points
++      p = QPoint(qRound(cx / map_density()), qRound(cy / map_density()));
++      c = mv->mapTo(gui(), p);
++      QApplication::setActiveWindow(gui());
++      QCursor::setPos(win->screen(), mv->mapToGlobal(p));
++      drive_log(QString("   tile (%1,%2) %3 at %4,%5 points, cursor %6,%7")
++                .arg(x + w[1].toInt()).arg(y + w[2].toInt())
++                .arg(terrain_rule_name(tile_terrain(ptile)))
++                .arg(p.x()).arg(p.y())
++                .arg(mv->mapFromGlobal(QCursor::pos()).x())
++                .arg(mv->mapFromGlobal(QCursor::pos()).y()));
++      QTest::mouseMove(win, c);
++      QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier, c);
 +    }
 +  } else if (cmd == "key" && w.size() > 1) {
 +    QString k = w[1].toLower();
