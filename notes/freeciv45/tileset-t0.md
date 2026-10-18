@@ -260,7 +260,12 @@ block and a 3 x 3 hills block, plus a lone forest and a lone hills tile in the g
 build is the fork at 0baacdb with this patch and `uidrive.diff` as it was at 204b400; "before" is main's tileset (no blend_layer, no
 mask) in the same patched client, "after" is the new build. The patch was then rebased onto 0a0ff8e (patch 0018,
 which does not touch `tilespec.c`) and the fork built clean with the same 48 compiler warnings as before, none in
-`tilespec.c`.
+`tilespec.c`. The review then found that the Qt client's zoom reloads the tileset at a scale that rounds the mask
+and the tile size separately (a 288 px mask next to 112 px tiles comes out 335 px, not 336), which the first
+version answered by switching blending off, and where Qt would have left a 1 px strip unmasked; the patch now cuts
+each direction's piece of the mask out as a whole tile (transparent where the mask is short) and allows a pixel per
+tile. Rechecked in the driver build: the exact mask draws the same terrain as before, and a scratch tileset with a
+287 px mask blends the same, with no error and no strip.
 
 - `tileset-t0/blend-before.jpg`, `blend-after.jpg`: the whole window (the chat box covers the bottom left).
 - `tileset-t0/blend-closeup.jpg`: 1:1 crops, before left and after right: the forest block with its grassland hole;

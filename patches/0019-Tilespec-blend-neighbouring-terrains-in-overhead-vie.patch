@@ -1,4 +1,4 @@
-From db65ef681cd13d2d5021f2997a1a330efa060c79 Mon Sep 17 00:00:00 2001
+From 37a68fe0bf705a5b0122adf8305468497d64962e Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Sat, 17 Oct 2026 21:34:12 -0500
 Subject: [PATCH] Tilespec: blend neighbouring terrains in overhead view with a
@@ -17,15 +17,20 @@ another blending terrain: across the edge for the four sides, into the
 corner for the diagonals. A corner is skipped when a side neighbour next to
 it has the corner's terrain, so the same terrain is not laid twice there.
 
+Each direction's part of the mask is cut out as a whole tile first, and the
+mask may be a pixel per tile off 3x3 tiles, so a tileset scaled by the Qt
+client's zoom, which rounds the mask and the tile size separately, still
+blends, with no unmasked strip where the scaled mask comes up short.
+
 Without t.blend_mask nothing changes: isometric tilesets and overhead
-tilesets (hex2t sets blend_layer) take the old path, and a mask of the wrong
+tilesets (hex2t sets blend_layer) take the old path, and a mask of another
 size is reported and ignored.
 ---
- client/tilespec.c | 81 ++++++++++++++++++++++++++++++++++++++++++++---
- 1 file changed, 77 insertions(+), 4 deletions(-)
+ client/tilespec.c | 88 ++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 84 insertions(+), 4 deletions(-)
 
 diff --git a/client/tilespec.c b/client/tilespec.c
-index 6397cdd..8ce4fc1 100644
+index 6397cdd..f6a2d8a 100644
 --- a/client/tilespec.c
 +++ b/client/tilespec.c
 @@ -196,7 +196,9 @@ struct drawing_data {
@@ -59,7 +64,7 @@ index 6397cdd..8ce4fc1 100644
      if (draw->blend[i]) {
        free_sprite(draw->blend[i]);
      }
-@@ -3182,6 +3186,21 @@ static void tileset_lookup_sprite_tags(struct tileset *t)
+@@ -3182,6 +3186,24 @@ static void tileset_lookup_sprite_tags(struct tileset *t)
    SET_SPRITE(arrow[ARROW_MINUS], "s.minus");
    if (t->type == TS_ISOMETRIC) {
      SET_SPRITE(dither_tile, "t.dither_tile");
@@ -69,8 +74,11 @@ index 6397cdd..8ce4fc1 100644
 +    if (t->sprites.blend_mask != NULL) {
 +      int mw, mh;
 +
++      /* A scaled tileset (the Qt client's zoom) rounds the mask and the
++       * tile size separately, so allow a pixel per tile. */
 +      get_sprite_dimensions(t->sprites.blend_mask, &mw, &mh);
-+      if (mw != 3 * t->normal_tile_width || mh != 3 * t->normal_tile_height) {
++      if (abs(mw - 3 * t->normal_tile_width) > 3
++          || abs(mh - 3 * t->normal_tile_height) > 3) {
 +        log_error("Tileset \"%s\": t.blend_mask is %dx%d, not 3x3 tiles "
 +                  "(%dx%d); no blending in overhead view.",
 +                  tileset_name_get(t), mw, mh,
@@ -81,7 +89,7 @@ index 6397cdd..8ce4fc1 100644
    }
  
    if (tileset_is_isometric(tileset)) {
-@@ -4392,7 +4411,26 @@ void tileset_setup_tile_type(struct tileset *t,
+@@ -4392,7 +4414,30 @@ void tileset_setup_tile_type(struct tileset *t,
      }
    }
  
@@ -91,25 +99,29 @@ index 6397cdd..8ce4fc1 100644
 +     * the middle, and says how strongly the terrain shows in each of the
 +     * eight tiles around it. blend[dir] is the whole blender tile seen
 +     * through the part of the mask that lies on the tile which has this
-+     * terrain in direction dir. */
++     * terrain in direction dir. That part is cut out first as a whole
++     * tile, so where a scaled mask comes up a pixel short the piece is
++     * transparent there rather than leaving the blender unmasked. */
 +    const int W = t->normal_tile_width;
 +    const int H = t->normal_tile_height;
 +    enum direction8 dir;
 +
 +    for (dir = 0; dir < DIR8_MAGIC_MAX; dir++) {
++      struct sprite *piece;
 +      int dx, dy;
 +
 +      DIRSTEP(dx, dy, dir);
-+      draw->blend[dir] = crop_sprite(draw->blender, 0, 0, W, H,
-+                                     t->sprites.blend_mask,
-+                                     -(1 - dx) * W, -(1 - dy) * H, 1.0f,
-+                                     FALSE);
++      piece = crop_sprite(t->sprites.blend_mask, (1 - dx) * W, (1 - dy) * H,
++                          W, H, NULL, 0, 0, 1.0f, FALSE);
++      draw->blend[dir] = crop_sprite(draw->blender, 0, 0, W, H, piece, 0, 0,
++                                     1.0f, FALSE);
++      free_sprite(piece);
 +    }
 +  } else if (NULL != draw->blender) {
      /* Set up blending sprites. This only works in iso-view! */
      const int W = t->normal_tile_width;
      const int H = t->normal_tile_height;
-@@ -5170,6 +5208,41 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
+@@ -5170,6 +5215,41 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
    };
    enum direction4 dir = 0;
  
