@@ -1,0 +1,92 @@
+# Freeciv45 city overlay, first slice: open, read, fold, change, buy, close
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd edit.create_city(find.unit(nil, $UNIT).owner, find.tile($X, $Y), "Testburg")
+wait 2500
+city Testburg
+# a new city opens the overlay (the server asks for the popup)
+state new-city
+shot 01-new-city
+key escape
+wait 1000
+state closed-once
+# a click on the city tile opens the overlay, not the dialog
+clicktile 0 0
+wait 1500
+city Testburg
+state open
+shot 02-overlay
+hover label Food
+wait 1500
+shot 03-hover-food
+hover button Buildings
+wait 1500
+shot 04-hover-buildings-heading
+click button Citizens
+wait 500
+state citizens-folded
+shot 05-citizens-folded
+click button Citizens
+wait 500
+hover button Buy
+wait 1500
+shot 06-buy-founding-turn
+click button Change
+wait 1500
+state chooser
+shot 07-chooser
+chooser 0 1
+wait 1500
+city Testburg
+shot 08-changed
+# next turn, with gold, Buy works
+endturn
+wait 6000
+dismiss
+wait 500
+chat /lua cmd edit.change_gold(find.unit(nil, $UNIT).owner, 400)
+wait 2500
+city Testburg
+state turn2
+hover button Buy
+wait 1500
+shot 09-turn2
+click button Buy
+wait 1200
+state buy-box
+shot 10-buy-box
+accept
+wait 2500
+city Testburg
+shot 11-bought
+# Escape gives the edges back
+key escape
+wait 1200
+city Testburg
+state closed
+shot 12-closed
+# Enter from the overlay opens the full dialog
+clicktile 0 0
+wait 1200
+key enter
+wait 1500
+state full
+shot 13-full-dialog
+# opening the overlay again hides the full dialog
+clicktile 0 0
+wait 1500
+state reopened
+shot 14-reopened
+click button Return to map
+wait 1000
+state returned
+# option off: the city opens the full dialog as today
+option off
+clicktile 0 0
+wait 1500
+state option-off
+shot 15-option-off
+option on
+quit
