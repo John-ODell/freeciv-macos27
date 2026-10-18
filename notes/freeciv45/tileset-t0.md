@@ -98,3 +98,80 @@ the goto line, the keyboard handler and the click handler were not exercised.
   hang when the server dies at start (same as harness-test.sh's old #66) is issue 79.
 - A client that does not need the suggestion dialog: either `preferred = "freeciv45"` in civ45's
   `game.ruleset` once the tileset has its final name, or auto-accept.
+
+## Forest and jungle from panel 4 (issue 126, 2026-10-17)
+
+Panel 4 of the terrain sheet is in `freeciv45test` now: ten forest cells from run 8 rows 1-2 (r2c2 and r2c4
+autumn), ten jungle cells from run 8 row 3 and run 9 row 4, cut and wired like the run 6 ground (forest and
+jungle lose trident's 16 edge-matched sprites and draw numbered variants; sources in
+`tilesets/freeciv45test/RECORD.md`). Pine is not in: see below.
+
+### How it was run
+
+Two new options in `scripts/tileset-look.sh`: `--serv LINE` adds a server setting before the start and
+`--at-start LINE` sends a server command once the game runs. Natural maps put only a few forest and jungle tiles
+in the start view, so the main look paints a 13 x 7 patch around the first unit (default map, seeds 7) with fog
+of war off, because a fogged tile keeps the terrain the player last saw:
+
+    PATCH='lua cmd local n = 0; for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do local x0, y0 = u.tile.nat_x, u.tile.nat_y; for dy = -3, 3 do for dx = -6, 6 do local t = find.tile(x0 + dx, y0 + dy); local name = (dx <= -3 and "Grassland") or (dx <= 1 and "Forest") or "Jungle"; if t then edit.change_terrain(t, find.terrain(name)); n = n + 1 end end end; log.normal("tileset-look: patch of %d tiles around %d,%d", n, x0, y0); break end end end'
+    scripts/tileset-look.sh OUT --port 5731 --moves "" --serv "set fogofwar DISABLED" --at-start "$PATCH"
+
+(columns -6 to -3 from the unit grassland, -2 to 1 forest, 2 to 6 jungle). A generated map was checked too:
+`--serv "set wetness 80" --serv "set temperature 70" --serv "set mapseed 11"`. The runs used scratch builds through
+`--tilesets`; the one without olive pine is byte-identical to the committed tileset. The client loaded it with no
+sprite error or warning in every run. Pictures, all from the Qt client on this Retina screen, so each 96 px tile is 192 screen
+pixels:
+
+- `forest-jungle-1to1.png`: 1:1 crop of the patch: run 6 grassland (left), forest, jungle (right).
+- `forest-jungle-map.jpg`: the whole map window at 40 %.
+- `generated-map-1to1.jpg`: 1:1 crop of the seed 11 map: forest (one autumn tile) and jungle among
+  grassland, hills, salt flats and trident's swamp.
+- `olive-pine-1to1.jpg`: the same patch with run 9's olive pine added as two more forest variants.
+
+### What it shows
+
+1. **Forest and jungle read right at 96 px.** The forest is a leafy broadleaf roof with crowns of mixed size;
+   the two autumn cells read as autumn without shouting; the pine accents in r1c2 and r1c4 show only as a few
+   darker blue-green crowns. The jungle is clearly a different terrain: darker, bluer green and finer-grained. Nothing turns to noise
+   the way the finest grass marks did, because a canopy is texture at every scale.
+2. **Against the run 6 grassland the forest is the better green.** Forest averages about RGB 74,109,35; the
+   meadow next to it reads yellow-olive and dry. That is finding 1 above again, now with a target: grassland
+   should sit between this forest and the plains, not next to the plains. The forest-grassland boundary is a
+   hard straight tile edge (whole tiles, no transition), which looks like a field edge and is acceptable.
+3. **The variant brightness steps show, less than on grassland.** On the 4 x 7 forest block the tile grid is
+   visible softly; in the jungle it shows mostly where the darkest and lightest cells land. Mean luminance at 96 px:
+   forest 68-103 (spread 35), jungle 50-76 (27), against grassland 85-166 (81) and plains 122-196 (74).
+   **r3c5 is the dark outlier** as expected: luminance 50, a dark square wherever it lands; r3c1 is the light end
+   (76). Every row was prompted "light to deeper green left to right", which builds the steps in.
+4. **A light line across the middle of the tiles.** Besides the tile edges, many tiles show a faint light
+   horizontal line half way down near their left and right edges. All 20 cells are lighter at the top than at the
+   bottom (top 20 px minus bottom 20 px: +3 to +27 luminance, 16 cells +12 or more; left minus right has no
+   common sign), and the cutter's half-shift wrap puts that top-meets-bottom seam across the middle. Brothers-Keeper-Art
+   issue 35.
+5. **Mist specks.** The pale mist puffs in r3c1 and run 9's r4c1, r4c3 and r4c5 repeat as small light specks,
+   one per tile of that variant. Faint; the only detail that reads as a motif.
+6. **Coasts.** Trident's green coast fringe around land now frames forest and jungle too (finding 5 above).
+
+### Pine
+
+Run 9's pine row is two colour families: cool blue-green c1-c3 and warm olive c4-c5.
+
+- **Cool pine is left out.** It belongs on forest next to tundra or glacier, and Freeciv 3.2's tilespec cannot pick
+  a whole-tile cell set by neighbour terrain: a whole-tile layer either picks a numbered variant by tile index or
+  one of 16 sprites by whether each neighbour has the *same* match type, and whole-tile `MATCH_PAIR`/`MATCH_FULL`
+  are "Not yet defined" (`fc_assert(FALSE)` in `client/tilespec.c`, loader and drawing). Corner cells with
+  `MATCH_PAIR` do see neighbours, but only as quarter-tile overlays, and glacier is a `water` match on layer 1.
+  The hooks that would work (a client patch for neighbour-chosen variant sets, a Boreal Forest terrain in the
+  ruleset, or a latitude rule) are written up in issue 127.
+- **Olive pine does not join the temperate forest.** Added as `forest11` and `forest12` (`--olive-pine`), the two
+  cells show as dark squares with black gaps between star-shaped crowns among the broadleaf tiles
+  (`olive-pine-1to1.jpg`; luminance 62 and 58 against 68-103): a patchwork. The committed build leaves them out.
+
+### For the next art prompt
+
+- Same mean lightness across all five cells of a row; put the light-dark variety inside each cell
+  (Brothers-Keeper-Art issue 26, comment of 2026-10-17).
+- No light gradient across a cell, top to bottom included; measure the edge bands in QA (issue 35).
+- Jungle: no mist or pale patches at all; retake r3c5 at the row's mid lightness or drop it (issue 36).
+- Grassland: match its green to this forest's family rather than the plains (issue 26).
+- Pine: decide its terrain hook first (issue 127); if pine stays a forest look, one colour family only.
