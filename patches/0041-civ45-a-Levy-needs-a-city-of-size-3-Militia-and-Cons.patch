@@ -1,0 +1,83 @@
+From 77f9ef68136b71107f2fcb62cd7b4b3375865ea0 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 13:07:11 -0500
+Subject: [PATCH 41/41] civ45: a Levy needs a city of size 3, Militia and
+ Conscripts size 4
+
+---
+ data/civ45/README.civ45  | 3 ++-
+ data/civ45/units.ruleset | 9 ++++++---
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 171ec6f..286b1c1 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -71,7 +71,8 @@ Differences from sandbox
+ - Drafting: Levy (Bronze Working, 2/2, 10 shields), Militia (Gunpowder,
+   8/8, 20 shields) and Conscripts (Conscription, 14/14, 25 shields) are
+   raised from one of the city's citizens (pop_cost 1), only under Tribal,
+-  Despotism, Monarchy, Communism or Fundamentalism. They stand in for
++  Despotism, Monarchy, Communism or Fundamentalism, a Levy only in a city
++  of size 3 or more and Militia and Conscripts only from size 4. They stand in for
+   the whip too: disbanded in a city ("Disband recovering production")
+   each puts 30 shields into the build, whatever it cost, so a citizen
+   becomes 30 shields. A Levy makes one of the city's content citizens
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 6d157e1..6c6877a 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -1408,6 +1408,7 @@ reqs          =
+     "Gov",  "Republic",   "Player", FALSE
+     "Gov",  "Democracy",  "Player", FALSE
+     "Gov",  "Federation", "Player", FALSE
++    "MinSize", "3", "City", TRUE
+   }
+ obsolete_by   = "None"
+ graphic       = "u.levy"
+@@ -1439,7 +1440,7 @@ Townsfolk called up with spear and shield for a season: as good as a\
+ "), _("\
+ A draft unit costs one of the city's citizens as well as its shields, and\
+  can only be raised under Tribal, Despotism, Monarchy, Communism or\
+- Fundamentalism. Disbanded in a city with \"Disband recovering production\"\
++ Fundamentalism, and only in a city of size 3 or more. Disbanded in a city with \"Disband recovering production\"\
+  it puts 30 shields into the city's current build, whatever it cost: that is\
+  how a city turns a citizen into production.\
+ ")
+@@ -1455,6 +1456,7 @@ reqs          =
+     "Gov",  "Democracy",  "Player", FALSE
+     "Gov",  "Federation", "Player", FALSE
+     "Building", "Draft Quota", "Player", FALSE
++    "MinSize", "4", "City", TRUE
+   }
+ obsolete_by   = "None"
+ graphic       = "u.militia"
+@@ -1486,7 +1488,7 @@ Citizens handed muskets and a few weeks of drill. They fight like\
+ "), _("\
+ A draft unit costs one of the city's citizens as well as its shields, and\
+  can only be raised under Tribal, Despotism, Monarchy, Communism or\
+- Fundamentalism. Disbanded in a city with \"Disband recovering production\"\
++ Fundamentalism, and only in a city of size 4 or more. Disbanded in a city with \"Disband recovering production\"\
+  it puts 30 shields into the city's current build, whatever it cost: that is\
+  how a city turns a citizen into production.\
+ ")
+@@ -1502,6 +1504,7 @@ reqs          =
+     "Gov",  "Democracy",  "Player", FALSE
+     "Gov",  "Federation", "Player", FALSE
+     "Building", "Draft Quota", "Player", FALSE
++    "MinSize", "4", "City", TRUE
+   }
+ obsolete_by   = "None"
+ graphic       = "u.conscripts"
+@@ -1533,7 +1536,7 @@ A conscript regiment, armed like Riflemen and raised in a turn from\
+ "), _("\
+ A draft unit costs one of the city's citizens as well as its shields, and\
+  can only be raised under Tribal, Despotism, Monarchy, Communism or\
+- Fundamentalism. Disbanded in a city with \"Disband recovering production\"\
++ Fundamentalism, and only in a city of size 4 or more. Disbanded in a city with \"Disband recovering production\"\
+  it puts 30 shields into the city's current build, whatever it cost: that is\
+  how a city turns a citizen into production.\
+ ")
+-- 
+2.56.0
+

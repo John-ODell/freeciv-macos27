@@ -256,6 +256,14 @@ Cruiser and Ship of the Line stay; Alpine Troops come back as they were and Crus
 nation-neutral until the unique-unit pass; Transport cargo 4. Horses gate the mounted units from this build on
 (the resource exists on grassland and plains), not from slice 4.
 
+Draft sizes (issue 158, built for balance report 2 on 2026-10-18, John to confirm): a draft leaves the city at
+least 3 citizens and a whip at least 2, so Militia and Conscripts need a city of size 4 (`"MinSize", "4", "City"`)
+and the Levy, the unit a whip is made of, size 3. Freeciv45's own reasoning: a city of 1 or 2 works only its best
+tiles and regrows slowly, so taking a citizen from it costs most of its output for many turns, which is what the AI
+did (4 of 9 drafts left a size-2 city in a Normal-AI game, balance-2.md). There is no cap on how much of a city may
+be whipped in one go: each Levy costs one citizen, a city builds one unit a turn, and every whip adds a face of
+unrest for ten turns (mechanics.md section 13), so repeated whipping already has a price.
+
 ## Implementation order
 
 1. `civ45/units.ruleset`: the 8 class flags in `[control] flags`; rename the 11 units (keep `rule_name` as the

@@ -71,6 +71,11 @@ for u in levy militia conscripts; do
   if sed -n "/^\[unit_$u\]/,/^\[unit_/p" "$DATA/civ45/units.ruleset" | grep -q '^pop_cost      = 1'; then
     echo "FC45TEST PASS units.ruleset: $u costs one citizen"; else echo "FC45TEST FAIL units.ruleset: $u lacks pop_cost 1"; RC=1; fi
 done
+# A draft leaves the city 3 citizens and a whip 2 (issue 158): MinSize 4 on Militia and Conscripts, 3 on the Levy.
+for p in levy:3 militia:4 conscripts:4; do
+  if sed -n "/^\[unit_${p%%:*}\]/,/^\[unit_/p" "$DATA/civ45/units.ruleset" | grep -q "\"MinSize\", \"${p##*:}\", \"City\", TRUE"; then
+    echo "FC45TEST PASS units.ruleset: ${p%%:*} needs a city of size ${p##*:}"; else echo "FC45TEST FAIL units.ruleset: ${p%%:*} lacks MinSize ${p##*:}"; RC=1; fi
+done
 # The roster's shape (units.ruleset): 85 unit types (78 of the roster and 7 great people), one strength number for attack and defence unless one of
 # them is 0, firepower 1 everywhere, and City Walls keyed on the attacker's class flag rather than the Ground class.
 UR="$DATA/civ45/units.ruleset"
