@@ -80,7 +80,8 @@ case "$END" in
   *) HOW="ended by a victory in turn ${LAST:-?}" ;;
 esac
 if [ $SRC = 0 ] && [ -n "$END" ]; then
-  echo "autogame: ok, $HOW, up to $TURNS turns, 10 AIs, $(( $(date +%s) - START )) s; $END"
+  AIS=$(awk '$1 == "set" && $2 == "aifill" {n = $3} END {print n}' "$OUT/autogame.serv")   # the last one wins, as in the server
+  echo "autogame: ok, $HOW, up to $TURNS turns, $AIS AIs, $(( $(date +%s) - START )) s; $END"
 else
   echo "autogame: FAILED (exit $SRC; see $OUT/autogame.log)"; grep -E "Starting game|rror|Turn" "$OUT/autogame.log" | tail -3; FAIL=1
 fi
