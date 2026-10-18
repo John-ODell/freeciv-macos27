@@ -1,4 +1,4 @@
-# Notification badges on the right edge (patch 0022)
+# Notification badges on the right edge (patches 0022 and 0023)
 
 Date: 2026-10-18. Design: `panels.md` section 8.2, `hud-layout.md` section 5. Issue: #143. Follows the top strip and
 right-edge column of patch 0018 (`edges-slice.md`).
@@ -56,6 +56,10 @@ message that has a place to go, newest at the top.
 | Click "+5" | The log scrolls to the oldest message without a badge | `badges-test/07-plus-log.jpg` |
 | Option off, on | Column hidden, then back with the same badges | log |
 | End turn | Turn 2; the badges stay, since the turn's messages are kept | log |
+| The same on a 1600 x 700 screen (`badges-test/badges-short.txt`) | Four badges and "+9", the last one clear of the column's bottom margin | `badges-test/09-short-screen.jpg` |
+
+Patch 0023 is the review's fix: the room for badges first ran to the column's bottom edge, so a window with just
+enough height for one more badge would have pushed the last one into the 10 px bottom margin.
 
 - The driver (`bar-test/uidrive.diff`) now lists only the visible buttons of the column in each state line, with a
   badge's text ("+5") before its tooltip.

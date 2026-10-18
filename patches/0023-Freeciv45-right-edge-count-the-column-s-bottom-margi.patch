@@ -1,0 +1,34 @@
+From b25912b273dccc793758def9aa0ae70a1081ae6d Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 23:00:46 -0500
+Subject: [PATCH] Freeciv45 right edge: count the column's bottom margin when
+ fitting badges
+
+The room for badges ran to the column's bottom edge, so on a window whose
+height left just enough for one more badge the last one overlapped the
+column's 10 px bottom margin. Found in the review of the badges change.
+---
+ client/gui-qt/edgebar.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/client/gui-qt/edgebar.cpp b/client/gui-qt/edgebar.cpp
+index 1a5ac56..0cf6d24 100644
+--- a/client/gui-qt/edgebar.cpp
++++ b/client/gui-qt/edgebar.cpp
+@@ -530,10 +530,12 @@ void edge_column::update_badges()
+   // The room under the buttons, in badges, counting the "+N" one
+   room = MAX_BADGES + 1;
+   if (more_btn->geometry().isValid() && height() > 0) {
++    // The gap is a spacer, which gets no layout spacing of its own
+     int top = more_btn->geometry().bottom() + 1 + BADGE_GAP
+               + layout()->spacing();
++    int bottom = height() - layout()->contentsMargins().bottom();
+ 
+-    room = qBound(0, (height() - top + BADGE_SPACING)
++    room = qBound(0, (bottom - top + BADGE_SPACING)
+                       / (BADGE_SIZE + BADGE_SPACING), MAX_BADGES + 1);
+   }
+   if (waiting.size() <= qMin(room, MAX_BADGES)) {
+-- 
+2.56.0
+

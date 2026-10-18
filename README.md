@@ -96,7 +96,7 @@ mates as chips and its common orders with key hints, themed by NightStalker and 
 An own city opens as panels on the map's edges instead of the city dialog (patch 0017, `notes/freeciv45/ui/city-overlay-slice.md`).
 A top strip of the empire's numbers and a right-edge column of round overview buttons replace the sidebar (patch 0018,
 `notes/freeciv45/ui/edges-slice.md`); the option `gui_qt_freeciv45_edges` switches back. Messages with a place to go
-arrive as round badges under the column's buttons and clear on click (patch 0022, `notes/freeciv45/ui/badges-slice.md`).
+arrive as round badges under the column's buttons and clear on click (patches 0022 and 0023, `notes/freeciv45/ui/badges-slice.md`).
 
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It
