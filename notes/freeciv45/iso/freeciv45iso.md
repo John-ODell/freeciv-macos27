@@ -75,7 +75,7 @@ left. That suits grassland, plains, desert, tundra, swamp, glacier and water. Hi
 
 **Chosen for now:**
 - Hills and mountains draw amplio2's relief overlays over flat painted ground.
-  - Hills stand on plains cells (run 6 row 3), mountains on rocky desert (run 12 row 5).
+  - Hills stand on plains cells (run 6 row 3), mountains on rocky desert (run 19 row 5 since issue 201).
   - The painted hills and mountains stay in freeciv45test.
 - Forest, jungle and the cool pine keep the painted canopy, which reads as forest at the angle (picture above).
 
@@ -151,6 +151,28 @@ build, offscreen. The crops are at the parent's `mid.png` offset, so the three r
 - Desert is golden where amplio2's is pale.
 - A diagonal coast still steps tile by tile, as amplio2's does, but softer.
 - Forest and jungle overlays and a brightness lift are the parent's items 4 and 5.
+
+## Terrain retakes, runs 18 to 21 (issue 201, 2026-10-18)
+
+The art repo kept four retakes (BK-Art PR 66, commit 1e805b1). Both builders now cut three of them, in
+`make-freeciv45test.py`'s `PANELS` and `PLAN`:
+- **Swamp:** run 18 panel 3 rows 3 and 4. Green marsh with small pools, in place of run 13's brown mud.
+- **Tundra:** run 19 panel 2 rows 3 and 4.
+- **Rocky desert:** run 19 panel 2 row 5. It is also the ground under the iso mountains (`RELIEF_BASE`).
+- **Plains bank:** run 20 panel 8 row 3, in freeciv45test only. The iso plains stay run 6's green rows 1 and 2
+  (issue 198), and this bank is the same straw gold that read as sand there.
+- **Run 21 row 5 is not cut.** It is the retake of run 11's ice on deep water, which neither builder cuts: civ45 has
+  no frozen-sea terrain, and as a deep ocean variant it would turn up on every deep ocean.
+
+**Check (observed):** offscreen, the same seed and window as issue 198, plus the labelled field.
+- The client logs show no tileset error or warning.
+- At 1:1, tundra shows no grid across the 3 x 3 block.
+- The swamp and rocky-desert edges show no ghosting. Run 21's edges are not in the tileset, so they were not checked.
+- freeciv45test was rebuilt and its RECORD updated, but it was not run in a game. civ45 is iso now.
+
+![amplio2, after 198, with the retakes; mapseed 21, 1:1](retakes-seed21-1to1.jpg)
+
+![every civ45 terrain by name: amplio2, after 198, with the retakes; 1:1](retakes-terrain-names-1to1.jpg)
 
 ## Not done, and findings
 

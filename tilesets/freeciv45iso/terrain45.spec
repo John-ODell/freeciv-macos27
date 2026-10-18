@@ -68,11 +68,11 @@ tiles = { "row", "column", "tag"
   8, 2, "t.l0.hills3"   ; run6 r3c3
   8, 3, "t.l0.hills4"   ; run6 r3c4
   8, 4, "t.l0.hills5"   ; run6 r3c5
-  9, 0, "t.l0.mountains1"   ; run12 r5c1
-  9, 1, "t.l0.mountains2"   ; run12 r5c2
-  9, 2, "t.l0.mountains3"   ; run12 r5c3
-  9, 3, "t.l0.mountains4"   ; run12 r5c4
-  9, 4, "t.l0.mountains5"   ; run12 r5c5
+  9, 0, "t.l0.mountains1"   ; run19 r5c1
+  9, 1, "t.l0.mountains2"   ; run19 r5c2
+  9, 2, "t.l0.mountains3"   ; run19 r5c3
+  9, 3, "t.l0.mountains4"   ; run19 r5c4
+  9, 4, "t.l0.mountains5"   ; run19 r5c5
   10, 0, "t.l0.desert1"   ; run12 r1c1
   10, 1, "t.l0.desert2"   ; run12 r1c2
   10, 2, "t.l0.desert3"   ; run12 r1c3
@@ -83,26 +83,26 @@ tiles = { "row", "column", "tag"
   11, 2, "t.l0.desert8"   ; run12 r2c3
   11, 3, "t.l0.desert9"   ; run12 r2c4
   11, 4, "t.l0.desert10"   ; run12 r2c5
-  12, 0, "t.l0.desert11"   ; run12 r5c1
-  12, 1, "t.l0.desert12"   ; run12 r5c2
-  12, 2, "t.l0.desert13"   ; run12 r5c3
-  12, 3, "t.l0.desert14"   ; run12 r5c4
-  12, 4, "t.l0.desert15"   ; run12 r5c5
+  12, 0, "t.l0.desert11"   ; run19 r5c1
+  12, 1, "t.l0.desert12"   ; run19 r5c2
+  12, 2, "t.l0.desert13"   ; run19 r5c3
+  12, 3, "t.l0.desert14"   ; run19 r5c4
+  12, 4, "t.l0.desert15"   ; run19 r5c5
   13, 0, "t.l0.desert16"   ; run14 r4c1
   13, 1, "t.l0.desert17"   ; run14 r4c2
   13, 2, "t.l0.desert18"   ; run14 r4c3
   13, 3, "t.l0.desert19"   ; run14 r4c4
   13, 4, "t.l0.desert20"   ; run14 r4c5
-  14, 0, "t.l0.tundra1"   ; run12 r3c1
-  14, 1, "t.l0.tundra2"   ; run12 r3c2
-  14, 2, "t.l0.tundra3"   ; run12 r3c3
-  14, 3, "t.l0.tundra4"   ; run12 r3c4
-  14, 4, "t.l0.tundra5"   ; run12 r3c5
-  15, 0, "t.l0.tundra6"   ; run12 r4c1
-  15, 1, "t.l0.tundra7"   ; run12 r4c2
-  15, 2, "t.l0.tundra8"   ; run12 r4c3
-  15, 3, "t.l0.tundra9"   ; run12 r4c4
-  15, 4, "t.l0.tundra10"   ; run12 r4c5
+  14, 0, "t.l0.tundra1"   ; run19 r3c1
+  14, 1, "t.l0.tundra2"   ; run19 r3c2
+  14, 2, "t.l0.tundra3"   ; run19 r3c3
+  14, 3, "t.l0.tundra4"   ; run19 r3c4
+  14, 4, "t.l0.tundra5"   ; run19 r3c5
+  15, 0, "t.l0.tundra6"   ; run19 r4c1
+  15, 1, "t.l0.tundra7"   ; run19 r4c2
+  15, 2, "t.l0.tundra8"   ; run19 r4c3
+  15, 3, "t.l0.tundra9"   ; run19 r4c4
+  15, 4, "t.l0.tundra10"   ; run19 r4c5
   16, 0, "t.l0.tundra11"   ; run14 r5c1
   16, 1, "t.l0.tundra12"   ; run14 r5c2
   16, 2, "t.l0.tundra13"   ; run14 r5c3
@@ -123,16 +123,16 @@ tiles = { "row", "column", "tag"
   19, 2, "t.l0.arctic13"   ; run13 r5c3
   19, 3, "t.l0.arctic14"   ; run13 r5c4
   19, 4, "t.l0.arctic15"   ; run13 r5c5
-  20, 0, "t.l0.swamp1"   ; run13 r3c1
-  20, 1, "t.l0.swamp2"   ; run13 r3c2
-  20, 2, "t.l0.swamp3"   ; run13 r3c3
-  20, 3, "t.l0.swamp4"   ; run13 r3c4
-  20, 4, "t.l0.swamp5"   ; run13 r3c5
-  21, 0, "t.l0.swamp6"   ; run13 r4c1
-  21, 1, "t.l0.swamp7"   ; run13 r4c2
-  21, 2, "t.l0.swamp8"   ; run13 r4c3
-  21, 3, "t.l0.swamp9"   ; run13 r4c4
-  21, 4, "t.l0.swamp10"   ; run13 r4c5
+  20, 0, "t.l0.swamp1"   ; run18 r3c1
+  20, 1, "t.l0.swamp2"   ; run18 r3c2
+  20, 2, "t.l0.swamp3"   ; run18 r3c3
+  20, 3, "t.l0.swamp4"   ; run18 r3c4
+  20, 4, "t.l0.swamp5"   ; run18 r3c5
+  21, 0, "t.l0.swamp6"   ; run18 r4c1
+  21, 1, "t.l0.swamp7"   ; run18 r4c2
+  21, 2, "t.l0.swamp8"   ; run18 r4c3
+  21, 3, "t.l0.swamp9"   ; run18 r4c4
+  21, 4, "t.l0.swamp10"   ; run18 r4c5
   22, 0, "t.l0.coast1"   ; run10 r1c1
   22, 1, "t.l0.coast2"   ; run10 r1c2
   22, 2, "t.l0.coast3"   ; run10 r1c3

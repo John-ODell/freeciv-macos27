@@ -49,8 +49,8 @@ so trident's coast pieces still draw the shore (issue 173).
 
 ## Painted ground: every terrain (issue 173)
 
-`terrain45.spec` / `terrain45.png` (960x6912, 36 rows of five 192 px cells): 182 cells from twelve 5x5 panels of the
-Freeciv45 terrain sheet, made 2026-10-17 and 18 with John's ChatGPT sheet workflow (OpenAI image_gen through Codex,
+`terrain45.spec` / `terrain45.png` (960x6912, 36 rows of five 192 px cells): 182 cells from fifteen 5x5 panels of the
+Freeciv45 terrain sheet, made 2026-10-17 and 18 (runs 18 to 20, issue 201, replace the swamp, tundra, rocky desert and plains bank) with John's ChatGPT sheet workflow (OpenAI image_gen through Codex,
 prompts and checks in each run's RECORD.md) in the Brothers-Keeper-Art repo, folder `freeciv45/01_terrain_ground/`.
 Every panel is 1254x1254. The kept run of each terrain is the art repo's runs log (`TERRAIN_GROUND.md`); the tags are
 the ruleset's graphic names (`data/civ45/terrain.ruleset`). `terrain45.spec` names the panel cell of every tag.
@@ -59,17 +59,18 @@ the ruleset's graphic names (`data/civ45/terrain.ruleset`). `terrain45.spec` nam
 |---|---|---|
 | `t.l0.grassland1`-`10` | rows 1-2 | run 15, panel 1, 1581dda |
 | `t.l0.plains1`-`10` | rows 3-4 | run 6, panel 1, 26f6afc |
-| `t.l0.plains11`-`15` | row 3, plains bank | run 14, panel 8, 1581dda |
+| `t.l0.plains11`-`15` | row 3, plains bank | run 20, panel 8, 1e805b1 |
 | `t.l0.forest1`-`10` | rows 1-2 (r2c2, r2c4 autumn) | run 8, panel 4, 62d9b9f |
 | `t.l0.jungle1`-`10` | rows 3-4 | run 17, panel 4, 750c2e3 |
 | `t.l0.hills1`-`15` | rows 1-3 | run 16, panel 5, 1581dda |
 | `t.l0.mountains1`-`9` | r4c1, r4c2, r4c4, r4c5, row 5 | run 7, panel 5, 0374987 |
-| `t.l0.desert1`-`15` | rows 1-2 dunes, row 5 rocky desert | run 12, panel 2, 1581dda |
-| `t.l0.desert16`-`20` | row 4, desert bank | run 14, panel 8 |
-| `t.l0.tundra1`-`10` | rows 3-4 | run 12, panel 2 |
+| `t.l0.desert1`-`10` | rows 1-2, dunes | run 12, panel 2, 1581dda |
+| `t.l0.desert11`-`15` | row 5, rocky desert | run 19, panel 2, 1e805b1 |
+| `t.l0.desert16`-`20` | row 4, desert bank | run 14, panel 8, 1581dda |
+| `t.l0.tundra1`-`10` | rows 3-4 | run 19, panel 2, 1e805b1 |
 | `t.l0.tundra11`-`15` | row 5, tundra shore | run 14, panel 8 |
 | `t.l0.arctic1`-`15` | rows 1-2 glacier, row 5 sea ice | run 13, panel 3, 1581dda |
-| `t.l0.swamp1`-`10` | rows 3-4 | run 13, panel 3 |
+| `t.l0.swamp1`-`10` | rows 3-4 | run 18, panel 3, 1e805b1 |
 | `t.l0.coast1`-`15` | rows 1-3, shallow ocean | run 10, panel 6, b57c128 |
 | `t.l0.lake1`-`10` | rows 4-5 | run 10, panel 6 |
 | `t.l0.floor1`-`15` | rows 1-3, deep ocean | run 11, panel 7, 1581dda |

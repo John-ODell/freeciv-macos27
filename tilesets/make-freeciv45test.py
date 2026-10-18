@@ -168,6 +168,8 @@ PANELS = {
     "run12": "run12/panel2/desert_and_tundra.png", "run13": "run13/panel3/glacier_and_swamp.png",
     "run14": "run14/panel8/shores_and_banks.png", "run15": "run15/panel1/grassland_and_plains.png",
     "run16": "run16/panel5/hills_and_mountains.png", "run17": "run17/panel4/forest_and_jungle.png",
+    "run18": "run18/panel3/glacier_and_swamp.png", "run19": "run19/panel2/desert_and_tundra.png",
+    "run20": "run20/panel8/shores_and_banks.png",
 }
 
 def row(r, cols=range(1, 6)):
@@ -177,21 +179,22 @@ def row(r, cols=range(1, 6)):
 # a new sheet row, five to a row. The tags are the ruleset's graphic names (terrain.ruleset), and forest_tundra is
 # forest next to tundra (PAIRED).
 # Not cut as ground: run 14 rows 1-2 (beach, rocky shore: SHORES, the coastline builder) and run 11 row 5 (ice on
-# deep water: as a deep ocean variant it would sit on every ocean).
+# deep water: as a deep ocean variant it would sit on every ocean; run 21 row 5, its retake, is not cut either).
 PLAN = [
     ("grassland", "run15", row(1) + row(2)),
     ("plains", "run6", row(3) + row(4)),
-    ("plains", "run14", row(3)),                                   # plains bank
+    ("plains", "run20", row(3)),                                   # plains bank
     ("forest", "run8", row(1) + row(2)),
     ("jungle", "run17", row(3) + row(4)),
     ("hills", "run16", row(1) + row(2) + row(3)),
     ("mountains", "run7", ["r4c1", "r4c2", "r4c4", "r4c5"] + row(5)),
-    ("desert", "run12", row(1) + row(2) + row(5)),                 # dunes, then rocky desert
+    ("desert", "run12", row(1) + row(2)),                          # dunes
+    ("desert", "run19", row(5)),                                   # rocky desert
     ("desert", "run14", row(4)),                                   # desert bank
-    ("tundra", "run12", row(3) + row(4)),
+    ("tundra", "run19", row(3) + row(4)),
     ("tundra", "run14", row(5)),                                   # tundra shore
     ("arctic", "run13", row(1) + row(2) + row(5)),                 # glacier, then sea ice
-    ("swamp", "run13", row(3) + row(4)),
+    ("swamp", "run18", row(3) + row(4)),
     ("coast", "run10", row(1) + row(2) + row(3)),
     ("lake", "run10", row(4) + row(5)),
     ("floor", "run11", row(1) + row(2) + row(3)),
