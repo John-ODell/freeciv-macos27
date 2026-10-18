@@ -74,7 +74,9 @@ RELIEF = {"amplio2/hills.spec": "hills", "amplio2/mountains.spec": "mountains"}
 ISO_PLAINS = [("plains", "run6", ["r1c%d" % c for c in range(1, 6)] + ["r2c%d" % c for c in range(1, 6)])]
 SHORE = {"SHORE_DEPTH": 0.07, "SHORE_WAVE": 0.6, "SHORE_SHALLOW": 0.10, "LAND_DEPTH": 0.08, "LAND_WAVE": 0.6,
          "SHORE_ROUND": 0.15}
-GRADE = {"floor": (28, 2, -20)}
+# Desert (issue 209): graded from orange (a +16, b +44) toward straw at the same lightness, so the ground round a
+# desert start no longer reads as orange sand.
+GRADE = {"floor": (28, 2, -20), "desert": (0, -12, -14)}
 BLEND_DEPTH = 0.375
 RELIEF_BASE = [
     ("hills", "run6", ["r3c1", "r3c2", "r3c3", "r3c4", "r3c5"]),        # plains, under the hills
