@@ -3,9 +3,9 @@
 Date: 2026-10-17. Design: `panels.md` section 3 and item 3 of its 5.4. Issue: #135.
 
 `city-overlay-slice.diff` in this folder is the minimum city overlay, prepared as a diff against the fork's Qt
-client at `49ba373` (patch 0016), the same way `first-slice.diff` was for the unit bar. It is **not applied** to
-`port/freeciv` and is **not** in `patches/`. Everything below was done in scratch copies of the fork; the fork
-itself was only read.
+client at `49ba373` (patch 0016), the same way `first-slice.diff` was for the unit bar. It was prepared in scratch
+copies of the fork (everything under "Checked" below) and then applied to `port/freeciv` unchanged as patch 0017
+(issue #137; see "On the fork" at the end).
 
 ## What it does
 
@@ -77,11 +77,11 @@ read, so the box moved to the stylesheet.
 From the repo root, with the fork clean:
 
 ```bash
-git -C port/freeciv apply --check notes/freeciv45/ui/city-overlay-slice.diff
+git -C port/freeciv apply --check "$PWD/notes/freeciv45/ui/city-overlay-slice.diff"
 ```
 
 ```bash
-git -C port/freeciv apply notes/freeciv45/ui/city-overlay-slice.diff
+git -C port/freeciv apply "$PWD/notes/freeciv45/ui/city-overlay-slice.diff"
 ```
 
 ```bash
@@ -145,3 +145,19 @@ Noticed, not filed:
 Not exercised: the System, Classic and Necrophos themes, a non-Retina screen, a city big enough for the buildings
 list to scroll, a city lost while open, a foreign city, swapping straight from one own city to another, real
 hardware input (the driver's events go through Qt's window path), and the autotools build.
+
+## On the fork (patch 0017, issue #137)
+
+Applied unchanged to `port/freeciv` as commit `0baacdb` and exported as
+`patches/0017-Freeciv45-city-overlay-an-own-city-opens-as-panels-o.patch`. `git -C` runs `apply` inside the fork, so
+the diff's path must be absolute (`$PWD/...` above); a relative path is read from `port/freeciv` and is not found.
+
+- `scripts/build.sh qt --no-install-deps` built it into `~/freeciv-builds/qt` with no compiler warnings; the installed
+  `freeciv-qt` carries the overlay (`nm -C` lists 18 `city_overlay::` symbols) and the installed NightStalker and
+  System `resource.qss` have the `city_part` blocks.
+- The installed client started a civ45 game under `QT_QPA_PLATFORM=offscreen` and stayed up; no window was shown.
+- The driver build (`git archive` of the fork at `0baacdb` plus `bar-test/uidrive.diff`) ran `city-test/city.txt`
+  offscreen: all 84 lines and 15 shots, the same states as the table above. The offscreen screen was 1600 x 1000 at
+  1x through `QT_QPA_PLATFORM="offscreen:configfile=<json>"` with one `screens` entry (the default offscreen screen
+  is about 800 x 800). `city-overlay-on-map.jpg` is the overlay on a new city from that run.
+
