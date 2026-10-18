@@ -6,11 +6,10 @@ every pixel; `is_hex FALSE`. `--tile 96` builds the old 96 px set at pixel_ratio
 Rebuild with (`T` is the art repo's `freeciv45/01_terrain_ground`)
 
     python3.14 -I tilesets/make-freeciv45test.py --data ~/freeciv-builds/qt/share/freeciv \
-        --panel $T/run6/panel1/grassland_and_plains.png --panel4 $T/run8/panel4/forest_and_jungle.png \
-        --panel4-retake $T/run9/panel4/forest_and_jungle.png --panel5 $T/run7/panel5/hills_and_mountains.png \
-        --cutter ~/Desktop/asset_generator/freeciv45/tools/seamless.py
+        --art $T
 
-(`--no-tone-match` leaves out the tone match of issue 138 and `--no-blend` the blending of issue 141; the builds
+(the cutter is `$T/../tools/seamless.py` unless `--cutter` names another; `--no-level` cuts without the gradient
+removal, `--no-tone-match` leaves out the tone match of issue 138 and `--no-blend` the blending of issue 141; the builds
 from before those issues also had fewer painted terrains, so they are rebuilt from that commit's script.)
 
 Licence of the whole folder: GPL-2.0-or-later, like Freeciv and like the Freeciv45 art pack.
@@ -25,7 +24,7 @@ reads them from the installed data like trident does.
 
 | spec | source | scaling | sheet |
 |---|---|---|---|
-| `tiles.spec` | `trident/tiles.spec` (675 tags, 3 grids; `t.l0.grassland1` dropped, three `t.blend.*` aliases added, see below) | nearest 6.4x | 3840x5088 |
+| `tiles.spec` | `trident/tiles.spec` (671 tags, 3 grids; `t.l0.grassland1` and `t.l0.inaccessible1` dropped, since `terrain45.spec` has them) | nearest 6.4x | 3840x5088 |
 | `earth.spec` | `trident/earth.spec` (6 tags) | nearest 6.4x | 576x384 |
 | `units.spec` | `trident/units.spec` (57 tags) | nearest 6.4x | 3840x576 |
 | `extra_units.spec` | `trident/extra_units.spec` (115 tags) | nearest 6.4x | 2880x2112 |
@@ -42,99 +41,86 @@ reads them from the installed data like trident does.
 
 `freeciv45test.tilespec` is `trident.tilespec` with the tile size 192 and `pixel_ratio = 2`, the pixel offsets
 and `svg_height` scaled (stack size number, city bar, tile label, upkeep, flags), the file list renamed, `terrain45.spec` added after `tiles.spec`, and
-`[tile_plains]`, `[tile_forest]`, `[tile_jungle]`, `[tile_hills]` and `[tile_mountains]` without `layer0_match_with`, so they draw from numbered
-variants like grassland instead of trident's 16 edge-matched sprites (which stay in `tiles.spec`, unused).
+every terrain's section without `layer0_match_with` and `layer0_sprite_type`, so they draw from numbered variants like
+grassland instead of trident's edge-matched and corner sprites (which stay in `tiles.spec`, unused). `[tile_arctic]`
+also loses trident's layers 1 and 2, whose ice cap would cover the painted glacier; the water sections keep theirs,
+so trident's coast pieces still draw the shore (issue 173).
 
-## Painted ground: run 6 of panel 1
+## Painted ground: every terrain (issue 173)
 
-`terrain45.spec` / `terrain45.png` (480x1248, rows 0-3 of it): 20 cells of `grassland_and_plains.png`, run 6 of panel 1 of the
-Freeciv45 terrain sheet, made 2026-10-17 with John's ChatGPT sheet workflow (OpenAI image_gen through Codex,
-prompts and checks in that run's RECORD.md) in the Brothers-Keeper-Art repo, commit 26f6afc on branch
-`docs/20-run6-panel1`, folder `freeciv45/01_terrain_ground/run6/panel1/`. The panel is 1254x1254, a 5x5
-grid; rows 1-2 are grassland, 3-4 plains, 5 damp grassland (not used here). Each cell is cut with the art
-repo's `tools/seamless.py` (3 px inset, square, 192 px LANCZOS master, edges wrapped by its half-shift blend)
-and then scaled to 96 px with LANCZOS.
+`terrain45.spec` / `terrain45.png` (960x6912, 36 rows of five 192 px cells): 182 cells from twelve 5x5 panels of the
+Freeciv45 terrain sheet, made 2026-10-17 and 18 with John's ChatGPT sheet workflow (OpenAI image_gen through Codex,
+prompts and checks in each run's RECORD.md) in the Brothers-Keeper-Art repo, folder `freeciv45/01_terrain_ground/`.
+Every panel is 1254x1254. The kept run of each terrain is the art repo's runs log (`TERRAIN_GROUND.md`); the tags are
+the ruleset's graphic names (`data/civ45/terrain.ruleset`). `terrain45.spec` names the panel cell of every tag.
 
-| tag | panel cell | tag | panel cell |
-|---|---|---|---|
-| `t.l0.grassland1`-`5` | r1c1-r1c5 | `t.l0.plains1`-`5` | r3c1-r3c5 |
-| `t.l0.grassland6`-`10` | r2c1-r2c5 | `t.l0.plains6`-`10` | r4c1-r4c5 |
+| tag | cells | run, panel, art repo commit |
+|---|---|---|
+| `t.l0.grassland1`-`10` | rows 1-2 | run 15, panel 1, 1581dda |
+| `t.l0.plains1`-`10` | rows 3-4 | run 6, panel 1, 26f6afc |
+| `t.l0.plains11`-`15` | row 3, plains bank | run 14, panel 8, 1581dda |
+| `t.l0.forest1`-`10` | rows 1-2 (r2c2, r2c4 autumn) | run 8, panel 4, 62d9b9f |
+| `t.l0.jungle1`-`10` | rows 3-4 | run 17, panel 4, 750c2e3 |
+| `t.l0.hills1`-`15` | rows 1-3 | run 16, panel 5, 1581dda |
+| `t.l0.mountains1`-`9` | r4c1, r4c2, r4c4, r4c5, row 5 | run 7, panel 5, 0374987 |
+| `t.l0.desert1`-`15` | rows 1-2 dunes, row 5 rocky desert | run 12, panel 2, 1581dda |
+| `t.l0.desert16`-`20` | row 4, desert bank | run 14, panel 8 |
+| `t.l0.tundra1`-`10` | rows 3-4 | run 12, panel 2 |
+| `t.l0.tundra11`-`15` | row 5, tundra shore | run 14, panel 8 |
+| `t.l0.arctic1`-`15` | rows 1-2 glacier, row 5 sea ice | run 13, panel 3, 1581dda |
+| `t.l0.swamp1`-`10` | rows 3-4 | run 13, panel 3 |
+| `t.l0.coast1`-`15` | rows 1-3, shallow ocean | run 10, panel 6, b57c128 |
+| `t.l0.lake1`-`10` | rows 4-5 | run 10, panel 6 |
+| `t.l0.floor1`-`15` | rows 1-3, deep ocean | run 11, panel 7, 1581dda |
+| `t.l0.inaccessible1`-`5` | row 4 | run 11, panel 7 |
+| `t.l0.pine1`-`3` | r5c1-r5c3, cool pine | run 9, panel 4, 1f5634f |
 
-The client picks one variant per tile from the tile index (`client/tilespec.c`, `MATCH_NONE`).
-Licence inputs: the panel is original generated art, intended GPL-2.0-or-later; its look reference
-(`references/inspiration/terrain-3x3-ai-grid.webp`, licence unknown) was inspiration only and no pixel of it
-is in the panel or here.
+Each cell is cut the way the art repo's `tools/seamless.py --size 192 --inset 3 --level` (commit c38c2e1) cuts it:
+3 px inset, square, 192 px LANCZOS master, its straight light gradient removed (`level`), edges wrapped by the
+half-shift blend. The script calls the cutter's own functions, so before the tone match every cell is
+pixel-identical to that command's output.
 
-## Painted forest and jungle: runs 8 and 9 of panel 4
+The pine is cut but not drawn: no tile section uses `t.l0.pine`, because the tilespec cannot pick a forest variant by
+neighbouring terrain (issue 127). `--olive-pine` adds run 9's warm olive r5c4-r5c5 as `forest11`-`12`.
 
-Rows 4-7 of `terrain45.png`: 20 cells of `forest_and_jungle.png`, panel 4 of the same sheet (forest and jungle),
-made 2026-10-17 with the same workflow, in the Brothers-Keeper-Art repo on main: run 8
-(`freeciv45/01_terrain_ground/run8/panel4/`, commit 62d9b9f, PR 31) for rows 1-3 and run 9's retake
-(`run9/panel4/`, commit 1f5634f, PR 34) for row 4. Both panels are 1254x1254, 5x5. Cut the same way as panel 1
-(`tools/seamless.py` at commit 58d08c9: 3 px inset, 192 px LANCZOS master, half-shift wrap; then 96 px LANCZOS);
-before the tone match below, every cell is pixel-identical to `seamless.py PANEL OUT --all --size 192 --inset 3`
-scaled to 96 px.
+Not used, on purpose: run 6 row 5 (damp grassland; run 15 replaced run 6's grassland and the two greens differ);
+run 7 r4c3 (its ridges share one diagonal with its neighbours, run 7's log entry); run 14 rows 1-2 (beach and rocky
+shore, for the coastline builder of issue 81); run 11 row 5 (ice on deep water: as a deep ocean variant it would lie
+on every ocean, tropics included, and it looks like run 13's sea ice).
 
-| tag | panel cell | tag | panel cell |
-|---|---|---|---|
-| `t.l0.forest1`-`5` | run 8 r1c1-r1c5 (r1c2, r1c4 with a few pines) | `t.l0.jungle1`-`5` | run 8 r3c1-r3c5 |
-| `t.l0.forest6`-`10` | run 8 r2c1-r2c5 (r2c2, r2c4 autumn) | `t.l0.jungle6`-`10` | run 9 r4c1-r4c5 |
+Known faults carried over from the runs log: run 12's tundra is busy, blue-grey snow against olive moss; run 13's
+swamp is dry brown dirt with no water (a retake is planned there); run 14's plains bank has light and dark cells
+(the tone match levels them).
 
-Not used: run 8 rows 4-5 (replaced by run 9's retake), run 9 rows 1-3 (the retake was for rows 4 and 5 only), and
-run 9 row 5, the pine. Its cool blue-green c1-c3 would only fit forest next to tundra or glacier, which the tilespec
-cannot select (freeciv-macos27 issue 127); its warm olive c4-c5 shows as a patchwork among the broadleaf cells in
-game (`--olive-pine` adds them as `forest11`-`12` for that test; see `notes/freeciv45/tileset-t0.md`).
-Licence inputs: original generated art, intended GPL-2.0-or-later; John's iPhone forest picture and the 3x3 grid
-reference were inspiration only (run 8's RECORD.md), and no pixel of them is in the panels or here.
-
-## Painted hills and mountains: run 7 of panel 5 (issue 151)
-
-Rows 8-12 of `terrain45.png`: 22 cells of `hills_and_mountains.png`, panel 5 of the same sheet (hills and
-mountains), made 2026-10-17 with the same workflow, in the Brothers-Keeper-Art repo on main: run 7
-(`freeciv45/01_terrain_ground/run7/panel5/`, commit 0374987, PR 28), call 5 of five. The panel is 1254x1254, 5x5;
-rows 1-3 are hills (green, then green with grey-brown bedrock on the crests in r2c1, r2c3, r2c5, then dry brown in
-r3c1, r3c3, r3c5 between green), rows 4-5 mountains. Cut the same way as the other panels (`tools/seamless.py` at
-commit 58d08c9); before the tone match every cell is pixel-identical to `seamless.py PANEL OUT --all --size 192
---inset 3` scaled to 96 px with LANCZOS.
-
-| tag | panel cell | tag | panel cell |
-|---|---|---|---|
-| `t.l0.hills1`-`4` | r1c2-r1c5 | `t.l0.mountains1`-`4` | r4c1, r4c2, r4c4, r4c5 |
-| `t.l0.hills5`-`8` | r2c2-r2c5 (r2c3, r2c5 with bedrock) | `t.l0.mountains5`-`9` | r5c1-r5c5 |
-| `t.l0.hills9`-`10` | r3c2, r3c4 | | |
-| `t.l0.hills11`-`13` | r3c1, r3c3, r3c5 (dry brown) | | |
-
-Not used: r1c1, r2c1 and r4c3, the cells the art repo's runs log (`TERRAIN_GROUND.md`, run 7) names for a shared
-diagonal ridge direction that shows as a rhythm when they repeat; thirteen hills and nine mountains remain. The
-three dry brown hills are in: the tone match brings them to the hills' shared mean colour, so in game they show as
-slightly warmer variants, not as brown patches, and they move the hills a little away from the grassland's green
-(`notes/freeciv45/tileset-t0.md`, "Hills and mountains from panel 5"). Hills and mountains no longer use trident's
-edge-matched sprites (they stay in `tiles.spec`, unused), and their `t.blend.hills` and `t.blend.mountains` aliases
-are gone, so the client fades them out with `t.l0.hills1` and `t.l0.mountains1` like the other painted terrains.
-Licence inputs: original generated art, intended GPL-2.0-or-later; the 3x3 grid reference (licence unknown) and
-John's own iPhone mountain picture were inspiration only for call 1 (run 7's RECORD.md); call 5 was text only, and no
-pixel of either is in the panel or here.
+Licence inputs: original generated art, intended GPL-2.0-or-later. The look references named in the runs' records
+(the 3x3 grid reference, licence unknown, and John's own iPhone pictures) were inspiration only; no pixel of them is
+in the panels or here.
 
 ## Tone match of the variants (issue 138)
 
 The client puts any two variants of a terrain side by side, so a field showed every tile boundary as a straight
 step in brightness and colour. Since issue 138 the build matches the 192 px masters of each terrain to each other
-before scaling them to 96 px (`match_tone` in the script): in CIE Lab (Pillow's ImageCms, sRGB profile) each
+(`match_tone` in the script): in CIE Lab (Pillow's ImageCms, sRGB profile) each
 channel of each cell is mapped linearly so that its mean is the mean of the terrain's cells and its standard
 deviation the mean of their standard deviations, the contrast scale held to 0.75-1.33 so a cell keeps its own
-texture. Only the levels change; no pixel moves. Mean luma per variant at 96 px, before and after:
+texture. Only the levels change; no pixel moves. Mean luma per variant at 192 px, before and after (issue 173's
+build):
 
-| terrain | before (min-max) | after |
-|---|---|---|
-| grassland (10) | 85-166 | 128 |
-| plains (10) | 122-196 | 166 |
-| forest (10) | 68-103 | 83 |
-| jungle (10) | 50-76 | 62 |
-| hills (13) | 85-149 | 121 |
-| mountains (9) | 96-157 | 124 |
+| terrain | before (min-max) | after | terrain | before (min-max) | after |
+|---|---|---|---|---|---|
+| grassland (10) | 92-116 | 104 | tundra (15) | 115-142 | 127 |
+| plains (15) | 122-196 | 158 | arctic (15) | 191-197 | 193 |
+| forest (10) | 68-103 | 83 | swamp (10) | 68-73 | 70-71 |
+| jungle (10) | 54-75 | 64 | coast (15) | 120-130 | 125-126 |
+| hills (15) | 115-131 | 120 | lake (10) | 73-77 | 74-75 |
+| mountains (9) | 96-157 | 124 | floor (15) | 29-33 | 32 |
+| desert (20) | 166-182 | 175 | inaccessible (5) | 67-69 | 68 |
+| pine (3) | 56-63 | 60-61 | | | |
 
-The two autumn forest cells (r2c2, r2c4) are pulled towards the forest's green with the rest: their orange crowns
-are still there but quieter. Results in game: `notes/freeciv45/tileset-t0.md`, "Variants matched in tone".
+Each terrain is matched as one group, so the rocky desert, the banks, the tundra shore and the sea ice take their
+terrain's mean colour and differ from its other cells only in texture. The two autumn forest cells (r2c2, r2c4) are
+pulled towards the forest's green with the rest: their orange crowns are still there but quieter. Results in game:
+`notes/freeciv45/tileset-t0.md`, "Variants matched in tone" and "Every terrain painted".
 
 ## Blending between terrains (issue 141)
 
@@ -145,12 +131,11 @@ is the product of the two edge fades over 0.5. The middle tile is transparent an
 (`client/tilespec.c`) uses the mask to blend terrains in overhead view; Freeciv 3.2 itself blends only in
 isometric view, and an unpatched client ignores the sprite.
 
-In `freeciv45test.tilespec` the land terrains desert, forest, grassland, hills, jungle, mountains, plains, swamp and
-tundra have `blend_layer = 1` (the neighbours fade in after layer 0, under trident's coast cells on layer 2); arctic,
-lake and the oceans do not blend. The client fades a terrain out from its blender: `t.l0.<terrain>1` for the
-painted terrains, and for the three drawn from trident's 16 edge-matched sprites an alias added to their
-all-neighbours-alike cell in `tiles.spec`: `t.blend.desert`, `t.blend.swamp`, `t.blend.tundra` on
-`t.l0.<terrain>_n1e1s1w1` (hills and mountains had one too until issue 151 painted them). Results in `notes/freeciv45/tileset-t0.md`,
+In `freeciv45test.tilespec` the land terrains arctic (since issue 173), desert, forest, grassland, hills, jungle,
+mountains, plains, swamp and tundra have `blend_layer = 1` (the neighbours fade in after layer 0, under trident's coast
+cells); lake, the oceans and inaccessible do not blend. The client fades a terrain out from its blender,
+`t.l0.<terrain>1`. Until issue 173 painted them, desert, swamp and tundra used `t.blend.*` aliases on trident's
+all-neighbours-alike cells instead. Results in `notes/freeciv45/tileset-t0.md`,
 "Terrains blended at the edge".
 
 ## 192 px at pixel_ratio 2 (issue 161)
