@@ -104,6 +104,9 @@ the richer tooltip (Q2) and badge-style banners drawn in the test tileset's styl
 
 ## 8. What this changes in panels.md
 
+Folded into `panels.md` on 2026-10-17 (issue 118): item 1 in its 2.3, item 2 in its section 3, items 3 and 4 in
+its new section 8, and the mockup redrawn with a map frame and a city frame.
+
 1. Add the previous/next-needing-orders arrows to the unit bar's title.
 2. The city panel becomes a map overlay set (left yields, right collapsible sections, bottom production), not a
    single side panel; the round marker still opens it.
