@@ -71,6 +71,8 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - freeciv (main, 3.3.90-dev, commit 3f0038d8), freeciv-S3_2 (3.2.6+, commit 44e6898c),
   freeciv-web, freeciv-environments, freeciv-website, all from https://github.com/freeciv/.
 - github-cleanhub (John-ODell) cloned to /tmp/cleanhub-ref for the GitHub workflow rules.
+- fcw.org-server (FCW, the Freeciv-web fork behind freecivweb.com), from https://github.com/Lexxie9952/fcw.org-server,
+  commit e27cac3, 603 MB, cloned 2026-10-18 at John's request for study (notes/freeciv45/fcw/).
 
 ## Not touched
 
