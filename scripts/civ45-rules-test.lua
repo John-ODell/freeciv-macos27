@@ -347,7 +347,7 @@ end
 -- cost of a tech is what the Linear style gives: base_tech_cost 10 times the number of techs it needs counted
 -- with itself (common/tech.c, num_reqs starts at 1), times the era's cost_pct (common/tech.c:273),
 -- times Tech_Cost_Factor 3. Gunpowder needs 17 techs in the Renaissance (200%): 10 x 18 x 2 x 3 = 1080; Fusion
--- Power needs 70 in the Information era (275%): 710 x 2.75 = 1952.5 (the cost is a double), x 3 = 5857; a root tech such as Alphabet
+-- Power needs 70 in the Information era (200%): 710 x 2 x 3 = 4260; a root tech such as Alphabet
 -- is 30. Player:tech_cost reads research_total_bulbs_required for the Tester, who has no embassy, so no leakage
 -- lowers it; under this style the cost does not depend on what the player already knows.
 function fc45_tech_test_run(tester)
@@ -364,7 +364,7 @@ function fc45_tech_test_run(tester)
              al, gp, fp, tostring(server.setting.get("sciencebox")))
   check("a root tech (Alphabet) costs 30 bulbs", al == 30)
   check("Gunpowder costs 1080 bulbs (17 techs needed plus itself, Renaissance 200%)", gp == 1080)
-  check("Fusion Power costs 5857 bulbs (70 techs needed plus itself, Information era 275%)", fp == 5857)
+  check("Fusion Power costs 4260 bulbs (70 techs needed plus itself, Information era 200%)", fp == 4260)
 end
 
 -- John's decisions of 2026-10-17 (plan decisions 10 and 11): the Horses gate, the two units that came back, the

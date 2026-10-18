@@ -62,9 +62,9 @@ TR="$DATA/civ45/techs.ruleset"
 NC=$(grep -c '^\[techclass_' "$TR"); NA=$(grep -c '^\[advance_' "$TR"); NCL=$(grep -c '^class    = "' "$TR")
 if [ "$NC" = 7 ] && [ "$NA" = 95 ] && [ "$NCL" = 95 ]; then echo "FC45TEST PASS techs.ruleset: 7 era classes, 95 advances, each in a class"
 else echo "FC45TEST FAIL techs.ruleset: $NC classes, $NA advances, $NCL with a class (want 7, 95, 95)"; RC=1; fi
-# The era cost curve (decision 10, John 2026-10-17): 100, 150, 175, 200, 225, 250, 275.
+# The era cost curve (decision 10, John 2026-10-17; eras V to VII lowered to 200 for issue 167): 100, 150, 175, 200, 200, 200, 200.
 PCT=$(grep "^cost_pct" "$TR" | awk '{print $3}' | tr "\n" " ")
-if [ "$PCT" = "100 150 175 200 225 250 275 " ]; then echo "FC45TEST PASS techs.ruleset: era cost_pct 100 150 175 200 225 250 275"
+if [ "$PCT" = "100 150 175 200 200 200 200 " ]; then echo "FC45TEST PASS techs.ruleset: era cost_pct 100 150 175 200 200 200 200"
 else echo "FC45TEST FAIL techs.ruleset: era cost_pct is $PCT"; RC=1; fi
 # The draft units cost a citizen (units.ruleset; Lua has no pop_cost getter).
 for u in levy militia conscripts; do
