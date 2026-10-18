@@ -107,6 +107,51 @@ The whole window, half size: `relief-window.jpg`.
   - sparse transparent detail sprites as extra numbered variants (FCW does this; the 3.2 client picks a variant per
     tile).
 
+## The look in a real game (issue 198, 2026-10-18)
+
+The parent session played civ45 with freeciv45iso (size 4, mapseed 21, gameseed 21, revealmap START, turn 1, John's
+options) and listed five faults. This section covers the first three. Forest and jungle overlays and a brightness lift
+come later. All changes are in `make-freeciv45iso.py`. freeciv45test and the client are unchanged.
+
+1. **"Grassland looks like orange sand."** Observed in the game's save: the start area is mostly plains, with some
+   grassland and desert.
+   - The plains cells were run 6's golden rows 3 and 4 and run 14's sandy bank, and next to the desert they read as
+     sand.
+   - The iso build now uses run 6's yellow-green rows 1 and 2.
+   - Each terrain was checked by name on the labelled field below. The orange left in the start view is desert, which
+     amplio2 paints pale beige, so our sand is more golden.
+2. **Boxy coasts.** The beach is narrower and wanders more, and bays are rounded over a wider soft minimum.
+   - These are make-freeciv45test.py's `SHORE_*` and `LAND_*` values, overridden for the iso build only (`SHORE`):
+     - beach depth on the water side 0.13 to 0.07 of a tile, and on the land side 0.16 to 0.08;
+     - wave 0.4 and 0.5 to 0.6;
+     - bay rounding 0.03 to 0.15.
+   - Lakes keep the shore. Two lake variants were tried:
+     - no beach at all;
+     - sand on the land side only.
+   - Both made a one-tile lake a hard diamond. With the rounded shore it reads as a pond.
+3. **Deep ocean as a black hole.** It is graded toward deep blue in CIE Lab (`GRADE`, floor +28 L, +2 a, -20 b).
+   - The fades between terrains now reach 37.5 % of a tile (`BLEND_DEPTH`), up from 25 %.
+   - A diamond is half as deep across an edge as a square, so the old fades looked short in iso.
+
+**Check (observed):** the same seed and the same 3680 x 2284 device-pixel window as the parent's shot, on the driver
+build, offscreen. The crops are at the parent's `mid.png` offset, so the three rows show the same tiles.
+- amplio2's run and ours have the same map and start.
+- The client log has no tileset error or warning.
+  - The first try of "no beach" named a new layer 1 match type "lake". The client refused it, because its initial
+    clashes with "land", and the game never started.
+
+![amplio2, before, now; same seed, 1:1](look-seed21-1to1.jpg)
+
+![deep ocean: amplio2, before, now; 1:1](look-deep-1to1.jpg)
+
+![every civ45 terrain by name: amplio2 and now; 1:1](look-terrain-names-1to1.jpg)
+
+**Still open:**
+- Grassland and plains are close in hue: plains are yellow-green, grassland a duller green.
+- Desert is golden where amplio2's is pale.
+- A diagonal coast still steps tile by tile, as amplio2's does, but softer.
+- Forest and jungle overlays and a brightness lift are the parent's items 4 and 5.
+
 ## Not done, and findings
 
 - Hills and mountains had no relief in the first build (issue 194). They now draw amplio2's relief (see above).

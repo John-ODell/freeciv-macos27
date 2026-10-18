@@ -38,7 +38,7 @@ usage: make-freeciv45iso.py --data ~/freeciv-builds/qt/share/freeciv
 Needs Pillow (python3.14 on this Mac has it).
 """
 import argparse, importlib.util, os, random, re, tempfile
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageCms
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location("make_freeciv45test", os.path.join(HERE, "make-freeciv45test.py"))
@@ -61,6 +61,19 @@ DROP_PREFIX = {"amplio2/water.spec": ("t.l0.", "t.l1."), "amplio2/terrain1.spec"
 # of against everything else. RELIEF_BASE is the ground under them: the flat cells cut for each instead of the
 # painted relief, which would fight the overlay's own light. --no-relief leaves both out (the build of issue 190).
 RELIEF = {"amplio2/hills.spec": "hills", "amplio2/mountains.spec": "mountains"}
+# The look in a real game (issue 198). Plains: run 6's yellow-green rows 1 and 2 instead of its golden rows 3 and 4 and
+# run 14's sandy bank, which read as sand next to the orange desert. Shore: a narrower beach that wanders more, with
+# bays rounded over a wider soft minimum, so a diagonal coast reads less like stair steps (make-freeciv45test.py's
+# SHORE_* and LAND_* values, overridden here only). Lakes keep the same shore: tried without a beach, a one-tile lake
+# read as a hard diamond, while the rounded shore makes it a pond. Deep ocean: graded toward deep blue (GRADE: CIE Lab
+# offsets on Pillow's 0-255 scale, L then a then b) so it reads as darker water, not a hole; and the fades between
+# terrains reach further in (BLEND_DEPTH, a share of the tile), since a diamond is half as deep across an edge as a
+# square.
+ISO_PLAINS = [("plains", "run6", ["r1c%d" % c for c in range(1, 6)] + ["r2c%d" % c for c in range(1, 6)])]
+SHORE = {"SHORE_DEPTH": 0.07, "SHORE_WAVE": 0.6, "SHORE_SHALLOW": 0.10, "LAND_DEPTH": 0.08, "LAND_WAVE": 0.6,
+         "SHORE_ROUND": 0.15}
+GRADE = {"floor": (28, 2, -20)}
+BLEND_DEPTH = 0.375
 RELIEF_BASE = [
     ("hills", "run6", ["r3c1", "r3c2", "r3c3", "r3c4", "r3c5"]),        # plains, under the hills
     ("mountains", "run12", ["r5c1", "r5c2", "r5c3", "r5c4", "r5c5"]),   # rocky desert, under the mountains
@@ -149,17 +162,29 @@ def rewrite_spec(path, dx, dy):
     _, grids = sq.parse_spec(path)
     return [(r, c, tags[0]) for g in grids for r, c, tags in g["cells"]]
 
+def grade(im, dl, da, db):
+    """im (RGB) moved in CIE Lab by (dl, da, db), keeping its texture."""
+    to_lab, to_rgb = sq.lab_transforms()
+    bands = [band.point(lambda v, d=d: max(0, min(255, v + d)))
+             for band, d in zip(ImageCms.applyTransform(im, to_lab).split(), (dl, da, db))]
+    return ImageCms.applyTransform(Image.merge("LAB", bands), to_rgb)
+
 def ground(out_dir, record):
-    """terrain45.png: freeciv45test's square sheet, each cell as a diamond."""
+    """terrain45.png: freeciv45test's square sheet, each cell as a diamond (GRADE first)."""
     path = os.path.join(out_dir, "terrain45.png"); square = Image.open(path).convert("RGB")
     cells = rewrite_spec(os.path.join(out_dir, "terrain45.spec"), W, H)
     rows, cols = max(r for r, _, _ in cells) + 1, max(c for _, c, _ in cells) + 1
     sheet = Image.new("RGBA", (cols * W, rows * H), (0, 0, 0, 0))
-    for r, c, _ in cells:
-        sheet.paste(iso_ground(square.crop((c * T, r * T, (c + 1) * T, (r + 1) * T))), (c * W, r * H))
+    for r, c, tag in cells:
+        cell = square.crop((c * T, r * T, (c + 1) * T, (r + 1) * T))
+        terrain = re.match(r"t\.l0\.([a-z_]+?)\d+$", tag).group(1)
+        if terrain in GRADE: cell = grade(cell, *GRADE[terrain])
+        sheet.paste(iso_ground(cell), (c * W, r * H))
     sheet.save(path, optimize=True)
     record.append("| `%s/terrain45.spec` | the cells above, each turned 45 degrees and squashed 2:1 (to_iso, %dx%d "
-                  "samples, binary outline) | %dx%d diamonds | %dx%d |" % (NAME, SS, SS, W, H, cols * W, rows * H))
+                  "samples, binary outline); graded in Lab: %s | %dx%d diamonds | %dx%d |"
+                  % (NAME, SS, SS, ", ".join("%s %+d %+d %+d" % ((t,) + g) for t, g in GRADE.items()), W, H, cols * W,
+                     rows * H))
     return {tag for _, _, tag in cells}
 
 def coast(out_dir, record, relief=True):
@@ -335,6 +360,8 @@ def main():
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
+    sq.BLEND_DEPTH = round(BLEND_DEPTH * T)
+    for key, value in SHORE.items(): setattr(sq, key, value)
     out_dir = os.path.join(a.out, NAME); os.makedirs(out_dir, exist_ok=True)
     cutter = a.cutter or os.path.join(os.path.dirname(os.path.abspath(a.art)), "tools", "seamless.py")
     panels = {key: os.path.join(a.art, rel) for key, rel in sq.PANELS.items()}
@@ -342,6 +369,7 @@ def main():
     plan = sq.PLAN + ([sq.OLIVE_PINE] if a.olive_pine else [])
     if relief and a.relief_base == "flat":
         plan = [p for p in plan if p[0] not in RELIEF.values()] + RELIEF_BASE
+    plan = [p for p in plan if p[0] != "plains"] + ISO_PLAINS
     plan.sort(key=lambda p: [t for t, _, _ in sq.PLAN].index(p[0]))
     painted_record, amplio_record = [], []
     sq.painted(panels, cutter, out_dir, painted_record, plan, tone_match=not a.no_tone_match, level=not a.no_level)
