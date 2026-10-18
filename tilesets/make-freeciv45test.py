@@ -1,37 +1,40 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Build the freeciv45test tileset: trident's sprites scaled to 96 px squares, with the grassland, plains, forest,
-jungle, hills and mountains ground replaced by cells cut from painted terrain panels.
+"""Build the freeciv45test tileset: trident's sprites scaled to 192 px squares, with the ground of every terrain
+replaced by cells cut from painted terrain panels.
 
 Every spec file that trident.tilespec lists under trident/ is re-cut: each grid's cells are cropped from the
-30 px sheet, scaled by 96/30 with nearest-neighbour sampling (the pixel art stays crisp; placeholders only),
+30 px sheet, scaled by 192/30 with nearest-neighbour sampling (the pixel art stays crisp; placeholders only),
 and laid out again on a clean grid with no pixel border, so the new spec files carry the same tags with new
 coordinates. The tilespec is trident's with the sizes and offsets scaled, the file list renamed, a new
-terrain45.spec added, and plains, forest, jungle, hills and mountains switched from 16 edge-matched sprites to
-plain variants like grassland.
+terrain45.spec added, and every PAINTED terrain switched from trident's edge-matched sprites to plain variants
+like grassland.
 
-The painted ground comes from 5 x 5 ChatGPT panels (PLAN below): panel 1 rows 1-2 grassland and rows 3-4 plains
-(row 5, the damp grassland, is left out); panel 4 rows 1-2 forest and row 3 jungle from run 8, row 4 jungle
-from run 9's retake (its row 5 is pine: the warm olive c4-c5 only with --olive-pine, the cool c1-c3 not at
-all, since the tilespec cannot pick a forest variant by neighbouring terrain); panel 5 rows 1-3 hills and rows 4-5
-mountains from run 7, without the three cells whose ridges share one diagonal (r1c1, r2c1, r4c3). Each cell goes through the art
-repo's seamless cutter (192 px master, edges wrapped) and is then scaled to 96 px, giving t.l0.<terrain>1..N;
-the client picks a variant per tile from the tile index. Because the client puts any two variants side by side, the
-masters of each terrain are first matched in tone (match_tone): in CIE Lab every cell is moved to the terrain's mean
-lightness and colour and its contrast to the terrain's mean contrast, so the texture stays and only the cell's
-overall level changes. --no-tone-match skips it.
+The painted ground comes from 5 x 5 ChatGPT panels in the art repo's freeciv45/01_terrain_ground (PANELS and PLAN
+below; --art names that folder): grassland run 15, plains run 6 (row 5, the damp grassland, is left out), forest
+run 8, jungle run 17, hills run 16, mountains run 7 (without r4c3, whose ridges share one diagonal with its
+neighbours), desert, tundra and rocky desert run 12, glacier, swamp and sea ice run 13, the plains and desert
+banks and the tundra shore run 14, shallow ocean and lake run 10, deep ocean and inaccessible run 11. Run 9's
+pine row gives t.l0.pine1..3 (cool c1-c3, not drawn yet: the tilespec cannot pick a forest variant by
+neighbouring terrain, issue 127) and, with --olive-pine, two warm olive forest variants. Each cell goes through
+the art repo's seamless cutter as `seamless.py --size 192 --inset 3 --level` does it (192 px LANCZOS master,
+straight light gradient removed, edges wrapped), giving t.l0.<terrain>1..N; the client picks a variant per tile
+from the tile index. Because the client puts any two variants side by side, the masters of each terrain are first
+matched in tone (match_tone): in CIE Lab every cell is moved to the terrain's mean lightness and colour and its
+contrast to the terrain's mean contrast, so the texture stays and only the cell's overall level changes.
+--no-tone-match skips it, --no-level the gradient removal.
 
-Neighbouring terrains fade into each other at the tile edge: the land terrains get blend_layer = 1, and blend.spec
-holds t.blend_mask, a generated 3 x 3 tile alpha mask that says how strongly a terrain shows in each tile around it
-(BLEND_PEAK at the shared edge, nothing BLEND_DEPTH pixels in). Freeciv 3.2 blends only in isometric view; the fork's
-patch 0019 uses this mask in overhead view. Terrains drawn from trident's 16 edge-matched sprites get a t.blend.<tag>
-alias on their all-neighbours-alike sprite, which the client takes as the texture that fades out. --no-blend
-leaves all of that out.
+Water (ocean, lake, deep ocean) gets painted layer 0 only: trident's coast pieces on layers 1 and 2 still draw
+the shore over it until the coastline builder exists (issue 81).
 
-usage: make-freeciv45test.py --data ~/freeciv-builds/qt/share/freeciv --panel PANEL1.png --panel4 RUN8.png
-                             --panel4-retake RUN9.png [--olive-pine] --panel5 RUN7.png
-                             --cutter ~/Desktop/asset_generator/freeciv45/tools/seamless.py [--out tilesets]
-                             [--no-tone-match] [--no-blend]
+Neighbouring land terrains fade into each other at the tile edge: they get blend_layer = 1, and blend.spec holds
+t.blend_mask, a generated 3 x 3 tile alpha mask that says how strongly a terrain shows in each tile around it
+(BLEND_PEAK at the shared edge, nothing BLEND_DEPTH pixels in). Freeciv 3.2 blends only in isometric view; the
+fork's patch 0019 uses this mask in overhead view, fading variant 1 of each terrain. --no-blend leaves it out.
+
+usage: make-freeciv45test.py --data ~/freeciv-builds/qt/share/freeciv
+                             --art ~/Desktop/asset_generator/freeciv45/01_terrain_ground [--cutter SEAMLESS.py]
+                             [--out tilesets] [--olive-pine] [--no-tone-match] [--no-level] [--no-blend] [--tile 96]
 Needs Pillow (python3.14 on this Mac has it).
 """
 import argparse, importlib.util, os, re
@@ -81,11 +84,10 @@ def parse_spec(path):
                 grid["cells"][-1][2].extend(re.findall(r'"([^"]+)"', line))
     return header, grids
 
-OVERRIDDEN = {"t.l0.grassland1"}      # terrain45.spec provides these; dropping them here avoids a duplicate-tag warning
+OVERRIDDEN = {"t.l0.grassland1", "t.l0.inaccessible1"}    # terrain45.spec provides these; dropping them here avoids a duplicate-tag warning
 
 # Blending between terrains (patch 0019 in the fork): which terrains take part, and the shape of the fade.
-BLEND_TERRAINS = ("desert", "forest", "grassland", "hills", "jungle", "mountains", "plains", "swamp", "tundra")
-BLEND_ALIASES = {"t.l0.%s_n1e1s1w1" % t: "t.blend.%s" % t for t in ("desert", "swamp", "tundra")}
+BLEND_TERRAINS = ("arctic", "desert", "forest", "grassland", "hills", "jungle", "mountains", "plains", "swamp", "tundra")
 BLEND_DEPTH = 48      # px into the neighbouring tile where the fade reaches nothing (a quarter tile; set_tile)
 BLEND_PEAK = 0.5      # opacity at the shared edge; both sides blend, so the edge itself is half and half
 
@@ -95,14 +97,13 @@ BLEND_PEAK = 0.5      # opacity at the shared edge; both sides blend, so the edg
 def map_misc_scale(spec_rel):
     return {"misc/citybar.spec": pixel_ratio(), "misc/overlays.spec": max(1.0, TILE / 64)}.get(spec_rel)
 
-def recut(data, spec_rel, out_dir, record, aliases={}, scale=None):
+def recut(data, spec_rel, out_dir, record, scale=None):
     """Re-cut one spec file (e.g. trident/tiles.spec) to <out_dir>/<base>.spec and .png, every sprite scaled by scale
     (default SCALE, trident's 30 px to TILE) with nearest-neighbour sampling."""
     scale = SCALE if scale is None else scale
     header, grids = parse_spec(os.path.join(data, spec_rel))
     for g in grids:
-        g["cells"] = [(r, c, [t for t in tags if t not in OVERRIDDEN] + [aliases[t] for t in tags if t in aliases])
-                      for r, c, tags in g["cells"]]
+        g["cells"] = [(r, c, [t for t in tags if t not in OVERRIDDEN]) for r, c, tags in g["cells"]]
         g["cells"] = [cell for cell in g["cells"] if cell[2]]
     gfx = next(re.search(r'gfx\s*=\s*"([^"]+)"', h).group(1) for h in header if re.search(r'gfx\s*=\s*"', h))
     src = Image.open(os.path.join(data, gfx + ".png")).convert("RGBA")
@@ -141,20 +142,50 @@ def recut(data, spec_rel, out_dir, record, aliases={}, scale=None):
     record.append("| `%s/%s.spec` | `%s` (%d tags, %d grids) | nearest %gx | %dx%d |"
                   % (NAME, base, spec_rel, ntags, len(grids), scale, width, height))
 
-# Painted ground, in sheet order: (terrain, panel key, panel cells). Each terrain's cells become t.l0.<terrain>1..N
-# and start on a new sheet row, five to a row. Panel keys are the --panel options.
+# The panels, in the art repo's freeciv45/01_terrain_ground (--art): the kept run of each, TERRAIN_GROUND.md's runs log.
+PANELS = {
+    "run6": "run6/panel1/grassland_and_plains.png", "run7": "run7/panel5/hills_and_mountains.png",
+    "run8": "run8/panel4/forest_and_jungle.png", "run9": "run9/panel4/forest_and_jungle.png",
+    "run10": "run10/panel6/shallow_ocean_and_lake.png", "run11": "run11/panel7/deep_ocean_and_impassable.png",
+    "run12": "run12/panel2/desert_and_tundra.png", "run13": "run13/panel3/glacier_and_swamp.png",
+    "run14": "run14/panel8/shores_and_banks.png", "run15": "run15/panel1/grassland_and_plains.png",
+    "run16": "run16/panel5/hills_and_mountains.png", "run17": "run17/panel4/forest_and_jungle.png",
+}
+
+def row(r, cols=range(1, 6)):
+    return ["r%dc%d" % (r, c) for c in cols]
+
+# Painted ground, in sheet order: (tag, panel key, panel cells). Each tag's cells become t.l0.<tag>1..N and start on
+# a new sheet row, five to a row. The tags are the ruleset's graphic names (terrain.ruleset); pine is not one yet.
+# Not cut: run 14 rows 1-2 (beach, rocky shore: for the coastline builder, issue 81) and run 11 row 5 (ice on deep
+# water: as a deep ocean variant it would sit on every ocean).
 PLAN = [
-    ("grassland", "panel1", ["r1c%d" % c for c in range(1, 6)] + ["r2c%d" % c for c in range(1, 6)]),
-    ("plains", "panel1", ["r3c%d" % c for c in range(1, 6)] + ["r4c%d" % c for c in range(1, 6)]),
-    ("forest", "panel4", ["r1c%d" % c for c in range(1, 6)] + ["r2c%d" % c for c in range(1, 6)]),
-    ("jungle", "panel4", ["r3c%d" % c for c in range(1, 6)]),
-    ("jungle", "panel4_retake", ["r4c%d" % c for c in range(1, 6)]),
-    ("hills", "panel5", ["r1c2", "r1c3", "r1c4", "r1c5", "r2c2", "r2c3", "r2c4", "r2c5", "r3c2", "r3c4",
-                         "r3c1", "r3c3", "r3c5"]),     # the green cells first, then the three dry brown ones
-    ("mountains", "panel5", ["r4c1", "r4c2", "r4c4", "r4c5"] + ["r5c%d" % c for c in range(1, 6)]),
+    ("grassland", "run15", row(1) + row(2)),
+    ("plains", "run6", row(3) + row(4)),
+    ("plains", "run14", row(3)),                                   # plains bank
+    ("forest", "run8", row(1) + row(2)),
+    ("jungle", "run17", row(3) + row(4)),
+    ("hills", "run16", row(1) + row(2) + row(3)),
+    ("mountains", "run7", ["r4c1", "r4c2", "r4c4", "r4c5"] + row(5)),
+    ("desert", "run12", row(1) + row(2) + row(5)),                 # dunes, then rocky desert
+    ("desert", "run14", row(4)),                                   # desert bank
+    ("tundra", "run12", row(3) + row(4)),
+    ("tundra", "run14", row(5)),                                   # tundra shore
+    ("arctic", "run13", row(1) + row(2) + row(5)),                 # glacier, then sea ice
+    ("swamp", "run13", row(3) + row(4)),
+    ("coast", "run10", row(1) + row(2) + row(3)),
+    ("lake", "run10", row(4) + row(5)),
+    ("floor", "run11", row(1) + row(2) + row(3)),
+    ("inaccessible", "run11", row(4)),
+    ("pine", "run9", row(5, (1, 2, 3))),                           # cool pine, issue 127
 ]
-OLIVE_PINE = ("forest", "panel4_retake", ["r5c4", "r5c5"])   # run 9's warm olive pine; --olive-pine adds it
-PAINTED = ("plains", "forest", "jungle", "hills", "mountains")   # tile sections drawn from variants, not edge-matched
+OLIVE_PINE = ("forest", "run9", row(5, (4, 5)))   # run 9's warm olive pine; --olive-pine adds it
+# Tile sections drawn from the painted variants instead of trident's matched sprites (grassland already is).
+PAINTED = ("plains", "forest", "jungle", "hills", "mountains", "desert", "tundra", "arctic", "swamp", "coast", "lake",
+           "floor", "inaccessible")
+# Painted terrains whose trident layers 1 and 2 would cover the painted ground: trident's glacier draws its whole ice
+# cap on layer 1, so the tile keeps layer 0 only (the shore against water is drawn by the water tiles).
+LAYER0_ONLY = ("arctic",)
 
 CONTRAST_CLAMP = (0.75, 1.33)    # how far match_tone may scale a cell's contrast, so each cell keeps its own texture
 
@@ -188,24 +219,27 @@ def luma_range(tiles):
     means = [ImageStat.Stat(t.convert("L")).mean[0] for t in tiles]
     return min(means), max(means)
 
-def painted(panels, cutter, out_dir, record, plan, tone_match=True):
-    """Cut the planned panel cells into 96 px seamless ground variants; write terrain45.png and terrain45.spec."""
+def painted(panels, cutter, out_dir, record, plan, tone_match=True, level=True):
+    """Cut the planned panel cells into TILE px seamless ground variants; write terrain45.png and terrain45.spec."""
     spec = importlib.util.spec_from_file_location("seamless", cutter); seamless = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(seamless)
+    panels = {key: path for key, path in panels.items() if any(k == key for _, k, _ in plan)}
     images = {key: Image.open(path).convert("RGB") for key, path in panels.items()}
     boxes = {key: seamless.cells(im) for key, im in images.items()}
-    placed, lines, count, row, prev = [], [], {}, -1, None
+    placed, lines, count, srow, prev = [], [], {}, -1, None
     for terrain, key, names in plan:
         for i, name in enumerate(names):
             n = count.get(terrain, 0); count[terrain] = n + 1
-            if terrain != prev or n % 5 == 0: row += 1
+            if terrain != prev or n % 5 == 0: srow += 1
             prev = terrain
             x0, y0, x1, y1 = boxes[key][name]; inset = 3
             cell = images[key].crop((x0 + inset, y0 + inset, x1 - inset, y1 - inset))
             side = min(cell.size)
-            master = seamless.make_seamless(cell.crop((0, 0, side, side)).resize((MASTER, MASTER), Image.LANCZOS))
-            placed.append([master, n % 5, row, terrain])
-            lines.append('  %d, %d, "t.l0.%s%d"   ; %s %s' % (row, n % 5, terrain, n + 1, key, name))
+            master = cell.crop((0, 0, side, side)).resize((MASTER, MASTER), Image.LANCZOS)
+            if level: master = seamless.level(master)          # as seamless.py --level: before the edges wrap
+            master = seamless.make_seamless(master)
+            placed.append([master, n % 5, srow, terrain])
+            lines.append('  %d, %d, "t.l0.%s%d"   ; %s %s' % (srow, n % 5, terrain, n + 1, key, name))
     tones = []
     for terrain in dict.fromkeys(p[3] for p in placed):
         group = [p for p in placed if p[3] == terrain]
@@ -214,7 +248,7 @@ def painted(panels, cutter, out_dir, record, plan, tone_match=True):
             for p, tile in zip(group, match_tone([p[0] for p in group])): p[0] = tile
         after = luma_range([p[0].resize((TILE, TILE), Image.LANCZOS) for p in group])
         tones.append("%s %.0f-%.0f -> %.0f-%.0f" % (terrain, before[0], before[1], after[0], after[1]))
-    sheet = Image.new("RGB", (TILE * 5, TILE * (row + 1)))
+    sheet = Image.new("RGB", (TILE * 5, TILE * (srow + 1)))
     for master, c, r, _ in placed:
         sheet.paste(master if master.size == (TILE, TILE) else master.resize((TILE, TILE), Image.LANCZOS),
                     (c * TILE, r * TILE))
@@ -229,7 +263,8 @@ def painted(panels, cutter, out_dir, record, plan, tone_match=True):
         used = ", ".join("%s %d" % (t, len(c)) for t, k, c in plan if k == key)
         record.append("| `%s/terrain45.spec` | `%s` (%s): %s, through `%s` | %s | %dx%d |"
                       % (NAME, key, os.path.basename(path), used, os.path.basename(cutter),
-                         "LANCZOS %d" % MASTER + ("" if TILE == MASTER else " then %d" % TILE), TILE * 5, TILE * (row + 1)))
+                         "LANCZOS %d" % MASTER + (", level" if level else "") + ("" if TILE == MASTER else " then %d" % TILE),
+                         TILE * 5, TILE * (srow + 1)))
     record.append("| tone match | %s | mean luma per variant at %d px, min-max |" % ("on" if tone_match else "off", TILE)
                   + " %s |" % "; ".join(tones))
 
@@ -289,9 +324,12 @@ def tilespec(data, out_root, files, blend=True):
             continue
         if key == "name": out.append('name = "Freeciv45 test"'); continue
         if key == "priority": out.append("priority = 4"); continue
-        if key == "summary": out.append('summary = _("Freeciv45 test tileset: %d px overhead squares, painted grassland, plains, forest, jungle, hills and mountains, scaled trident placeholders.")' % TILE); continue
-        if section and section[5:] in PAINTED and key == "layer0_match_with":
-            continue    # <terrain>1..N variants from terrain45.spec, no edge matching
+        if key == "summary": out.append('summary = _("Freeciv45 test tileset: %d px overhead squares, painted ground for every terrain, scaled trident placeholders.")' % TILE); continue
+        if section and section[5:] in PAINTED and key in ("layer0_match_with", "layer0_sprite_type"):
+            continue    # <terrain>1..N variants from terrain45.spec, no edge or corner matching
+        if section and section[5:] in LAYER0_ONLY:
+            if key == "num_layers": out.append("num_layers = 1"); continue
+            if key and re.match(r"layer[12]_", key): continue
         if blend and key == "blend_layer" and section and section[5:] in BLEND_TERRAINS:
             out.append("blend_layer = 1"); continue     # neighbours fade in after layer 0, under the coast cells
         out.append(line)
@@ -302,13 +340,11 @@ def tilespec(data, out_root, files, blend=True):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True, help="a Freeciv data dir with trident.tilespec and trident/")
-    ap.add_argument("--panel", required=True, help="panel 1 (grassland and plains), run 6")
-    ap.add_argument("--panel4", required=True, help="panel 4 (forest and jungle), run 8: rows 1-3")
-    ap.add_argument("--panel4-retake", required=True, help="panel 4, run 9: rows 4 (jungle) and 5 (pine)")
+    ap.add_argument("--art", required=True, help="the art repo's freeciv45/01_terrain_ground, with the runs in PANELS")
     ap.add_argument("--olive-pine", action="store_true", help="add run 9's r5c4 and r5c5 as forest11 and forest12")
-    ap.add_argument("--panel5", required=True, help="panel 5 (hills and mountains), run 7")
-    ap.add_argument("--cutter", required=True)
+    ap.add_argument("--cutter", help="seamless.py (default: tools/seamless.py next to --art)")
     ap.add_argument("--no-tone-match", action="store_true", help="leave each painted cell's tone as cut (the build before issue 138)")
+    ap.add_argument("--no-level", action="store_true", help="keep each cell's light gradient (seamless.py without --level)")
     ap.add_argument("--no-blend", action="store_true", help="no blending between terrains (the build before issue 141)")
     ap.add_argument("--tile", type=int, choices=(96, 192), default=192,
                     help="tile size: 192 px at pixel_ratio 2 (default), or 96 px, the build before issue 161")
@@ -321,7 +357,7 @@ def main():
     files, record = [], []
     for rel in listed:
         if rel.startswith("trident/"):
-            recut(a.data, rel, out_dir, record, {} if a.no_blend else BLEND_ALIASES)
+            recut(a.data, rel, out_dir, record)
             files.append("%s/%s" % (NAME, os.path.basename(rel)))
             if rel == "trident/tiles.spec":
                 files.append("%s/terrain45.spec" % NAME)
@@ -332,8 +368,9 @@ def main():
         else: files.append(rel)
     plan = PLAN + ([OLIVE_PINE] if a.olive_pine else [])
     plan.sort(key=lambda p: [t for t, _, _ in PLAN].index(p[0]))     # keep each terrain's cells together
-    painted({"panel1": a.panel, "panel4": a.panel4, "panel4_retake": a.panel4_retake, "panel5": a.panel5}, a.cutter, out_dir, record, plan,
-            tone_match=not a.no_tone_match)
+    cutter = a.cutter or os.path.join(os.path.dirname(os.path.abspath(a.art)), "tools", "seamless.py")
+    painted({key: os.path.join(a.art, rel) for key, rel in PANELS.items()}, cutter, out_dir, record, plan,
+            tone_match=not a.no_tone_match, level=not a.no_level)
     if not a.no_blend: blend_mask(out_dir, record)
     tilespec(a.data, a.out, files, blend=not a.no_blend)
     print("| spec | source | scaling | sheet |\n|---|---|---|---|\n" + "\n".join(record))

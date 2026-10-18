@@ -13,7 +13,7 @@ priority = 4
 ;version = ""
 
 ; Summary and full description of the tileset.
-summary = _("Freeciv45 test tileset: 192 px overhead squares, painted grassland, plains, forest, jungle, hills and mountains, scaled trident placeholders.")
+summary = _("Freeciv45 test tileset: 192 px overhead squares, painted ground for every terrain, scaled trident placeholders.")
 ;description = ""
 
 ; TODO: add more overall information fields on tiles,
@@ -204,8 +204,6 @@ tag = "coast"
 blend_layer = 0
 num_layers = 3
 layer0_match_type = "water"
-layer0_match_with = "water"
-layer0_sprite_type = "corner"
 layer1_match_type = "water"
 layer1_match_with = "water"
 layer2_match_type = "water"
@@ -216,8 +214,6 @@ tag = "floor"
 blend_layer = 0
 num_layers = 3
 layer0_match_type = "water"
-layer0_match_with = "water"
-layer0_sprite_type = "corner"
 layer1_match_type = "water"
 layer1_match_with = "water"
 layer2_match_type = "water"
@@ -228,8 +224,6 @@ tag = "lake"
 blend_layer = 0
 num_layers = 3
 layer0_match_type = "water"
-layer0_match_with = "water"
-layer0_sprite_type = "corner"
 layer1_match_type = "water"
 layer1_match_with = "water"
 layer2_match_type = "water"
@@ -240,8 +234,6 @@ tag = "inaccessible"
 blend_layer = 0
 num_layers = 3
 layer0_match_type = "water"
-layer0_match_with = "water"
-layer0_sprite_type = "corner"
 layer1_match_type = "water"
 layer1_match_with = "water"
 layer2_match_type = "water"
@@ -251,20 +243,15 @@ layer2_match_with = "water"
 ;
 [tile_arctic]
 tag = "arctic"
-blend_layer = 0
-num_layers = 3
+blend_layer = 1
+num_layers = 1
 layer0_match_type = "tundra"
-layer0_match_with = "tundra"
-layer1_match_type = "water"
-layer1_match_with = "water"
-layer2_match_type = "arctic"
 
 [tile_desert]
 tag = "desert"
 blend_layer = 1
 num_layers = 3
 layer0_match_type = "desert"
-layer0_match_with = "desert"
 layer1_match_type = "land"
 layer2_match_type = "water"
 
@@ -321,7 +308,6 @@ tag = "swamp"
 blend_layer = 1
 num_layers = 3
 layer0_match_type = "swamp"
-layer0_match_with = "swamp"
 layer1_match_type = "land"
 layer2_match_type = "water"
 
@@ -330,7 +316,6 @@ tag = "tundra"
 blend_layer = 1
 num_layers = 3
 layer0_match_type = "tundra"
-layer0_match_with = "tundra"
 layer1_match_type = "land"
 layer2_match_type = "water"
 

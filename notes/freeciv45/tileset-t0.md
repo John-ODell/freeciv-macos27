@@ -378,3 +378,70 @@ Since issue 161 the tileset is built at 192 px with `pixel_ratio = 2`: the fork'
 map at two pixels per point, so tiles stay 96 points and a Retina screen shows every pixel of the painted masters.
 The 1:1 pictures above were taken with 96 px tiles doubled by the OS. Reasons, pictures and checks:
 `notes/freeciv45/retina.md`.
+
+## Every terrain painted (issue 173, 2026-10-18)
+
+With the art repo's overnight queue finished (runs 10 to 17), `freeciv45test` paints the ground of every terrain the
+ruleset draws: grassland, plains, forest, jungle, hills, mountains, desert, tundra, glacier, swamp, ocean, lake, deep
+ocean and inaccessible, 182 cells in all. Which run and cells each terrain uses, and the cells left out on purpose:
+`tilesets/freeciv45test/RECORD.md`, "Painted ground: every terrain". `make-freeciv45test.py` now takes the art folder
+(`--art`) instead of one option per panel, and cuts every cell as `seamless.py --level` does, so the generator's
+light gradient no longer wraps into a light band across the tile.
+
+What changed in the tilespec besides the variants:
+
+- Desert, tundra, swamp, glacier and the four water terrains drop trident's edge-matched or corner sprites for
+  layer 0, like the land terrains before them.
+- Glacier keeps layer 0 only. Trident draws its ice cap on layer 1, and in the first run that cap covered the
+  painted glacier with white pixel art.
+- Glacier now blends with its land neighbours. Desert, swamp and tundra fade out from their first painted variant,
+  not from trident's sprites through the old `t.blend.*` aliases.
+- Water keeps trident's layers 1 and 2, so trident's coast pieces still draw the shore over the painted water.
+  That stays until the coastline builder exists (issue 81).
+
+**How it was checked (observed).** `tileset-t0/all-terrain.txt` runs offscreen at `QT_SCALE_FACTOR=2` on the
+1728 x 1030 pt screen. It paints 3 x 3 tile blocks next to the start stack:
+
+| Row | Blocks |
+|---|---|
+| 1 | Grassland, Plains, Forest, Jungle, Hills |
+| 2 | Mountains, Desert, Tundra, Glacier, Swamp |
+| 3 | Ocean, Lake, Deep Ocean, Inaccessible, Ocean |
+
+The client logged no sprite error or warning. A duplicate-tag warning for `t.l0.inaccessible1`, which trident also
+has, showed in the first run and is fixed. The same scene was also run on the build before this change.
+
+- `tileset-t0/all-terrain-window.jpg`: the whole window, half size.
+- `tileset-t0/all-terrain-window-before.jpg`: the same scene on the build before.
+- `tileset-t0/all-terrain-after-1to1.png` and `tileset-t0/all-terrain-before-1to1.png`: 1:1 device pixels, the
+  same area. It shows the jungle edge, tundra, glacier, deep ocean and inaccessible.
+
+![After, 1:1](tileset-t0/all-terrain-after-1to1.png)
+![Before, 1:1](tileset-t0/all-terrain-before-1to1.png)
+
+What the pictures show:
+
+1. **Every block is painted.** Before, desert, tundra, glacier, swamp and the water were trident's flat pixel art.
+   Now each one reads as its terrain:
+   - glacier is cracked blue-white ice;
+   - deep ocean is dark swell, the ocean clear teal and the lake darker green-teal;
+   - inaccessible is black broken rock with ice.
+   Grassland, hills and jungle changed too, to their newer runs (15, 16 and 17): a greener meadow, dry ochre hills
+   and a jungle without mist.
+2. **The land blends.** Glacier fades into the jungle and tundra beside it over the same 48 px band as the other land
+   terrains, and tundra into jungle, desert and swamp.
+3. **The water does not blend.** Ocean, deep ocean, lake and inaccessible meet with a straight hard edge. Trident's
+   corner sprites used to shade one water depth into the next, and the painted water drops them. Its shores are
+   trident's coast pieces scaled 6.4x: a blocky blue and green (white next to glacier) zigzag between painted
+   tiles. Both are the coastline builder's job (issue 81, comment added there).
+4. **Faults the runs log already names show in game.**
+   - Tundra is busy, and its tile grid shows as steps in the blue-grey snow patches (run 12).
+   - Swamp reads as brown dirt with no water (run 13).
+   - The plains bank cells pull plains towards a lighter straw. The tone match moved them to the plains' mean, and
+     the five run 6 rows 3 to 4 cells and the five bank cells now differ in texture only.
+
+Not checked:
+- glacier next to ocean beyond this patch;
+- desert, tundra and swamp in a generated map's real layout;
+- other clients;
+- any zoom level.

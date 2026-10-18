@@ -1,0 +1,14 @@
+# Every terrain in one view (issue 173): 3 x 3 tile blocks from two tiles above the start stack, land in two rows, water below.
+# Run with QT_SCALE_FACTOR=2 on the 1728 x 1030 pt screen; the shot is 1:1 device pixels.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd local n = {{"Grassland", "Plains", "Forest", "Jungle", "Hills"}, {"Mountains", "Desert", "Tundra", "Glacier", "Swamp"}, {"Ocean", "Lake", "Deep Ocean", "Inaccessible", "Ocean"}}; for dy = -2, 6 do for dx = -7, 7 do local t = find.tile($X + dx, $Y + dy); if t then edit.change_terrain(t, find.terrain(n[math.floor((dy + 2) / 3) + 1][math.floor((dx + 7) / 3) + 1])) end end end
+wait 8000
+key escape
+wait 1000
+dismiss
+state all
+shot all-terrain
+quit
