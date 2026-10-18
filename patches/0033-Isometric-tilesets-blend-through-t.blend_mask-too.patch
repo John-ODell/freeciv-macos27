@@ -1,0 +1,154 @@
+From 563ce2a9333e82d1fef53f3b2da577faeb732adf Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 14:34:16 -0500
+Subject: [PATCH] Isometric tilesets blend through t.blend_mask too
+
+The blend masks (t.blend_mask and t.blend_mask_2 and up) were read only
+for overhead square tilesets. An isometric tileset with square tiles can
+now have them as well: 3x3 tiles in map order, each tile's part a
+diamond in that tile's own rectangle. The client then uses them in
+place of t.dither_tile. t.blend_mask_same stays overhead only, because
+its strips are cut along a square tile's edges.
+
+The blend pieces are one tile in size, so they are now drawn at the
+tile's own origin. They were drawn at the full tile offset, which is 0
+in overhead view but half a tile up in isometric view.
+---
+ client/tilespec.c | 61 ++++++++++++++++++++++++++++-------------------
+ 1 file changed, 37 insertions(+), 24 deletions(-)
+
+diff --git a/client/tilespec.c b/client/tilespec.c
+index a74017c..61173e2 100644
+--- a/client/tilespec.c
++++ b/client/tilespec.c
+@@ -203,8 +203,8 @@ struct drawing_data {
+   int blending; /* layer, 0 = none */
+   struct sprite *blender;
+   struct sprite *blend[8]; /* Indexed by a direction4 in isometric view,
+-                            * by a direction8 in overhead view with
+-                            * t.blend_mask */
++                            * by a direction8 with t.blend_mask (square
++                            * tiles, overhead or isometric) */
+   /* Overhead view: blend[] through t.blend_mask_2 and up, edges only
+    * (indexed by a direction8; the corners are always blend[]). */
+   struct sprite *blend_more[MAX_BLEND_MASKS - 1][8];
+@@ -267,11 +267,13 @@ struct named_sprites {
+     /* The panel sprites for showing tax % allocations. */
+     *tax_luxury, *tax_science, *tax_gold,
+     *dither_tile,     /* Only used for isometric view */
+-    *blend_mask,      /* Overhead square tilesets only, optional: 3x3 tiles,
+-                       * how far a terrain fades into each neighbour */
++    *blend_mask,      /* Square tilesets only (overhead or isometric),
++                       * optional: 3x3 tiles in map order, how far a
++                       * terrain fades into each neighbour */
+     *blend_mask_more[MAX_BLEND_MASKS - 1], /* t.blend_mask_2 ..., optional */
+-    *blend_mask_same; /* Optional: how a variant fades into a neighbour
+-                       * with another variant of the same terrain */
++    *blend_mask_same; /* Optional, overhead only: how a variant fades into
++                       * a neighbour with another variant of the same
++                       * terrain */
+ 
+   struct {
+     struct sprite
+@@ -3246,7 +3248,7 @@ static bool blend_mask_fits(struct tileset *t, struct sprite *mask,
+   if (abs(mw - 3 * t->normal_tile_width) > 3
+       || abs(mh - 3 * t->normal_tile_height) > 3) {
+     log_error("Tileset \"%s\": %s is %dx%d, not 3x3 tiles (%dx%d); "
+-              "not used for blending in overhead view.",
++              "not used for blending.",
+               tileset_name_get(t), tag, mw, mh,
+               3 * t->normal_tile_width, 3 * t->normal_tile_height);
+     return FALSE;
+@@ -3288,10 +3290,14 @@ static void tileset_lookup_sprite_tags(struct tileset *t)
+   t->sprites.blend_mask_same = NULL;
+   if (t->type == TS_ISOMETRIC) {
+     SET_SPRITE(dither_tile, "t.dither_tile");
+-  } else if (t->hex_width == 0 && t->hex_height == 0) {
+-    /* Blending in overhead view: the tileset's own soft mask, if any,
+-     * more masks to pick from per edge, and a mask for two variants of
+-     * one terrain. */
++  }
++  if (t->hex_width == 0 && t->hex_height == 0) {
++    /* Blending with square tiles: the tileset's own soft mask, if any,
++     * more masks to pick from per edge, and, overhead only, a mask for two
++     * variants of one terrain. The masks are 3x3 tiles laid out in map
++     * order, each tile's part drawn in that tile's own rectangle, so in
++     * isometric view each part is a diamond and t.dither_tile is then left
++     * unused. */
+     SET_SPRITE_OPT(blend_mask, "t.blend_mask");
+     if (!blend_mask_fits(t, t->sprites.blend_mask, "t.blend_mask")) {
+       t->sprites.blend_mask = NULL;
+@@ -3312,9 +3318,13 @@ static void tileset_lookup_sprite_tags(struct tileset *t)
+         t->sprites.blend_mask_more[k - 2] = more;
+         t->num_blend_masks = k;
+       }
+-      SET_SPRITE_OPT(blend_mask_same, "t.blend_mask_same");
+-      if (!blend_mask_fits(t, t->sprites.blend_mask_same,
+-                           "t.blend_mask_same")) {
++      if (t->type != TS_ISOMETRIC) {
++        /* Its strips are cut along the edges of a square tile. */
++        SET_SPRITE_OPT(blend_mask_same, "t.blend_mask_same");
++      }
++      if (t->sprites.blend_mask_same != NULL
++          && !blend_mask_fits(t, t->sprites.blend_mask_same,
++                              "t.blend_mask_same")) {
+         t->sprites.blend_mask_same = NULL;
+       }
+     }
+@@ -4598,7 +4608,7 @@ void tileset_setup_tile_type(struct tileset *t,
+   }
+ 
+   if (NULL != draw->blender && NULL != t->sprites.blend_mask) {
+-    /* Overhead view: t.blend_mask is 3x3 tiles with this terrain's tile in
++    /* Square tiles: t.blend_mask is 3x3 tiles with this terrain's tile in
+      * the middle, and says how strongly the terrain shows in each of the
+      * eight tiles around it. blend[dir] is the whole blender tile seen
+      * through the part of the mask that lies on the tile which has this
+@@ -5560,7 +5570,7 @@ static int fill_blend_variant(const struct tileset *t,
+                          TRUE);
+   }
+   blend_rect(t, dir8, TRUE, &x, &y, &w, &h);
+-  ADD_SPRITE(*piece, TRUE, FULL_TILE_X_OFFSET + x, FULL_TILE_Y_OFFSET + y);
++  ADD_SPRITE(*piece, TRUE, x, y);
+ 
+   return sprs - saved_sprs;
+ }
+@@ -5583,11 +5593,12 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
+   enum direction4 dir = 0;
+ 
+   if (NULL != t->sprites.blend_mask) {
+-    /* Overhead view: every neighbour of another blending terrain of the
+-     * same class (land or water) fades a little way into this tile, across
+-     * the shared edge or, for a diagonal neighbour, into the shared
+-     * corner. A corner is left to the edges when a neighbour beside it has
+-     * the corner's terrain, so the same terrain is not laid twice there. */
++    /* Square tiles with t.blend_mask: every neighbour of another blending
++     * terrain of the same class (land or water) fades a little way into
++     * this tile, across the shared edge or, for a diagonal neighbour, into
++     * the shared corner. A corner is left to the edges when a neighbour
++     * beside it has the corner's terrain, so the same terrain is not laid
++     * twice there. */
+     enum direction8 dir8;
+ 
+     for (dir8 = 0; dir8 < DIR8_MAGIC_MAX; dir8++) {
+@@ -5629,12 +5640,14 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
+                                 : NULL);
+ 
+         if (NULL != piece) {
+-          ADD_SPRITE_FULL(piece);
++          ADD_SPRITE_SIMPLE(piece);
+           continue;
+         }
+       }
+-      ADD_SPRITE_FULL(pair && NULL != odraw->blend_pair[0][dir8]
+-                      ? odraw->blend_pair[0][dir8] : odraw->blend[dir8]);
++      /* The pieces are one tile in size, so they go at the tile's own
++       * origin (a full tile is taller in isometric view). */
++      ADD_SPRITE_SIMPLE(pair && NULL != odraw->blend_pair[0][dir8]
++                        ? odraw->blend_pair[0][dir8] : odraw->blend[dir8]);
+     }
+ 
+     return sprs - saved_sprs;
+-- 
+2.56.0
+
