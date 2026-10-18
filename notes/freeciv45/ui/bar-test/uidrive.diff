@@ -20,10 +20,10 @@ index 8b57da8..b7ef893 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..625501f
+index 0000000..2c10409
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,597 @@
+@@ -0,0 +1,661 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -49,11 +49,12 @@ index 0000000..625501f
 +
 +    pace MS                 delay between lines (default 900)
 +    wait MS                 extra delay
-+    hover portrait|chip N|action TEXT|button TEXT|label TEXT
-+    click portrait|chip N|action TEXT|button TEXT|label TEXT [shift]
++    hover portrait|chip N|action TEXT|button TEXT|label TEXT|tip TEXT
++    click portrait|chip N|action TEXT|button TEXT|label TEXT|tip TEXT [shift]
 +                            (button: any visible button in the window whose
 +                            text contains TEXT; label: a visible label whose
-+                            text is TEXT)
++                            text is TEXT; tip: any visible button whose
++                            tooltip contains TEXT, for icon-only buttons)
 +    city NAME               where the city is, its build, stock and gold
 +    chooser ROW COL         pick that cell of the open production chooser,
 +                            as a click on it does (selection changed)
@@ -64,9 +65,11 @@ index 0000000..625501f
 +    clicktile DX DY         left click the tile DX, DY from the focus unit
 +                            (through action_button_pressed, which the map's
 +                            mouse release calls, since that reads QCursor)
-+    option on|off           gui_qt_freeciv45_panels, through its callback
++    option [NAME] on|off    a boolean client option through its callback
++                            (default gui_qt_freeciv45_panels)
 +    chat TEXT               send a chat line or a /command to the server
 +    dismiss                 close the modal boxes (welcome message...)
++                            and an open popup menu
 +    unit ID                 where unit ID is, its activity and orders
 +    state LABEL             append the state to drive.log
 +    shot NAME               state, then NAME.png of the window (+ tooltip)
@@ -120,6 +123,7 @@ index 0000000..625501f
 +#include "fc_client.h"
 +#include "hudwidget.h"
 +#include "mapview.h"
++#include "sidebar.h"
 +#include "unitbar.h"
 +#include "uidrive.h"
 +
@@ -189,6 +193,21 @@ index 0000000..625501f
 +  if (w.size() >= 3 && w[1] == "button") {
 +    foreach (QAbstractButton *b, gui()->findChildren<QAbstractButton *>()) {
 +      if (b->isVisible() && b->text().contains(w[2], Qt::CaseInsensitive)) {
++        return b;
++      }
++    }
++  }
++  if (w.size() >= 3 && w[1] == "tip") {
++    QString tip = QStringList(w.mid(2)).join(' ');
++
++    // An exact tooltip first, then one that contains the text
++    foreach (QAbstractButton *b, gui()->findChildren<QAbstractButton *>()) {
++      if (b->isVisible() && b->toolTip() == tip) {
++        return b;
++      }
++    }
++    foreach (QAbstractButton *b, gui()->findChildren<QAbstractButton *>()) {
++      if (b->isVisible() && b->toolTip().contains(tip, Qt::CaseInsensitive)) {
 +        return b;
 +      }
 +    }
@@ -297,6 +316,43 @@ index 0000000..625501f
 +    s += QString("\n   minimap visible %1, chat visible %2")
 +         .arg(gui()->minimapview_wdg->isVisible() ? "yes" : "no")
 +         .arg(gui()->infotab->isVisible() ? "yes" : "no");
++  }
++  {
++    // The Freeciv45 edges: top strip, edge column, and the old sidebar
++    QWidget *strip = gui()->findChild<QWidget *>("top_strip");
++    QWidget *col = gui()->findChild<QWidget *>("edge_column");
++    QWidget *tab = gui()->game_tab_widget->currentWidget();
++
++    if (strip != nullptr && strip->isVisible()) {
++      QStringList stexts;
++
++      foreach (QAbstractButton *b, strip->findChildren<QAbstractButton *>()) {
++        if (b->isVisible()) {
++          stexts << b->text() + (b->isEnabled() ? "" : " (disabled)")
++                    + (b->property("attention").toBool() ? " (!)" : "");
++        }
++      }
++      s += QString("\n   top strip %1x%2 [%3]").arg(strip->width())
++           .arg(strip->height()).arg(stexts.join(" | "));
++    } else {
++      s += "\n   top strip hidden";
++    }
++    if (col != nullptr && col->isVisible()) {
++      QStringList tips;
++
++      foreach (QAbstractButton *b, col->findChildren<QAbstractButton *>()) {
++        tips << b->toolTip();
++      }
++      s += QString("\n   edge column %1,%2 %3x%4 [%5]").arg(col->x())
++           .arg(col->y()).arg(col->width()).arg(col->height())
++           .arg(tips.join(" | "));
++    } else {
++      s += "\n   edge column hidden";
++    }
++    s += QString("\n   sidebar visible %1, game tab %2 (%3)")
++         .arg(gui()->sidebar_wdg->isVisible() ? "yes" : "no")
++         .arg(gui()->game_tab_widget->currentIndex())
++         .arg(tab != nullptr ? tab->metaObject()->className() : "none");
 +  }
 +  s += QString("\n   hud_units visible %1")
 +       .arg(gui()->unitinfo_wdg->isVisible() ? "yes" : "no");
@@ -456,12 +512,20 @@ index 0000000..625501f
 +    set_mapview_origin(mapview.gui_x0 + w[1].toInt(),
 +                       mapview.gui_y0 + w[2].toInt(), map_zoom);
 +  } else if (cmd == "option" && w.size() > 1) {
++    QString name = (w.size() > 2 ? w[1] : QString("gui_qt_freeciv45_panels"));
++
 +    option_bool_set(optset_option_by_name(client_optset,
-+                                          "gui_qt_freeciv45_panels"),
-+                    w[1] == "on");
++                                          name.toUtf8().constData()),
++                    w.last() == "on");
 +  } else if (cmd == "chat" && w.size() > 1) {
 +    send_chat(QStringList(w.mid(1)).join(' ').toUtf8().constData());
 +  } else if (cmd == "dismiss") {
++    if (QApplication::activePopupWidget() != nullptr) {
++      drive_log(QString("   closing %1").arg(
++                QApplication::activePopupWidget()->metaObject()->className()));
++      QApplication::activePopupWidget()->close();
++      QApplication::processEvents();
++    }
 +    // Close modal boxes as a player's OK or close button would
 +    for (int i = 0; i < 10 && QApplication::activeModalWidget() != nullptr;
 +         i++) {

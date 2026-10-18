@@ -1,0 +1,83 @@
+# Freeciv45 top strip and right-edge column: read them, click every button, end the turn, option off and on
+pace 1200
+wait 4000
+dismiss
+wait 1000
+state start
+shot 01-strip-column
+hover tip Gold and income
+wait 1500
+shot 02-hover-gold
+# the column's overviews open as today's report tabs; Map returns
+click tip Research
+wait 1500
+state research
+shot 03-research
+click tip Map
+wait 1000
+state map
+click tip Nations
+wait 1500
+state nations
+shot 04-nations
+click tip Cities
+wait 1500
+state cities
+shot 05-cities
+click tip Economy
+wait 1500
+state economy
+shot 06-economy
+click tip Map
+wait 1000
+click tip Units
+wait 1500
+state units
+shot 07-units
+click tip Units
+wait 1000
+state units-closed
+# the strip's numbers
+click tip max rate
+wait 1500
+state rates
+shot 08-rates
+dismiss
+wait 500
+click tip Culture and history
+wait 1500
+state culture-nations
+click tip Gold and income
+wait 1500
+state gold-economy
+click tip Map
+wait 1000
+click tip More overviews
+wait 1500
+state more
+shot 09-more-menu
+dismiss
+wait 500
+state more-closed
+# End turn from the strip
+click tip End the turn
+wait 6000
+dismiss
+wait 500
+state turn2
+shot 10-turn2
+# option off brings the sidebar back, on hides it again
+option gui_qt_freeciv45_edges off
+wait 1500
+state edges-off
+shot 11-option-off
+option gui_qt_freeciv45_edges on
+wait 1500
+state edges-on
+# a city: the strip and column stay while the overlay is open
+chat /lua cmd edit.create_city(find.unit(nil, $UNIT).owner, find.tile($X, $Y), "Testburg")
+wait 2500
+city Testburg
+state city
+shot 12-city-overlay
+quit

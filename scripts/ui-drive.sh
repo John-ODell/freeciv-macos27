@@ -21,7 +21,8 @@
 # throwaway HOME with a copy of ~/.freeciv/freeciv-client-rc-3.2. The client reads its options through a short
 # relative FREECIV_OPT because the options path is a 256-byte buffer (client/options.c) and a long <outdir>
 # truncates it. The connection gets cmdlevel admin after the start, so "chat /lua cmd ..." lines work.
-# The client window shows on screen while it runs: clicking into it changes the run.
+# The client runs offscreen (QT_QPA_PLATFORM=offscreen on a 1600x1000 1x screen), so no window opens over the
+# desktop; UI_DRIVE_VISIBLE=1 shows the window instead, and clicking into it then changes the run.
 set -u
 [ $# -ge 2 ] || { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 SCRIPT="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; OUT="$2"; PORT="${3:-5720}"; THEME="${4:-NightStalker}"
@@ -57,7 +58,18 @@ SPID=$!
 ( exec sleep 1800 ) > "$OUT/fifo" &
 HPID=$!
 sleep 3
-( cd "$OUT" && HOME="$OUT/home" FREECIV_OPT=home/.freeciv/freeciv-client-rc-3.2 FREECIV_UI_DRIVE="$SCRIPT" \
+if [ "${UI_DRIVE_VISIBLE:-0}" = 1 ]; then
+  QPA="${QT_QPA_PLATFORM:-}"
+else
+  cat > "$OUT/offscreen.json" <<'JSON'
+{ "windowFrameMargins": false,
+  "screens": [ { "name": "drive", "x": 0, "y": 0, "width": 1600, "height": 1000,
+                 "logicalDpi": 96, "logicalBaseDpi": 96, "dpr": 1 } ] }
+JSON
+  QPA="offscreen:configfile=$OUT/offscreen.json"
+fi
+( cd "$OUT" && if [ -n "$QPA" ]; then export QT_QPA_PLATFORM="$QPA"; fi
+  HOME="$OUT/home" FREECIV_OPT=home/.freeciv/freeciv-client-rc-3.2 FREECIV_UI_DRIVE="$SCRIPT" \
   FREECIV_UI_DRIVE_OUT="$OUT" exec "$BIN/freeciv-qt" -a -s localhost -p "$PORT" -n Probe -t trident \
   > "$OUT/client.log" 2>&1 ) &
 CPID=$!
