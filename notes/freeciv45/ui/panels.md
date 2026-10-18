@@ -335,7 +335,11 @@ tested and what was not in `first-slice.md`, and screenshots `first-slice-on.png
 
 The city overlay's first slice (5.4 item 3) was prepared the same way under issue #135: `city-overlay-slice.diff`,
 with what it does, how it was built and what a game showed in `city-overlay-slice.md`, and the shots and drive
-script in `city-test/`.
+script in `city-test/`. It went onto the fork unchanged as patch 0017 (issue #137).
+
+The first slice of section 8, the top strip and the right-edge column with the overview buttons, went onto the fork
+as patch 0018 (issue #140) behind its own option, `gui_qt_freeciv45_edges`; what it does and how it was checked is in
+`edges-slice.md`, the shots in `edges-test/`. The badges (#143) and the "what next" button (#144) follow.
 
 ## 8. The map's edges: top strip, right-edge column, "what next" and the tile box
 

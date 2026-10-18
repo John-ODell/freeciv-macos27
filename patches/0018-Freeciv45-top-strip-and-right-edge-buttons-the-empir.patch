@@ -1,0 +1,883 @@
+From 0a0ff8e373d74eaa767da738c4cdd4a686dde4b9 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 21:30:10 -0500
+Subject: [PATCH] Freeciv45 top strip and right-edge buttons: the empire's
+ numbers and the overviews replace the sidebar
+
+A new Qt client option, gui_qt_freeciv45_edges ("Freeciv45 top strip and
+edge buttons", default on), hides the left sidebar and puts two frames
+around the map instead:
+
+- A top strip with research (the tech, bulbs per turn and the turns left),
+  gold and income, the tax, luxury and science rates, culture with the
+  history gained per turn, the year and turn, and End turn. Each number is a
+  button: research opens the science report, gold the economy report, the
+  rates the rates dialog, culture the nations report, the turn returns to
+  the map. End turn is greyed out and stands out as the sidebar's Turn Done
+  did.
+- A right-edge column of round buttons: Map, Research, Nations, Cities,
+  Units and Economy, which open today's reports, and More, a menu for
+  demographics, wonders, top cities, achievements and the spaceship.
+
+Switching the option off brings the sidebar back and removes both frames.
+The strip refreshes with the sidebar's tooltips, which follow the player,
+research and turn packets. Both frames are themed in the NightStalker and
+System resource.qss. First slice of notes/freeciv45/ui/panels.md section 8;
+the notification badges and the "what next" button come later.
+---
+ client/gui-qt/Makefile.am                    |   3 +
+ client/gui-qt/edgebar.cpp                    | 375 +++++++++++++++++++
+ client/gui-qt/edgebar.h                      |  75 ++++
+ client/gui-qt/fc_client.cpp                  |   2 +
+ client/gui-qt/fc_client.h                    |   4 +
+ client/gui-qt/gui_main.cpp                   |  12 +
+ client/gui-qt/pages.cpp                      |  19 +
+ client/gui-qt/sidebar.cpp                    |   7 +
+ client/options.c                             |   8 +
+ client/options.h                             |   1 +
+ data/themes/gui-qt/NightStalker/resource.qss |  59 +++
+ data/themes/gui-qt/System/resource.qss       |  58 +++
+ meson.build                                  |   2 +
+ 13 files changed, 625 insertions(+)
+ create mode 100644 client/gui-qt/edgebar.cpp
+ create mode 100644 client/gui-qt/edgebar.h
+
+diff --git a/client/gui-qt/Makefile.am b/client/gui-qt/Makefile.am
+index a3e4574..e2ce4da 100644
+--- a/client/gui-qt/Makefile.am
++++ b/client/gui-qt/Makefile.am
+@@ -46,6 +46,7 @@ MOC_FILES = \
+ 	meta_gotodlg.cpp	\
+ 	meta_hudwidget.cpp	\
+ 	meta_cityoverlay.cpp	\
++	meta_edgebar.cpp	\
+ 	meta_unitbar.cpp
+ 
+ libgui_qt_la_SOURCES = \
+@@ -67,6 +68,8 @@ libgui_qt_la_SOURCES = \
+ 	dialogs.h	\
+ 	diplodlg.cpp	\
+ 	diplodlg.h	\
++	edgebar.cpp	\
++	edgebar.h	\
+ 	fc_client.cpp	\
+ 	fc_client.h	\
+ 	fonts.cpp	\
+diff --git a/client/gui-qt/edgebar.cpp b/client/gui-qt/edgebar.cpp
+new file mode 100644
+index 0000000..18d7d4b
+--- /dev/null
++++ b/client/gui-qt/edgebar.cpp
+@@ -0,0 +1,375 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++// Qt
++#include <QHBoxLayout>
++#include <QMenu>
++#include <QPushButton>
++#include <QStyle>
++#include <QVBoxLayout>
++
++// utility
++#include "fcintl.h"
++
++// common
++#include "calendar.h"
++#include "city.h"
++#include "culture.h"
++#include "game.h"
++#include "player.h"
++#include "research.h"
++
++// client
++#include "client_main.h"
++#include "climisc.h"
++#include "options.h"
++#include "text.h"
++
++// gui-qt
++#include "cityrep.h"
++#include "edgebar.h"
++#include "fc_client.h"
++#include "plrdlg.h"
++#include "repodlgs.h"
++#include "sidebar.h"
++#include "spaceshipdlg.h"
++
++// Logical sizes at 1x (panels.md section 8.5); the same at 2x.
++static const int STRIP_HEIGHT = 32;
++static const int STRIP_ICON = 18;
++static const int COLUMN_WIDTH = 64;
++static const int BUTTON_SIZE = 44;
++static const int BUTTON_ICON = 38;
++
++/************************************************************************//**
++  A number with its sign, for per-turn changes
++****************************************************************************/
++static QString signed_number(int n)
++{
++  return (n >= 0 ? "+" : "") + QString::number(n);
++}
++
++/************************************************************************//**
++  Restyle a widget after one of its stylesheet properties changed
++****************************************************************************/
++static void set_attention(QWidget *w, bool attention)
++{
++  if (w->property("attention").toBool() == attention) {
++    return;
++  }
++  w->setProperty("attention", attention);
++  w->style()->unpolish(w);
++  w->style()->polish(w);
++}
++
++/************************************************************************//**
++  The player's own bulbs per turn, as the client's science text counts them
++****************************************************************************/
++static int own_bulbs_per_turn(struct player *pplayer)
++{
++  int bulbs = 0;
++
++  city_list_iterate(pplayer->cities, pcity) {
++    bulbs += pcity->surplus[O_SCIENCE];
++  } city_list_iterate_end;
++
++  return bulbs - pplayer->client.tech_upkeep;
++}
++
++/************************************************************************//**
++  The culture the player gains this turn: the nation's history and every
++  city's, as the server adds them at turn change
++****************************************************************************/
++static int culture_per_turn(struct player *pplayer)
++{
++  int gain = nation_history_gain(pplayer);
++
++  city_list_iterate(pplayer->cities, pcity) {
++    gain += city_history_gain(pcity);
++  } city_list_iterate_end;
++
++  return gain;
++}
++
++/************************************************************************//**
++  Return to the map from a report tab; the strip's turn and the column's
++  Map button
++****************************************************************************/
++static void show_map(bool nothing)
++{
++  side_show_map(nothing);
++}
++
++/************************************************************************//**
++  Open the rates dialog
++****************************************************************************/
++static void open_rates(bool nothing)
++{
++  side_rates_wdg(nothing);
++}
++
++/************************************************************************//**
++  End the turn
++****************************************************************************/
++static void end_turn(bool nothing)
++{
++  side_finish_turn(nothing);
++}
++
++/************************************************************************//**
++  The strip: left to right research, gold, rates, culture; at the right end
++  the year and turn and End turn.
++****************************************************************************/
++top_strip::top_strip(QWidget *parent) : QFrame(parent)
++{
++  QHBoxLayout *row = new QHBoxLayout(this);
++
++  setObjectName("top_strip");
++  row->setContentsMargins(8, 0, 8, 0);
++  row->setSpacing(6);
++  setFixedHeight(STRIP_HEIGHT);
++
++  research_btn = add_number("research", side_left_click_science);
++  gold_btn = add_number("economy", economy_report_dialog_popup);
++  rates_btn = add_number(QString(), open_rates);
++  culture_btn = add_number(QString(), popup_players_dialog);
++  row->addStretch(1);
++  turn_btn = add_number(QString(), show_map);
++
++  // TRANS: the Freeciv45 top strip's end turn button
++  end_turn_btn = new QPushButton(QString(_("End turn")), this);
++  end_turn_btn->setToolTip(QString(_("End the turn (Shift+Return)")));
++  end_turn_btn->setFocusPolicy(Qt::NoFocus);
++  end_turn_btn->setCursor(Qt::PointingHandCursor);
++  connect(end_turn_btn, &QPushButton::clicked, this, [=]() {
++    end_turn(true);
++  });
++  row->addWidget(end_turn_btn);
++}
++
++/************************************************************************//**
++  One number of the strip: a flat button that runs click when pressed
++****************************************************************************/
++QToolButton *top_strip::add_number(const QString &icon,
++                                   void (*click)(bool))
++{
++  QToolButton *btn = new QToolButton(this);
++
++  if (!icon.isEmpty()) {
++    btn->setIcon(fc_icons::instance()->get_icon(icon));
++    btn->setIconSize(QSize(STRIP_ICON, STRIP_ICON));
++    btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
++  } else {
++    btn->setToolButtonStyle(Qt::ToolButtonTextOnly);
++  }
++  btn->setAutoRaise(true);
++  btn->setFocusPolicy(Qt::NoFocus);
++  btn->setCursor(Qt::PointingHandCursor);
++  connect(btn, &QToolButton::clicked, this, [=]() {
++    click(true);
++  });
++  layout()->addWidget(btn);
++
++  return btn;
++}
++
++/************************************************************************//**
++  Read the numbers again; called with the sidebar's tooltips, which follow
++  the player, research and turn packets
++****************************************************************************/
++void top_strip::refresh()
++{
++  struct player *pplayer = client_player();
++  bool playing = (pplayer != nullptr && !client_is_global_observer());
++  QString s;
++
++  research_btn->setVisible(playing);
++  gold_btn->setVisible(playing);
++  rates_btn->setVisible(playing);
++  culture_btn->setVisible(playing);
++
++  /* TRANS: the Freeciv45 top strip's year and turn, "4000 BCE  Turn 1" */
++  s = QString(_("%1  Turn %2")).arg(calendar_text(),
++                                    QString::number(game.info.turn));
++  if (current_turn_timeout() > 0) {
++    s += QString("  %1").arg(get_timeout_label_text());
++  }
++  turn_btn->setText(s);
++  turn_btn->setToolTip(QString(get_info_label_text_popup()));
++
++  if (!playing) {
++    return;
++  }
++
++  {
++    const struct research *presearch = research_get(pplayer);
++
++    if (presearch->researching == A_UNSET) {
++      // TRANS: the Freeciv45 top strip when no research is set
++      research_btn->setText(QString(_("Choose research")));
++      set_attention(research_btn, true);
++    } else {
++      research_btn->setText(QString("%1 %2  %3")
++        .arg(research_advance_name_translation(presearch,
++                                               presearch->researching),
++             signed_number(own_bulbs_per_turn(pplayer)),
++             get_science_target_text(nullptr)));
++      set_attention(research_btn, false);
++    }
++    research_btn->setToolTip(QString(science_dialog_text()));
++  }
++
++  /* TRANS: the Freeciv45 top strip's gold and income, "123 (+5)" */
++  gold_btn->setText(QString(_("%1 (%2)"))
++    .arg(QString::number(pplayer->economic.gold),
++         signed_number(player_get_expected_income(pplayer))));
++  gold_btn->setToolTip(QString(_("Gold and income per turn; opens the "
++                                 "economy report")));
++
++  /* TRANS: the Freeciv45 top strip's rates, tax, luxury and science */
++  rates_btn->setText(QString(_("Tax %1  Lux %2  Sci %3"))
++    .arg(pplayer->economic.tax).arg(pplayer->economic.luxury)
++    .arg(pplayer->economic.science));
++  rates_btn->setToolTip(QString(_("%1 - max rate: %2%; click to change"))
++    .arg(government_name_for_player(pplayer),
++         QString::number(get_player_bonus(pplayer, EFT_MAX_RATES))));
++
++  /* TRANS: the Freeciv45 top strip's culture, "Culture 120 (+3)" */
++  culture_btn->setText(QString(_("Culture %1 (%2)"))
++    .arg(QString::number(pplayer->client.culture),
++         signed_number(culture_per_turn(pplayer))));
++  culture_btn->setToolTip(QString(_("Culture and history gained per turn; "
++                                    "opens the nations report")));
++}
++
++/************************************************************************//**
++  End turn is greyed out while the turn cannot be ended
++****************************************************************************/
++void top_strip::set_turn_done_enabled(bool enabled)
++{
++  end_turn_btn->setEnabled(enabled);
++}
++
++/************************************************************************//**
++  End turn stands out when every unit has moved
++****************************************************************************/
++void top_strip::set_turn_done_attention(bool attention)
++{
++  set_attention(end_turn_btn, attention);
++}
++
++/************************************************************************//**
++  A round button; resource.qss draws the circle
++****************************************************************************/
++edge_button::edge_button(const QString &icon, const QString &tip,
++                         QWidget *parent) : QToolButton(parent)
++{
++  setIcon(fc_icons::instance()->get_icon(icon));
++  setIconSize(QSize(BUTTON_ICON, BUTTON_ICON));
++  setFixedSize(BUTTON_SIZE, BUTTON_SIZE);
++  setToolTip(tip);
++  setFocusPolicy(Qt::NoFocus);
++  setCursor(Qt::PointingHandCursor);
++}
++
++/************************************************************************//**
++  The column: Map, the five overviews, and More for the rest
++****************************************************************************/
++edge_column::edge_column(QWidget *parent) : QFrame(parent)
++{
++  QVBoxLayout *col = new QVBoxLayout(this);
++  edge_button *more;
++  QMenu *menu;
++
++  setObjectName("edge_column");
++  col->setContentsMargins(0, 10, 0, 10);
++  col->setSpacing(10);
++  col->setAlignment(Qt::AlignTop | Qt::AlignHCenter);
++  setFixedWidth(COLUMN_WIDTH);
++
++  add_button("view", QString(_("Map")), show_map);
++  add_button("research", QString(_("Research")), side_left_click_science);
++  add_button("nations", QString(_("Nations")), popup_players_dialog);
++  add_button("cities", QString(_("Cities")), city_report_dialog_popup);
++  add_button("units", QString(_("Units")), toggle_units_report);
++  add_button("economy", QString(_("Economy")), economy_report_dialog_popup);
++
++  // TRANS: the Freeciv45 right-edge button for the other overviews
++  more = new edge_button("list-add", QString(_("More overviews")),
++                         this);
++  menu = new QMenu(more);
++  menu->addAction(QString(_("Demographics")), [=]() {
++    send_report_request(REPORT_DEMOGRAPHIC);
++  });
++  menu->addAction(QString(_("Wonders of the World")), [=]() {
++    send_report_request(REPORT_WONDERS_OF_THE_WORLD_LONG);
++  });
++  menu->addAction(QString(_("Top Cities")), [=]() {
++    send_report_request(REPORT_TOP_CITIES);
++  });
++  menu->addAction(QString(_("Achievements")), [=]() {
++    send_report_request(REPORT_ACHIEVEMENTS);
++  });
++  menu->addAction(QString(_("Spaceship")), [=]() {
++    if (client_has_player()) {
++      popup_spaceship_dialog(client_player());
++    }
++  });
++  more->setMenu(menu);
++  more->setPopupMode(QToolButton::InstantPopup);
++  col->addWidget(more, 0, Qt::AlignHCenter);
++}
++
++/************************************************************************//**
++  One round button of the column
++****************************************************************************/
++edge_button *edge_column::add_button(const QString &icon,
++                                     const QString &tip,
++                                     void (*click)(bool))
++{
++  edge_button *btn = new edge_button(icon, tip, this);
++
++  connect(btn, &QToolButton::clicked, this, [=]() {
++    click(true);
++  });
++  layout()->addWidget(btn);
++  layout()->setAlignment(btn, Qt::AlignHCenter);
++
++  return btn;
++}
++
++/************************************************************************//**
++  With gui_qt_freeciv45_edges on, the strip and the column replace the
++  left sidebar; off brings the sidebar back
++****************************************************************************/
++void apply_freeciv45_edges(void)
++{
++  bool on = gui_options.gui_qt_freeciv45_edges;
++
++  if (gui()->sidebar_wdg != nullptr) {
++    gui()->sidebar_wdg->setVisible(!on);
++  }
++  if (gui()->edgecolumn_wdg != nullptr) {
++    gui()->edgecolumn_wdg->setVisible(on);
++  }
++  if (gui()->topstrip_wdg != nullptr) {
++    gui()->topstrip_wdg->setVisible(on);
++    if (on) {
++      gui()->topstrip_wdg->refresh();
++    }
++  }
++}
+diff --git a/client/gui-qt/edgebar.h b/client/gui-qt/edgebar.h
+new file mode 100644
+index 0000000..12f992d
+--- /dev/null
++++ b/client/gui-qt/edgebar.h
+@@ -0,0 +1,75 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifndef FC__EDGEBAR_H
++#define FC__EDGEBAR_H
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++// Qt
++#include <QFrame>
++#include <QToolButton>
++
++class QLabel;
++class QPushButton;
++
++/****************************************************************************
++  The top strip: the empire's numbers, each a button that opens its report,
++  the year and turn, and End turn (panels.md section 8.1)
++****************************************************************************/
++class top_strip : public QFrame
++{
++  Q_OBJECT
++public:
++  top_strip(QWidget *parent);
++  void refresh();
++  void set_turn_done_enabled(bool enabled);
++  void set_turn_done_attention(bool attention);
++private:
++  QToolButton *add_number(const QString &icon, void (*click)(bool));
++  QToolButton *research_btn;
++  QToolButton *gold_btn;
++  QToolButton *rates_btn;
++  QToolButton *culture_btn;
++  QToolButton *turn_btn;
++  QPushButton *end_turn_btn;
++};
++
++/****************************************************************************
++  One round button on the right-edge column
++****************************************************************************/
++class edge_button : public QToolButton
++{
++  Q_OBJECT
++public:
++  edge_button(const QString &icon, const QString &tip, QWidget *parent);
++};
++
++/****************************************************************************
++  The right-edge column: round buttons for the overviews (panels.md 8.2)
++****************************************************************************/
++class edge_column : public QFrame
++{
++  Q_OBJECT
++public:
++  edge_column(QWidget *parent);
++private:
++  edge_button *add_button(const QString &icon, const QString &tip,
++                          void (*click)(bool));
++};
++
++void apply_freeciv45_edges(void);
++
++#endif // FC__EDGEBAR_H
+diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
+index f85bf90..491e2dd 100644
+--- a/client/gui-qt/fc_client.cpp
++++ b/client/gui-qt/fc_client.cpp
+@@ -128,6 +128,8 @@ fc_client::fc_client() : QMainWindow()
+   unitinfo_wdg = nullptr;
+   unitbar_wdg = nullptr;
+   cityoverlay_wdg = nullptr;
++  topstrip_wdg = nullptr;
++  edgecolumn_wdg = nullptr;
+   battlelog_wdg = nullptr;
+   interface_locked = false;
+   map_scale = 1.0f;
+diff --git a/client/gui-qt/fc_client.h b/client/gui-qt/fc_client.h
+index 6953712..d327d30 100644
+--- a/client/gui-qt/fc_client.h
++++ b/client/gui-qt/fc_client.h
+@@ -60,11 +60,13 @@ enum connection_state {
+ };
+ 
+ class city_overlay;
++class edge_column;
+ class fc_sidebar;
+ class fc_sidetax;
+ class fc_sidewidget;
+ class MainWindow;
+ class pregame_options;
++class top_strip;
+ class unit_bar;
+ class QApplication;
+ class QDialog;
+@@ -273,6 +275,8 @@ public:
+   hud_units *unitinfo_wdg;
+   unit_bar *unitbar_wdg;
+   city_overlay *cityoverlay_wdg;
++  top_strip *topstrip_wdg;
++  edge_column *edgecolumn_wdg;
+   hud_battle_log *battlelog_wdg;
+   bool interface_locked;
+   fc_sidewidget *sw_cunit;
+diff --git a/client/gui-qt/gui_main.cpp b/client/gui-qt/gui_main.cpp
+index 37a0367..d4fa8b7 100644
+--- a/client/gui-qt/gui_main.cpp
++++ b/client/gui-qt/gui_main.cpp
+@@ -58,6 +58,7 @@
+ #include "helpdlg.h"
+ #include "hudwidget.h"
+ #include "cityoverlay.h"
++#include "edgebar.h"
+ #include "unitbar.h"
+ #include "qtg_cxxside.h"
+ 
+@@ -79,6 +80,7 @@ static void apply_help_font(struct option *poption);
+ static void apply_notify_font(struct option *poption);
+ static void apply_sidebar(struct option *poption);
+ static void apply_panels(struct option *poption);
++static void apply_edges(struct option *poption);
+ static void apply_titlebar(struct option *poption);
+ static void apply_fullscreen(struct option *poption);
+ 
+@@ -268,6 +270,8 @@ void qtg_options_extra_init()
+                           apply_sidebar);
+   option_var_set_callback(gui_qt_freeciv45_panels,
+                           apply_panels);
++  option_var_set_callback(gui_qt_freeciv45_edges,
++                          apply_edges);
+   option_var_set_callback(gui_qt_fullscreen,
+                           apply_fullscreen);
+ #undef option_var_set_callback
+@@ -430,6 +434,14 @@ static void apply_panels(struct option *poption)
+   }
+ }
+ 
++/************************************************************************//**
++  Show the Freeciv45 top strip and edge buttons or the old sidebar
++****************************************************************************/
++static void apply_edges(struct option *poption)
++{
++  apply_freeciv45_edges();
++}
++
+ /**********************************************************************//**
+   Change sidebar position
+ **************************************************************************/
+diff --git a/client/gui-qt/pages.cpp b/client/gui-qt/pages.cpp
+index f41acf0..6eaea1f 100644
+--- a/client/gui-qt/pages.cpp
++++ b/client/gui-qt/pages.cpp
+@@ -44,6 +44,7 @@
+ // gui-qt
+ #include "colors.h"
+ #include "dialogs.h"
++#include "edgebar.h"
+ #include "fc_client.h"
+ #include "pages.h"
+ #include "plrdlg.h"
+@@ -805,8 +806,23 @@ void fc_client::create_game_page()
+     pages_layout[PAGE_GAME]->addWidget(sidebar_wdg, 1, 2);
+   }
+   pages_layout[PAGE_GAME]->addWidget(game_tab_widget, 1, 1);
++  // Freeciv45: the top strip over everything, the edge column right of
++  // the map; column 2 stays the sidebar's right-hand place
++  topstrip_wdg = new top_strip(nullptr);
++  edgecolumn_wdg = new edge_column(nullptr);
++  pages_layout[PAGE_GAME]->addWidget(topstrip_wdg, 0, 0, 1, 4);
++  pages_layout[PAGE_GAME]->addWidget(edgecolumn_wdg, 1, 3);
+   pages_layout[PAGE_GAME]->setContentsMargins(0, 0, 0, 0);
+   pages_layout[PAGE_GAME]->setSpacing(0);
++  // Only hide here: the page's layout may not be on a widget yet, and
++  // showing a parentless widget would open it as a window. gui() is not
++  // set yet either, so apply_freeciv45_edges() cannot run.
++  if (gui_options.gui_qt_freeciv45_edges) {
++    sidebar_wdg->hide();
++  } else {
++    topstrip_wdg->hide();
++    edgecolumn_wdg->hide();
++  }
+ }
+ 
+ /**********************************************************************//**
+@@ -2187,6 +2203,9 @@ void fc_client::update_sidebar_tooltips()
+     sw_economy->set_tooltip("");
+   }
+   sw_indicators->set_tooltip(QString(get_info_label_text_popup()));
++  if (topstrip_wdg != nullptr && topstrip_wdg->isVisible()) {
++    topstrip_wdg->refresh();
++  }
+ }
+ 
+ /**********************************************************************//**
+diff --git a/client/gui-qt/sidebar.cpp b/client/gui-qt/sidebar.cpp
+index edc6576..67ebbd5 100644
+--- a/client/gui-qt/sidebar.cpp
++++ b/client/gui-qt/sidebar.cpp
+@@ -33,6 +33,7 @@
+ #include "client_main.h"
+ 
+ // gui-qt
++#include "edgebar.h"
+ #include "fc_client.h"
+ #include "repodlgs.h"
+ #include "sidebar.h"
+@@ -681,6 +682,9 @@ void side_disable_endturn(bool do_restore)
+ 
+   gui()->sw_endturn->disabled = !do_restore;
+   gui()->sw_endturn->update_final_pixmap();
++  if (gui()->topstrip_wdg != nullptr) {
++    gui()->topstrip_wdg->set_turn_done_enabled(do_restore);
++  }
+ }
+ 
+ /***********************************************************************//**
+@@ -693,6 +697,9 @@ void side_blink_endturn(bool do_restore)
+   }
+   gui()->sw_endturn->blink = !do_restore;
+   gui()->sw_endturn->update_final_pixmap();
++  if (gui()->topstrip_wdg != nullptr) {
++    gui()->topstrip_wdg->set_turn_done_attention(!do_restore);
++  }
+ }
+ 
+ /***********************************************************************//**
+diff --git a/client/options.c b/client/options.c
+index e3baae6..61c0f5a 100644
+--- a/client/options.c
++++ b/client/options.c
+@@ -380,6 +380,7 @@ struct client_options gui_options = {
+   .gui_qt_show_preview = TRUE,
+   .gui_qt_sidebar_left = TRUE,
+   .gui_qt_freeciv45_panels = TRUE,
++  .gui_qt_freeciv45_edges = TRUE,
+   .gui_qt_default_theme_name = FC_QT_DEFAULT_THEME_NAME,
+   .gui_qt_font_default = "Sans Serif,10,-1,5,75,0,0,0,0,0",
+   .gui_qt_font_notify_label = "Monospace,8,-1,5,75,0,0,0,0,0",
+@@ -3300,6 +3301,13 @@ static struct client_option client_options[] = {
+                      "a bar at the bottom of the map, with its stack and "
+                      "its common orders, instead of the unit info widget."),
+                   COC_INTERFACE, GUI_QT, TRUE, NULL),
++  GEN_BOOL_OPTION(gui_qt_freeciv45_edges,
++                  N_("Freeciv45 top strip and edge buttons"),
++                  N_("If this option is set, the empire's numbers run "
++                     "along the top of the map and round buttons for the "
++                     "overviews down its right edge, instead of the "
++                     "sidebar."),
++                  COC_INTERFACE, GUI_QT, TRUE, NULL),
+   GEN_STR_OPTION(gui_qt_wakeup_text,
+                  N_("Wake up sequence"),
+                  N_("String which will trigger sound in pregame page; "
+diff --git a/client/options.h b/client/options.h
+index 5b46f30..f41e839 100644
+--- a/client/options.h
++++ b/client/options.h
+@@ -407,6 +407,7 @@ struct client_options
+   bool gui_qt_allied_chat_only;
+   bool gui_qt_sidebar_left;
+   bool gui_qt_freeciv45_panels;
++  bool gui_qt_freeciv45_edges;
+   char gui_qt_default_theme_name[512];
+   char gui_qt_font_default[FONT_NAME_SIZE];
+   char gui_qt_font_notify_label[FONT_NAME_SIZE];
+diff --git a/data/themes/gui-qt/NightStalker/resource.qss b/data/themes/gui-qt/NightStalker/resource.qss
+index fb0b5aa..9d87d03 100644
+--- a/data/themes/gui-qt/NightStalker/resource.qss
++++ b/data/themes/gui-qt/NightStalker/resource.qss
+@@ -924,3 +924,62 @@ city_production QProgressBar::chunk {
+   background-color: #f2c14e;
+   border-radius: 3px;
+ }
++
++/* Freeciv45 top strip and right-edge column (client/gui-qt/edgebar.cpp):
++   they replace the sidebar while gui_qt_freeciv45_edges is on. */
++top_strip {
++  background-color: #1b1f26;
++  border-bottom: 1px solid #47515f;
++}
++top_strip QToolButton {
++  color: #e6e9ef;
++  background: transparent;
++  border: none;
++  border-radius: 4px;
++  padding: 2px 6px;
++}
++top_strip QToolButton:hover {
++  background-color: #323843;
++}
++top_strip QToolButton[attention="true"] {
++  color: #f2c14e;
++  font-weight: bold;
++}
++top_strip QPushButton {
++  color: #e6e9ef;
++  background-color: #323843;
++  border: 1px solid #47515f;
++  border-radius: 4px;
++  padding: 2px 14px;
++}
++top_strip QPushButton:hover {
++  background-color: #3d4552;
++}
++top_strip QPushButton[attention="true"] {
++  background-color: #2f6b3e;
++  border-color: #4f9a62;
++}
++top_strip QPushButton:disabled {
++  color: #7b8494;
++  background-color: #262b33;
++}
++edge_column {
++  background-color: #1b1f26;
++  border-left: 1px solid #47515f;
++}
++edge_button {
++  background-color: #323843;
++  border: 1px solid #47515f;
++  border-radius: 22px;
++  padding: 0px;
++}
++edge_button:hover {
++  background-color: #3d4552;
++  border-color: #f2c14e;
++}
++edge_button:pressed {
++  background-color: #4f5b6d;
++}
++edge_button::menu-indicator {
++  image: none;
++}
+diff --git a/data/themes/gui-qt/System/resource.qss b/data/themes/gui-qt/System/resource.qss
+index a9669a7..65e84d0 100644
+--- a/data/themes/gui-qt/System/resource.qss
++++ b/data/themes/gui-qt/System/resource.qss
+@@ -145,3 +145,61 @@ city_production QProgressBar::chunk {
+   background-color: #3d7bd9;
+   border-radius: 3px;
+ }
++
++/* Freeciv45 top strip and right-edge column (client/gui-qt/edgebar.cpp):
++   they replace the sidebar while gui_qt_freeciv45_edges is on. */
++top_strip {
++  background-color: #eceef1;
++  border-bottom: 1px solid #b8bcc4;
++}
++top_strip QToolButton {
++  color: #1d1f23;
++  background: transparent;
++  border: none;
++  border-radius: 4px;
++  padding: 2px 6px;
++}
++top_strip QToolButton:hover {
++  background-color: #dfe3e9;
++}
++top_strip QToolButton[attention="true"] {
++  color: #9a4f00;
++  font-weight: bold;
++}
++top_strip QPushButton {
++  color: #1d1f23;
++  background-color: #dfe3e9;
++  border: 1px solid #b8bcc4;
++  border-radius: 4px;
++  padding: 2px 14px;
++}
++top_strip QPushButton:hover {
++  background-color: #d2d8e1;
++}
++top_strip QPushButton[attention="true"] {
++  background-color: #bfe3c8;
++  border-color: #4f9a62;
++}
++top_strip QPushButton:disabled {
++  color: #8a9099;
++}
++edge_column {
++  background-color: #eceef1;
++  border-left: 1px solid #b8bcc4;
++}
++edge_button {
++  background-color: #dfe3e9;
++  border: 1px solid #b8bcc4;
++  border-radius: 22px;
++  padding: 0px;
++}
++edge_button:hover {
++  background-color: #d2d8e1;
++  border-color: #3d7bd9;
++}
++edge_button:pressed {
++  background-color: #c3cfe2;
++}
++edge_button::menu-indicator {
++  image: none;
++}
+diff --git a/meson.build b/meson.build
+index 736350d..ca99a71 100644
+--- a/meson.build
++++ b/meson.build
+@@ -3529,6 +3529,7 @@ mocced_client = qt_mod.preprocess(
+    'client/gui-qt/gotodlg.h',
+    'client/gui-qt/hudwidget.h',
+    'client/gui-qt/cityoverlay.h',
++   'client/gui-qt/edgebar.h',
+    'client/gui-qt/unitbar.h']
+   )
+ 
+@@ -3538,6 +3539,7 @@ executable('freeciv-qt',
+   'client/gui-qt/chatline.cpp',
+   'client/gui-qt/citydlg.cpp',
+   'client/gui-qt/cityoverlay.cpp',
++  'client/gui-qt/edgebar.cpp',
+   'client/gui-qt/cityrep.cpp',
+   'client/gui-qt/colors.cpp',
+   'client/gui-qt/connectdlg.cpp',
+-- 
+2.56.0
+
