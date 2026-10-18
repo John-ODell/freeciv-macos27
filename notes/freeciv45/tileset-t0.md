@@ -175,3 +175,56 @@ Run 9's pine row is two colour families: cool blue-green c1-c3 and warm olive c4
 - Jungle: no mist or pale patches at all; retake r3c5 at the row's mid lightness or drop it (issue 36).
 - Grassland: match its green to this forest's family rather than the plains (issue 26).
 - Pine: decide its terrain hook first (issue 127); if pine stays a forest look, one colour family only.
+
+## Variants matched in tone (issue 138, 2026-10-17)
+
+John saw hard square edges all over the painted ground. Inside one terrain they came from finding 2 above: each of
+the ten cells is seamless with itself, but the cells differ in lightness and colour, so wherever the client puts
+two of them side by side the boundary is a straight step. No new art was made: `tilesets/make-freeciv45test.py`
+now matches the cells of each terrain to each other before it scales them to 96 px (`match_tone`: in CIE Lab each
+channel of each cell gets the terrain's mean level and mean contrast, contrast scale held to 0.75-1.33; details and
+the before/after luma table in `tilesets/freeciv45test/RECORD.md`). Only `terrain45.png` changes; `--no-tone-match`
+rebuilds the old sheet byte for byte.
+
+### How it was checked
+
+A 25 x 17 field around the start stack was painted from the server's Lua console, grassland west of the stack and
+forest from it eastwards, fog of war off, and the Qt client was shot through the in-process driver with no window
+on screen (`QT_QPA_PLATFORM=offscreen` on a 1600 x 1000 virtual screen; the shot is the widget's own grab, so 1 px
+per tileset pixel). `scripts/ui-drive.sh` takes the tileset, the extra server lines and the screen through new
+`FREECIV_DRIVE_*` variables and now runs offscreen unless `FREECIV_DRIVE_VISIBLE=1`:
+
+    FREECIV_DRIVE_PREFIX=<driver build>/qt FREECIV_DRIVE_TILESET=freeciv45test FREECIV_DRIVE_TILESETS=<build out> \
+    FREECIV_DRIVE_SERV="set fogofwar DISABLED" FREECIV_DRIVE_QPA="offscreen:configfile=$PWD/notes/freeciv45/tileset-t0/screen-1600x1000.json" \
+    scripts/ui-drive.sh notes/freeciv45/tileset-t0/field.txt <outdir> 5741
+
+once with a scratch build made with `--no-tone-match` and once with the new one (the driver build is the fork at
+0baacdb plus `notes/freeciv45/ui/bar-test/uidrive.diff`; same seed, so the same tiles get the same variants).
+Pictures: `tileset-t0/variant-tone-before.jpg` and `variant-tone-after.jpg` (whole window, grassland left, forest
+right, the chat box over the bottom left). `scripts/tile-edge-steps.py` (new) measures the tile grid in a shot: the
+mean difference between the 8 px bands on either side of each tile edge, against the same measure across the
+tile's middle line, which is the terrain's own variation:
+
+| field | tile edges before | tile edges after | tile middles (both) |
+|---|---|---|---|
+| grassland (71 edge segments) | 30.5 | 5.2 | 7.9 |
+| forest (97 edge segments) | 14.6 | 6.8 | 8.2 |
+
+### What it looks like now
+
+- **The patchwork is gone.** The grassland field reads as one meadow instead of a chequerboard of gold and olive
+  squares, and the forest as one canopy; the tone step at a tile edge is now smaller than the variation across the
+  middle of a tile.
+- **Still visible, faintly:** the texture itself is cut at the edge. A clump of grass or a crown of trees stops at
+  a straight line where the next cell's pattern starts, so at 1:1 a careful eye still finds the grid, more in the
+  forest (big crowns) than in the meadow. Matching tone cannot fix that; a soft blend across the edge or
+  edge-matched cells from the cutter could.
+- **Still visible:** the light line across the middle of many cells (finding 4 above, Brothers-Keeper-Art issue 35)
+  is untouched, since it is inside each cell; now that the edges are quiet it is the most visible straight line in
+  the forest.
+- **Autumn is quieter.** The two autumn forest cells keep their orange crowns but are pulled towards the forest's
+  green with the rest; at map scale they read as a hint of autumn rather than an orange tile.
+- The grassland is still gold-olive, not green (finding 1): the tone match brings every cell to the meadow's mean
+  and leaves that mean alone.
+- Edges between different terrains (the grassland-forest line in the pictures) are unchanged; that is issue 141's
+  overhead blending.

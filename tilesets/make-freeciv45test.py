@@ -15,15 +15,19 @@ The painted ground comes from 5 x 5 ChatGPT panels (PLAN below): panel 1 rows 1-
 from run 9's retake (its row 5 is pine: the warm olive c4-c5 only with --olive-pine, the cool c1-c3 not at
 all, since the tilespec cannot pick a forest variant by neighbouring terrain). Each cell goes through the art
 repo's seamless cutter (192 px master, edges wrapped) and is then scaled to 96 px, giving t.l0.<terrain>1..N;
-the client picks a variant per tile from the tile index.
+the client picks a variant per tile from the tile index. Because the client puts any two variants side by side, the
+masters of each terrain are first matched in tone (match_tone): in CIE Lab every cell is moved to the terrain's mean
+lightness and colour and its contrast to the terrain's mean contrast, so the texture stays and only the cell's
+overall level changes. --no-tone-match skips it.
 
 usage: make-freeciv45test.py --data ~/freeciv-builds/qt/share/freeciv --panel PANEL1.png --panel4 RUN8.png
                              --panel4-retake RUN9.png [--olive-pine]
                              --cutter ~/Desktop/asset_generator/freeciv45/tools/seamless.py [--out tilesets]
+                             [--no-tone-match]
 Needs Pillow (python3.14 on this Mac has it).
 """
 import argparse, importlib.util, os, re
-from PIL import Image
+from PIL import Image, ImageCms, ImageStat
 
 NAME = "freeciv45test"
 TILE = 96
@@ -114,7 +118,39 @@ PLAN = [
 ]
 OLIVE_PINE = ("forest", "panel4_retake", ["r5c4", "r5c5"])   # run 9's warm olive pine; --olive-pine adds it
 
-def painted(panels, cutter, out_dir, record, plan):
+CONTRAST_CLAMP = (0.75, 1.33)    # how far match_tone may scale a cell's contrast, so each cell keeps its own texture
+
+def lab_transforms():
+    srgb, lab = ImageCms.createProfile("sRGB"), ImageCms.createProfile("LAB")
+    return (ImageCms.buildTransformFromOpenProfiles(srgb, lab, "RGB", "LAB"),
+            ImageCms.buildTransformFromOpenProfiles(lab, srgb, "LAB", "RGB"))
+
+def match_tone(tiles):
+    """Match RGB tiles of one terrain to each other in tone, keeping each one's texture. In CIE Lab (Pillow stores
+    a and b offset by 128), each channel of each tile is mapped linearly so its mean becomes the mean of all the
+    tiles' means and its standard deviation the mean of their standard deviations, the scale clamped to
+    CONTRAST_CLAMP. Returns the new tiles."""
+    to_lab, to_rgb = lab_transforms()
+    labs = [ImageCms.applyTransform(t, to_lab) for t in tiles]
+    stats = [ImageStat.Stat(lab) for lab in labs]
+    mean = [sum(st.mean[i] for st in stats) / len(stats) for i in range(3)]
+    std = [sum(st.stddev[i] for st in stats) / len(stats) for i in range(3)]
+    lo, hi = CONTRAST_CLAMP; out = []
+    for lab, st in zip(labs, stats):
+        bands = []
+        for i, band in enumerate(lab.split()):
+            k = min(max(std[i] / st.stddev[i], lo), hi) if st.stddev[i] else 1.0
+            lut = [max(0, min(255, round((v - st.mean[i]) * k + mean[i]))) for v in range(256)]
+            bands.append(band.point(lut))
+        out.append(ImageCms.applyTransform(Image.merge("LAB", bands), to_rgb))
+    return out
+
+def luma_range(tiles):
+    """(min, max) of the tiles' mean luma (Pillow's L), the measure notes/freeciv45/tileset-t0.md uses."""
+    means = [ImageStat.Stat(t.convert("L")).mean[0] for t in tiles]
+    return min(means), max(means)
+
+def painted(panels, cutter, out_dir, record, plan, tone_match=True):
     """Cut the planned panel cells into 96 px seamless ground variants; write terrain45.png and terrain45.spec."""
     spec = importlib.util.spec_from_file_location("seamless", cutter); seamless = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(seamless)
@@ -130,10 +166,18 @@ def painted(panels, cutter, out_dir, record, plan):
             cell = images[key].crop((x0 + inset, y0 + inset, x1 - inset, y1 - inset))
             side = min(cell.size)
             master = seamless.make_seamless(cell.crop((0, 0, side, side)).resize((192, 192), Image.LANCZOS))
-            placed.append((master.resize((TILE, TILE), Image.LANCZOS), n % 5, row))
+            placed.append([master, n % 5, row, terrain])
             lines.append('  %d, %d, "t.l0.%s%d"   ; %s %s' % (row, n % 5, terrain, n + 1, key, name))
+    tones = []
+    for terrain in dict.fromkeys(p[3] for p in placed):
+        group = [p for p in placed if p[3] == terrain]
+        before = luma_range([p[0].resize((TILE, TILE), Image.LANCZOS) for p in group])
+        if tone_match:
+            for p, tile in zip(group, match_tone([p[0] for p in group])): p[0] = tile
+        after = luma_range([p[0].resize((TILE, TILE), Image.LANCZOS) for p in group])
+        tones.append("%s %.0f-%.0f -> %.0f-%.0f" % (terrain, before[0], before[1], after[0], after[1]))
     sheet = Image.new("RGB", (TILE * 5, TILE * (row + 1)))
-    for tile, c, r in placed: sheet.paste(tile, (c * TILE, r * TILE))
+    for master, c, r, _ in placed: sheet.paste(master.resize((TILE, TILE), Image.LANCZOS), (c * TILE, r * TILE))
     sheet.save(os.path.join(out_dir, "terrain45.png"), optimize=True)
     with open(os.path.join(out_dir, "terrain45.spec"), "w") as f:
         f.write("; Painted ground for the Freeciv45 test tileset, cut from ChatGPT terrain panels by\n"
@@ -145,6 +189,8 @@ def painted(panels, cutter, out_dir, record, plan):
         used = ", ".join("%s %d" % (t, len(c)) for t, k, c in plan if k == key)
         record.append("| `%s/terrain45.spec` | `%s` (%s): %s, through `%s` | LANCZOS 192 then 96 | %dx%d |"
                       % (NAME, key, os.path.basename(path), used, os.path.basename(cutter), TILE * 5, TILE * (row + 1)))
+    record.append("| tone match | %s | mean luma per variant at 96 px, min-max |" % ("on" if tone_match else "off")
+                  + " %s |" % "; ".join(tones))
 
 def tilespec(data, out_root, files):
     """trident.tilespec with sizes, offsets, name and file list changed; plains, forest and jungle as plain variants."""
@@ -184,6 +230,7 @@ def main():
     ap.add_argument("--panel4-retake", required=True, help="panel 4, run 9: rows 4 (jungle) and 5 (pine)")
     ap.add_argument("--olive-pine", action="store_true", help="add run 9's r5c4 and r5c5 as forest11 and forest12")
     ap.add_argument("--cutter", required=True)
+    ap.add_argument("--no-tone-match", action="store_true", help="leave each painted cell's tone as cut (the build before issue 138)")
     ap.add_argument("--out", default=os.path.dirname(os.path.abspath(__file__)))
     a = ap.parse_args()
     out_dir = os.path.join(a.out, NAME); os.makedirs(out_dir, exist_ok=True)
@@ -197,7 +244,8 @@ def main():
         else: files.append(rel)
     plan = PLAN + ([OLIVE_PINE] if a.olive_pine else [])
     plan.sort(key=lambda p: [t for t, _, _ in PLAN].index(p[0]))     # keep each terrain's cells together
-    painted({"panel1": a.panel, "panel4": a.panel4, "panel4_retake": a.panel4_retake}, a.cutter, out_dir, record, plan)
+    painted({"panel1": a.panel, "panel4": a.panel4, "panel4_retake": a.panel4_retake}, a.cutter, out_dir, record, plan,
+            tone_match=not a.no_tone_match)
     tilespec(a.data, a.out, files)
     print("| spec | source | scaling | sheet |\n|---|---|---|---|\n" + "\n".join(record))
 
