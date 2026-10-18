@@ -15,8 +15,9 @@ below; --art names that folder): grassland run 15, plains run 6 (row 5, the damp
 run 8, jungle run 17, hills run 16, mountains run 7 (without r4c3, whose ridges share one diagonal with its
 neighbours), desert, tundra and rocky desert run 12, glacier, swamp and sea ice run 13, the plains and desert
 banks and the tundra shore run 14, shallow ocean and lake run 10, deep ocean and inaccessible run 11. Run 9's
-pine row gives t.l0.pine1..3 (cool c1-c3, not drawn yet: the tilespec cannot pick a forest variant by
-neighbouring terrain, issue 127) and, with --olive-pine, two warm olive forest variants. Each cell goes through
+pine row gives t.l0.forest_tundra1..3 (cool c1-c3), the forest drawn on a tile with tundra or glacier among its eight
+neighbours (issue 127: forest gets layer0_match_with = "tundra", which the fork's patch 0030 reads as a second
+variant set; glacier's layer 0 match type is tundra too) and, with --olive-pine, two warm olive forest variants. Each cell goes through
 the art repo's seamless cutter as `seamless.py --size 192 --inset 3 --level` does it (192 px LANCZOS master,
 straight light gradient removed, edges wrapped), giving t.l0.<terrain>1..N; the client picks a variant per tile
 from the tile index. Because the client puts any two variants side by side, the masters of each terrain are first
@@ -168,7 +169,8 @@ def row(r, cols=range(1, 6)):
     return ["r%dc%d" % (r, c) for c in cols]
 
 # Painted ground, in sheet order: (tag, panel key, panel cells). Each tag's cells become t.l0.<tag>1..N and start on
-# a new sheet row, five to a row. The tags are the ruleset's graphic names (terrain.ruleset); pine is not one yet.
+# a new sheet row, five to a row. The tags are the ruleset's graphic names (terrain.ruleset), and forest_tundra is
+# forest next to tundra (PAIRED).
 # Not cut: run 14 rows 1-2 (beach, rocky shore: for the coastline builder, issue 81) and run 11 row 5 (ice on deep
 # water: as a deep ocean variant it would sit on every ocean).
 PLAN = [
@@ -189,7 +191,7 @@ PLAN = [
     ("lake", "run10", row(4) + row(5)),
     ("floor", "run11", row(1) + row(2) + row(3)),
     ("inaccessible", "run11", row(4)),
-    ("pine", "run9", row(5, (1, 2, 3))),                           # cool pine, issue 127
+    ("forest_tundra", "run9", row(5, (1, 2, 3))),                  # cool pine, issue 127
 ]
 OLIVE_PINE = ("forest", "run9", row(5, (4, 5)))   # run 9's warm olive pine; --olive-pine adds it
 # Tile sections drawn from the painted variants instead of trident's matched sprites (grassland already is).
@@ -198,6 +200,9 @@ PAINTED = ("plains", "forest", "jungle", "hills", "mountains", "desert", "tundra
 # Painted terrains whose trident layers 1 and 2 would cover the painted ground: trident's glacier draws its whole ice
 # cap on layer 1, so the tile keeps layer 0 only (the shore against water is drawn by the water tiles).
 LAYER0_ONLY = ("arctic",)
+# Painted terrains with a second variant set, t.l0.<terrain>_<type>1..N, drawn where one of the eight neighbours has
+# layer 0 match type <type> (fork patch 0030; an unpatched client draws no ground for these terrains).
+PAIRED = {"forest": "tundra"}
 
 CONTRAST_CLAMP = (0.75, 1.33)    # how far match_tone may scale a cell's contrast, so each cell keeps its own texture
 
@@ -393,6 +398,9 @@ def tilespec(data, out_root, files, blend=True):
         if key == "summary": out.append('summary = _("Freeciv45 test tileset: %d px overhead squares, painted ground for every terrain, scaled trident placeholders.")' % TILE); continue
         if section and section[5:] in PAINTED and key in ("layer0_match_with", "layer0_sprite_type"):
             continue    # <terrain>1..N variants from terrain45.spec, no edge or corner matching
+        if section and section[5:] in PAIRED and key == "layer0_match_type":
+            out.append(line)
+            out.append('layer0_match_with = "%s"' % PAIRED[section[5:]]); continue    # the second variant set
         if section and section[5:] in LAYER0_ONLY:
             if key == "num_layers": out.append("num_layers = 1"); continue
             if key and re.match(r"layer[12]_", key): continue

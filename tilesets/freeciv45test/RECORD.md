@@ -73,15 +73,19 @@ the ruleset's graphic names (`data/civ45/terrain.ruleset`). `terrain45.spec` nam
 | `t.l0.lake1`-`10` | rows 4-5 | run 10, panel 6 |
 | `t.l0.floor1`-`15` | rows 1-3, deep ocean | run 11, panel 7, 1581dda |
 | `t.l0.inaccessible1`-`5` | row 4 | run 11, panel 7 |
-| `t.l0.pine1`-`3` | r5c1-r5c3, cool pine | run 9, panel 4, 1f5634f |
+| `t.l0.forest_tundra1`-`3` | r5c1-r5c3, cool pine | run 9, panel 4, 1f5634f |
 
 Each cell is cut the way the art repo's `tools/seamless.py --size 192 --inset 3 --level` (commit c38c2e1) cuts it:
 3 px inset, square, 192 px LANCZOS master, its straight light gradient removed (`level`), edges wrapped by the
 half-shift blend. The script calls the cutter's own functions, so before the tone match every cell is
 pixel-identical to that command's output.
 
-The pine is cut but not drawn: no tile section uses `t.l0.pine`, because the tilespec cannot pick a forest variant by
-neighbouring terrain (issue 127). `--olive-pine` adds run 9's warm olive r5c4-r5c5 as `forest11`-`12`.
+The cool pine is forest next to tundra or glacier (issue 127): `[tile_forest]` gets `layer0_match_with = "tundra"`,
+and the fork's patch 0030 reads a whole-tile layer with two match types as two variant sets, `forest1`-`10` on most
+forest and `forest_tundra1`-`3` on a forest tile with a tundra or glacier tile (layer 0 match type `tundra`) among
+its eight neighbours. An unpatched client would draw no ground for forest with this tilespec (it asserts on
+whole-tile MATCH_PAIR; read in the source, not run). `--olive-pine` adds run 9's warm olive r5c4-r5c5 as
+`forest11`-`12`.
 
 Not used, on purpose: run 6 row 5 (damp grassland; run 15 replaced run 6's grassland and the two greens differ);
 run 7 r4c3 (its ridges share one diagonal with its neighbours, run 7's log entry); run 14 rows 1-2 (beach and rocky
@@ -115,7 +119,7 @@ build):
 | hills (15) | 115-131 | 120 | lake (10) | 73-77 | 74-75 |
 | mountains (9) | 96-157 | 124 | floor (15) | 29-33 | 32 |
 | desert (20) | 166-182 | 175 | inaccessible (5) | 67-69 | 68 |
-| pine (3) | 56-63 | 60-61 | | | |
+| forest_tundra (3) | 56-63 | 60-61 | | | |
 
 Each terrain is matched as one group, so the rocky desert, the banks, the tundra shore and the sea ice take their
 terrain's mean colour and differ from its other cells only in texture. The two autumn forest cells (r2c2, r2c4) are

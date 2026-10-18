@@ -260,6 +260,7 @@ tag = "forest"
 blend_layer = 1
 num_layers = 3
 layer0_match_type = "forest"
+layer0_match_with = "tundra"
 layer1_match_type = "land"
 layer2_match_type = "water"
 
