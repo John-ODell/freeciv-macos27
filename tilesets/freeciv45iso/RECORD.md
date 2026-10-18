@@ -15,17 +15,18 @@ terrains need the fork's patch 0033 (an unpatched client blends through amplio2'
 
 ## From amplio2, scaled
 
-Every spec file that `amplio2.tilespec` lists under `amplio2/`, except `terrain2.spec`, `ocean.spec` (the forest and jungle overlays
-and ocean cells the painted ground replaces), is re-cut from Freeciv 3.2.6's amplio2 tileset (GPL-2.0-or-later; the artists are
+Every spec file that `amplio2.tilespec` lists under `amplio2/`, except `ocean.spec` (cells the painted ground
+replaces), is re-cut from Freeciv 3.2.6's amplio2 tileset (GPL-2.0-or-later; the artists are
 named in each spec's `[info]` section, copied verbatim): each sprite scaled 2x with nearest-neighbour sampling, so it
 looks as amplio2 does on a 2x screen today. `water.spec` keeps only the rivers. `hills.spec` and `mountains.spec` are the relief
-over the flat hills and mountains ground (issue 194), moved from layer 1 to layer 2. `misc/citybar` and `misc/overlays`
+over the flat hills and mountains ground (issue 194), moved from layer 1 to layer 2. `terrain2.spec`, the forest and jungle overlays, moves the same way over painted grassland (issue 199). `misc/citybar` and `misc/overlays`
 are re-cut too, because the client draws them on the map; the other `misc/` files are read from the installed data.
 
 | spec | source | scaling | sheet |
 |---|---|---|---|
 | `freeciv45iso/terrain1.spec` | `amplio2/terrain1.spec` (62 tags, 1 grids) | nearest 2x | 1728x1536 |
 | `freeciv45iso/maglev.spec` | `amplio2/maglev.spec` (9 tags, 1 grids) | nearest 2x | 1728x96 |
+| `freeciv45iso/terrain2.spec` | `amplio2/terrain2.spec` (32 tags, 1 grids) | nearest 2x | 1536x576 |
 | `freeciv45iso/hills.spec` | `amplio2/hills.spec` (16 tags, 1 grids) | nearest 2x | 768x384 |
 | `freeciv45iso/mountains.spec` | `amplio2/mountains.spec` (16 tags, 1 grids) | nearest 2x | 768x528 |
 | `freeciv45iso/water.spec` | `amplio2/water.spec` (20 tags, 1 grids) | nearest 2x | 1536x480 |
@@ -54,18 +55,16 @@ Cut as `make-freeciv45test.py` cuts them (the same panels, cells, cutter and ton
 | spec | source | scaling | sheet |
 |---|---|---|---|
 | `freeciv45iso/terrain45.spec` | `run6` (grassland_and_plains.png): plains 10, hills 5, through `seamless.py` | LANCZOS 192, level | 960x6144 |
-| `freeciv45iso/terrain45.spec` | `run8` (forest_and_jungle.png): forest 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run9` (forest_and_jungle.png): forest_tundra 3, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run10` (shallow_ocean_and_lake.png): coast 15, lake 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run11` (deep_ocean_and_impassable.png): floor 15, inaccessible 5, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run12` (desert_and_tundra.png): desert 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run13` (glacier_and_swamp.png): arctic 15, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run14` (shores_and_banks.png): desert 5, tundra 5, through `seamless.py` | LANCZOS 192, level | 960x6144 |
-| `freeciv45iso/terrain45.spec` | `run15` (grassland_and_plains.png): grassland 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
-| `freeciv45iso/terrain45.spec` | `run17` (forest_and_jungle.png): jungle 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
+| `freeciv45iso/terrain45.spec` | `run15` (grassland_and_plains.png): grassland 10, forest 10, jungle 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run18` (glacier_and_swamp.png): swamp 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run19` (desert_and_tundra.png): mountains 5, desert 5, tundra 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
-| tone match | on | mean luma per variant at 192 px, min-max | grassland 92-116 -> 104-104; plains 85-166 -> 128-128; forest 68-103 -> 83-83; jungle 54-75 -> 64-64; hills 132-196 -> 168-169; mountains 176-178 -> 177-177; desert 173-182 -> 176-176; tundra 115-132 -> 123-124; arctic 191-197 -> 193-193; swamp 74-76 -> 75-75; coast 120-130 -> 125-126; lake 73-77 -> 74-75; floor 29-33 -> 32-32; inaccessible 67-69 -> 68-68; forest_tundra 56-63 -> 60-61 |
+| tone match | on | mean luma per variant at 192 px, min-max | grassland 92-116 -> 104-104; plains 85-166 -> 128-128; forest 92-116 -> 104-104; jungle 92-116 -> 104-104; hills 132-196 -> 168-169; mountains 176-178 -> 177-177; desert 173-182 -> 176-176; tundra 115-132 -> 123-124; arctic 191-197 -> 193-193; swamp 74-76 -> 75-75; coast 120-130 -> 125-126; lake 73-77 -> 74-75; floor 29-33 -> 32-32; inaccessible 67-69 -> 68-68; forest_tundra 56-63 -> 60-61 |
 | `freeciv45iso/terrain45.spec` | the cells above, each turned 45 degrees and squashed 2:1 (to_iso, 4x4 samples, binary outline); graded in Lab: floor +28 +2 -20 | 192x96 diamonds | 960x3072 |
 | `freeciv45iso/coast.spec` | `run14` r1c3 (shores_and_banks.png), through `seamless.py`: beach cells for water tiles next to land, layer 1 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | `run14` r1c3 (shores_and_banks.png), through `seamless.py`: sand cells for land tiles next to water, layer 1 | generated, 96 px quarter cells | 3072x288 |

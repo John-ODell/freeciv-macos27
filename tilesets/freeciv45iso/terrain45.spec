@@ -43,26 +43,26 @@ tiles = { "row", "column", "tag"
   3, 2, "t.l0.plains8"   ; run6 r2c3
   3, 3, "t.l0.plains9"   ; run6 r2c4
   3, 4, "t.l0.plains10"   ; run6 r2c5
-  4, 0, "t.l0.forest1"   ; run8 r1c1
-  4, 1, "t.l0.forest2"   ; run8 r1c2
-  4, 2, "t.l0.forest3"   ; run8 r1c3
-  4, 3, "t.l0.forest4"   ; run8 r1c4
-  4, 4, "t.l0.forest5"   ; run8 r1c5
-  5, 0, "t.l0.forest6"   ; run8 r2c1
-  5, 1, "t.l0.forest7"   ; run8 r2c2
-  5, 2, "t.l0.forest8"   ; run8 r2c3
-  5, 3, "t.l0.forest9"   ; run8 r2c4
-  5, 4, "t.l0.forest10"   ; run8 r2c5
-  6, 0, "t.l0.jungle1"   ; run17 r3c1
-  6, 1, "t.l0.jungle2"   ; run17 r3c2
-  6, 2, "t.l0.jungle3"   ; run17 r3c3
-  6, 3, "t.l0.jungle4"   ; run17 r3c4
-  6, 4, "t.l0.jungle5"   ; run17 r3c5
-  7, 0, "t.l0.jungle6"   ; run17 r4c1
-  7, 1, "t.l0.jungle7"   ; run17 r4c2
-  7, 2, "t.l0.jungle8"   ; run17 r4c3
-  7, 3, "t.l0.jungle9"   ; run17 r4c4
-  7, 4, "t.l0.jungle10"   ; run17 r4c5
+  4, 0, "t.l0.forest1"   ; run15 r1c1
+  4, 1, "t.l0.forest2"   ; run15 r1c2
+  4, 2, "t.l0.forest3"   ; run15 r1c3
+  4, 3, "t.l0.forest4"   ; run15 r1c4
+  4, 4, "t.l0.forest5"   ; run15 r1c5
+  5, 0, "t.l0.forest6"   ; run15 r2c1
+  5, 1, "t.l0.forest7"   ; run15 r2c2
+  5, 2, "t.l0.forest8"   ; run15 r2c3
+  5, 3, "t.l0.forest9"   ; run15 r2c4
+  5, 4, "t.l0.forest10"   ; run15 r2c5
+  6, 0, "t.l0.jungle1"   ; run15 r1c1
+  6, 1, "t.l0.jungle2"   ; run15 r1c2
+  6, 2, "t.l0.jungle3"   ; run15 r1c3
+  6, 3, "t.l0.jungle4"   ; run15 r1c4
+  6, 4, "t.l0.jungle5"   ; run15 r1c5
+  7, 0, "t.l0.jungle6"   ; run15 r2c1
+  7, 1, "t.l0.jungle7"   ; run15 r2c2
+  7, 2, "t.l0.jungle8"   ; run15 r2c3
+  7, 3, "t.l0.jungle9"   ; run15 r2c4
+  7, 4, "t.l0.jungle10"   ; run15 r2c5
   8, 0, "t.l0.hills1"   ; run6 r3c1
   8, 1, "t.l0.hills2"   ; run6 r3c2
   8, 2, "t.l0.hills3"   ; run6 r3c3
