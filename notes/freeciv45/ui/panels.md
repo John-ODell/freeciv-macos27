@@ -325,6 +325,7 @@ The patch becomes `patches/0008-...` applied to the fork, built with `scripts/bu
 | 9 | The left sidebar with the switch on | leaves the grid: its numbers move to the top strip (8.1), its buttons to the right-edge column (8.2), Turn Done becomes the "what next" button (8.3). Off brings it back as today. |
 | 10 | What "what next" asks first | research unset, then a unit that needs orders, then a city whose queue ran out this turn, then End Turn. |
 | 11 | The previous/next arrows | "›" is W (wait and go to the next unit), "‹" steps back through the units shown this turn without changing them; no new keys. |
+| 12 | Does the strip's End turn stay now that "what next" ends the turn? | Pending. It stays in patch 0026, so End turn is always one click away even while "what next" asks for something else; removing it is one line in `top_strip`'s constructor. |
 
 ## 7. The prepared first slice
 
@@ -340,7 +341,8 @@ script in `city-test/`. It went onto the fork unchanged as patch 0017 (issue #13
 The first slice of section 8, the top strip and the right-edge column with the overview buttons, went onto the fork
 as patch 0018 (issue #140) behind its own option, `gui_qt_freeciv45_edges`; what it does and how it was checked is in
 `edges-slice.md`, the shots in `edges-test/`. The notification badges (#143) followed as patches 0022 and 0023
-(`badges-slice.md`, shots in `badges-test/`); the "what next" button (#144) follows.
+(`badges-slice.md`, shots in `badges-test/`), and the "what next" button above the minimap (#144) as patch 0026
+(`whatnext-slice.md`, shots in `whatnext-test/`).
 
 ## 8. The map's edges: top strip, right-edge column, "what next" and the tile box
 

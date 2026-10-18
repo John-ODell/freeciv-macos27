@@ -1,5 +1,5 @@
 diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
-index 491e2dd..ca1cb80 100644
+index 5e6de95..a5ca1a9 100644
 --- a/client/gui-qt/fc_client.cpp
 +++ b/client/gui-qt/fc_client.cpp
 @@ -54,6 +54,7 @@
@@ -10,7 +10,7 @@ index 491e2dd..ca1cb80 100644
  #include "unitbar.h"
  
  fc_icons* fc_icons::m_instance = 0;
-@@ -276,6 +277,7 @@ void fc_client::fc_main(QApplication *qapp)
+@@ -277,6 +278,7 @@ void fc_client::fc_main(QApplication *qapp)
  
    startTimer(TIMER_INTERVAL);
    connect(qapp, &QCoreApplication::aboutToQuit, this, &fc_client::closing);
@@ -20,10 +20,10 @@ index 491e2dd..ca1cb80 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..ff368bc
+index 0000000..e902c24
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,704 @@
+@@ -0,0 +1,718 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -60,15 +60,14 @@ index 0000000..ff368bc
 +                            as a click on it does (selection changed)
 +    accept                  accept the active modal box (its OK button)
 +    endturn                 end the turn, as the Turn Done button does
-+    key K                   g f s w space escape enter, or one letter
++    key K                   g f s w space escape enter shift+enter, or one
++                            letter
++    research NAME           research the advance NAME (its rule name)
++    opencity NAME           open the own city NAME, as a click on it does
 +    scroll DX DY            move the map origin by DX, DY canvas pixels
 +    clicktile DX DY         left click the tile DX, DY from the focus unit
 +                            (through action_button_pressed, which the map's
 +                            mouse release calls, since that reads QCursor)
-+    mousetile DX DY         the same click with the mouse: the cursor goes
-+                            to the tile's middle in map widget points and a
-+                            press and release go through the window, so the
-+                            map's point to canvas pixel conversion runs
 +    option [NAME] on|off    a boolean client option through its callback
 +                            (default gui_qt_freeciv45_panels)
 +    chat TEXT               send a chat line or a /command to the server
@@ -88,7 +87,6 @@ index 0000000..ff368bc
 +#include <QAbstractButton>
 +#include <QAbstractItemView>
 +#include <QApplication>
-+#include <QCursor>
 +#include <QDialog>
 +#include <QDir>
 +#include <QFile>
@@ -106,6 +104,7 @@ index 0000000..ff368bc
 +// common
 +#include "city.h"
 +#include "game.h"
++#include "tech.h"
 +#include "terrain.h"
 +#include "map.h"
 +#include "player.h"
@@ -128,6 +127,7 @@ index 0000000..ff368bc
 +#include "fc_client.h"
 +#include "hudwidget.h"
 +#include "mapview.h"
++#include "qtg_cxxside.h"
 +#include "sidebar.h"
 +#include "unitbar.h"
 +#include "uidrive.h"
@@ -357,6 +357,27 @@ index 0000000..ff368bc
 +    } else {
 +      s += "\n   edge column hidden";
 +    }
++    {
++      QWidget *wn = gui()->findChild<QWidget *>("what_next_button");
++      QWidget *mm = gui()->minimapview_wdg;
++
++      if (wn != nullptr && wn->isVisible()) {
++        QLabel *t = wn->findChild<QLabel *>("what_next_text");
++        QLabel *c = wn->findChild<QLabel *>("what_next_count");
++
++        s += QString("\n   what next %1,%2 %3x%4 [%5%6] step %7%8"
++                     " (minimap %9,%10 %11x%12)")
++             .arg(wn->x()).arg(wn->y()).arg(wn->width()).arg(wn->height())
++             .arg(t != nullptr ? t->text() : QString())
++             .arg(c != nullptr && c->isVisible() ? " | " + c->text()
++                                                  : QString())
++             .arg(wn->property("step").toString())
++             .arg(wn->isEnabled() ? "" : " (disabled)")
++             .arg(mm->x()).arg(mm->y()).arg(mm->width()).arg(mm->height());
++      } else {
++        s += "\n   what next hidden";
++      }
++    }
 +    s += QString("\n   sidebar visible %1, game tab %2 (%3)")
 +         .arg(gui()->sidebar_wdg->isVisible() ? "yes" : "no")
 +         .arg(gui()->game_tab_widget->currentIndex())
@@ -476,41 +497,6 @@ index 0000000..ff368bc
 +                          shift ? Qt::ShiftModifier : Qt::NoModifier, c);
 +      }
 +    }
-+  } else if (cmd == "mousetile" && w.size() > 2) {
-+    struct unit *punit = head_of_units_in_focus();
-+    int x, y;
-+    float cx, cy;
-+    struct tile *ptile = nullptr;
-+
-+    if (punit != nullptr) {
-+      index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
-+      ptile = map_pos_to_tile(&(wld.map), x + w[1].toInt(),
-+                              y + w[2].toInt());
-+    }
-+    if (ptile == nullptr
-+        || !tile_to_canvas_pos(&cx, &cy, map_zoom, ptile)) {
-+      drive_log("   !! no focus unit or tile not on the canvas");
-+    } else {
-+      QWidget *mv = gui()->mapview_wdg;
-+      QWindow *win = gui()->windowHandle();
-+      QPoint p, c;
-+
-+      cx += tileset_tile_width(tileset) * map_zoom / 2;
-+      cy += tileset_tile_height(tileset) * map_zoom / 2;
-+      // Canvas pixels to map widget points
-+      p = QPoint(qRound(cx / map_density()), qRound(cy / map_density()));
-+      c = mv->mapTo(gui(), p);
-+      QApplication::setActiveWindow(gui());
-+      QCursor::setPos(win->screen(), mv->mapToGlobal(p));
-+      drive_log(QString("   tile (%1,%2) %3 at %4,%5 points, cursor %6,%7")
-+                .arg(x + w[1].toInt()).arg(y + w[2].toInt())
-+                .arg(terrain_rule_name(tile_terrain(ptile)))
-+                .arg(p.x()).arg(p.y())
-+                .arg(mv->mapFromGlobal(QCursor::pos()).x())
-+                .arg(mv->mapFromGlobal(QCursor::pos()).y()));
-+      QTest::mouseMove(win, c);
-+      QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier, c);
-+    }
 +  } else if (cmd == "key" && w.size() > 1) {
 +    QString k = w[1].toLower();
 +    Qt::Key key = Qt::Key_unknown;
@@ -519,13 +505,25 @@ index 0000000..ff368bc
 +      key = Qt::Key_Space;
 +    } else if (k == "escape") {
 +      key = Qt::Key_Escape;
-+    } else if (k == "enter") {
++    } else if (k == "enter" || k == "shift+enter") {
 +      key = Qt::Key_Return;
 +    } else if (k.size() == 1) {
 +      key = (Qt::Key) k.toUpper()[0].unicode();
 +    }
 +    // Through the window, so menu shortcuts (W, F, S...) fire too
-+    QTest::keyClick(gui()->windowHandle(), key);
++    QTest::keyClick(gui()->windowHandle(), key,
++                    k.startsWith("shift+") ? Qt::ShiftModifier
++                                           : Qt::NoModifier);
++  } else if (cmd == "research" && w.size() > 1) {
++    struct advance *padv
++      = advance_by_rule_name(QStringList(w.mid(1)).join(' ')
++                             .toUtf8().constData());
++
++    if (padv == nullptr) {
++      drive_log("   !! no such advance");
++    } else {
++      dsend_packet_player_research(&client.conn, advance_number(padv));
++    }
 +  } else if (cmd == "clicktile" && w.size() > 2) {
 +    struct unit *punit = head_of_units_in_focus();
 +
@@ -598,6 +596,22 @@ index 0000000..ff368bc
 +                .arg(get_activity_text(punit->activity))
 +                .arg(punit->moves_left)
 +                .arg(punit->has_orders ? "yes" : "no"));
++    }
++  } else if (cmd == "opencity" && w.size() > 1) {
++    QString name = QStringList(w.mid(1)).join(' ');
++    struct city *found = nullptr;
++
++    if (client_player() != nullptr) {
++      city_list_iterate(client_player()->cities, pcity) {
++        if (name == city_name_get(pcity)) {
++          found = pcity;
++        }
++      } city_list_iterate_end;
++    }
++    if (found == nullptr) {
++      drive_log("   !! no such city");
++    } else {
++      qtg_real_city_dialog_popup(found);
 +    }
 +  } else if (cmd == "city" && w.size() > 1) {
 +    QString name = QStringList(w.mid(1)).join(' ');

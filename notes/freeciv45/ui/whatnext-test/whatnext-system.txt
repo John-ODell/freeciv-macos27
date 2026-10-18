@@ -1,0 +1,7 @@
+pace 1200
+wait 4000
+dismiss
+wait 1000
+state start
+shot whatnext-system
+quit

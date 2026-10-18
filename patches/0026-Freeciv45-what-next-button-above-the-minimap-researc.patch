@@ -1,0 +1,678 @@
+From 71df49b15d94160d8ca8018a4d2a4332e2498b1b Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 10:17:43 -0500
+Subject: [PATCH] Freeciv45 "what next" button above the minimap: research,
+ unit orders, city production, then End turn
+
+With gui_qt_freeciv45_edges on, a 224 x 40 button sits right-aligned with
+the minimap, 8 px above it, and follows it when it moves, changes size or
+hides (so it hides with the minimap while the city overlay is open, and
+with the map while a report tab is current). It says what the turn needs
+next, in decision 10's order, and a click does it:
+
+- "Choose research" while nothing is being researched: opens the research
+  report.
+- "Unit needs orders" while an own unit is idle with moves left, no orders,
+  not done and not automated (the units the focus cycles through, waiting
+  ones included): the next one, as W does, or the first such unit when the
+  focus unit has its orders.
+- "City needs production" for an own city that finished something at this
+  turn's start or was founded this turn and has nothing queued: opens it.
+  The city's data decides (city_built_last_turn, not a founding stamp, and
+  an empty worklist), since the worklist and production-changed events go
+  to no message window by default. A city counts as seen for the rest of
+  the turn once it is opened from here or shown in the overlay.
+- "End turn" when nothing blocks, greyed out and highlighted as the
+  sidebar's Turn Done is (side_disable_endturn, side_blink_endturn).
+
+"1 of N" shows on the right when more than one thing waits; the tooltip says
+what a click does. The button refreshes twice a second. Shift+Return still
+ends the turn, and the top strip's End turn stays. Themed in the
+NightStalker and System resource.qss; the labels carry the button's step,
+since a pseudo-state of an ancestor does not reach a child in a style sheet.
+
+panels.md section 8.3, issue 144.
+---
+ client/gui-qt/edgebar.cpp                    | 356 +++++++++++++++++++
+ client/gui-qt/edgebar.h                      |  38 +-
+ client/gui-qt/fc_client.cpp                  |   1 +
+ client/gui-qt/fc_client.h                    |   2 +
+ client/gui-qt/pages.cpp                      |   2 +
+ client/gui-qt/sidebar.cpp                    |   6 +
+ data/themes/gui-qt/NightStalker/resource.qss |  38 ++
+ data/themes/gui-qt/System/resource.qss       |  38 ++
+ 8 files changed, 480 insertions(+), 1 deletion(-)
+
+diff --git a/client/gui-qt/edgebar.cpp b/client/gui-qt/edgebar.cpp
+index 0cf6d24..cf1f87f 100644
+--- a/client/gui-qt/edgebar.cpp
++++ b/client/gui-qt/edgebar.cpp
+@@ -16,10 +16,13 @@
+ #endif
+ 
+ // Qt
++#include <QEvent>
+ #include <QHBoxLayout>
++#include <QLabel>
+ #include <QMenu>
+ #include <QPushButton>
+ #include <QStyle>
++#include <QTimer>
+ #include <QVBoxLayout>
+ 
+ // utility
+@@ -33,10 +36,15 @@
+ #include "game.h"
+ #include "player.h"
+ #include "research.h"
++#include "unit.h"
++#include "unitlist.h"
++#include "worklist.h"
+ 
+ // client
+ #include "client_main.h"
+ #include "climisc.h"
++#include "control.h"
++#include "mapview_common.h"
+ #include "messagewin_common.h"
+ #include "options.h"
+ #include "text.h"
+@@ -48,6 +56,7 @@
+ #include "fc_client.h"
+ #include "messagewin.h"
+ #include "plrdlg.h"
++#include "qtg_cxxside.h"
+ #include "repodlgs.h"
+ #include "sidebar.h"
+ #include "spaceshipdlg.h"
+@@ -63,6 +72,10 @@ static const int BADGE_ICON = 30;
+ static const int BADGE_GAP = 18;
+ static const int BADGE_SPACING = 8;
+ static const int MAX_BADGES = 8;
++static const int WHAT_NEXT_WIDTH = 224;
++static const int WHAT_NEXT_HEIGHT = 40;
++static const int WHAT_NEXT_GAP = 8;
++static const int WHAT_NEXT_REFRESH_MS = 500;
+ 
+ /************************************************************************//**
+   A number with its sign, for per-turn changes
+@@ -585,6 +598,346 @@ edge_button *edge_column::add_button(const QString &icon,
+   return btn;
+ }
+ 
++/************************************************************************//**
++  Whether a unit still needs orders this turn: the units the focus cycles
++  through, as W and the focus advance pick them, waiting ones included
++****************************************************************************/
++static bool unit_needs_orders(const struct unit *punit)
++{
++  return (unit_owner(punit) == client_player()
++          && punit->client.focus_status != FOCUS_DONE
++          && punit->activity == ACTIVITY_IDLE
++          && !unit_has_orders(punit)
++          && (punit->moves_left > 0
++              || unit_type_get(punit)->move_rate == 0)
++          && !punit->done_moving
++          && punit->ssa_controller == SSA_NONE);
++}
++
++/************************************************************************//**
++  The button: the step's text on the left, "1 of N" on the right when
++  more than one thing waits. It follows the minimap: right-aligned with it,
++  8 px above, hidden with it.
++****************************************************************************/
++what_next_button::what_next_button(QWidget *minimap_wdg, QWidget *parent)
++  : QPushButton(parent)
++{
++  QHBoxLayout *row = new QHBoxLayout(this);
++
++  setObjectName("what_next_button");
++  minimap = minimap_wdg;
++  step = NEXT_END_TURN;
++  end_turn_enabled = true;
++  end_turn_attention = false;
++  seen_turn = -1;
++  setFixedSize(WHAT_NEXT_WIDTH, WHAT_NEXT_HEIGHT);
++  setFocusPolicy(Qt::NoFocus);
++  setCursor(Qt::PointingHandCursor);
++  row->setContentsMargins(14, 0, 12, 0);
++  what = new QLabel(this);
++  what->setObjectName("what_next_text");
++  count = new QLabel(this);
++  count->setObjectName("what_next_count");
++  row->addWidget(what, 1);
++  row->addWidget(count, 0);
++  connect(this, &QPushButton::clicked, this, &what_next_button::do_next);
++  minimap->installEventFilter(this);
++  timer = new QTimer(this);
++  connect(timer, &QTimer::timeout, this, [this]() {
++    note_seen_city();
++    if (isVisible()) {
++      refresh();
++    } else {
++      place();
++    }
++  });
++  timer->start(WHAT_NEXT_REFRESH_MS);
++  hide();
++}
++
++/************************************************************************//**
++  The minimap moved, changed size, or was shown or hidden
++****************************************************************************/
++bool what_next_button::eventFilter(QObject *obj, QEvent *event)
++{
++  if (obj == minimap
++      && (event->type() == QEvent::Move || event->type() == QEvent::Resize
++          || event->type() == QEvent::Show
++          || event->type() == QEvent::Hide)) {
++    place();
++  }
++
++  return QPushButton::eventFilter(obj, event);
++}
++
++/************************************************************************//**
++  Right-aligned with the minimap, 8 px above it (below it when the minimap
++  sits at the top); only with the edges on, in a game, while the minimap
++  shows
++****************************************************************************/
++void what_next_button::place()
++{
++  bool want = (gui_options.gui_qt_freeciv45_edges
++               && C_S_RUNNING <= client_state()
++               && minimap->isVisibleTo(parentWidget()));
++  QRect m = minimap->geometry();
++  int y = m.top() - WHAT_NEXT_GAP - height();
++
++  if (y < 0) {
++    y = m.bottom() + 1 + WHAT_NEXT_GAP;
++  }
++  move(m.right() + 1 - width(), y);
++  if (want != isVisibleTo(parentWidget())) {
++    setVisible(want);
++  }
++  if (want) {
++    raise();
++    refresh();
++  }
++}
++
++/************************************************************************//**
++  The first own unit that needs orders, the focus unit first; count is how
++  many do
++****************************************************************************/
++struct unit *what_next_button::unit_waiting(int *count_out)
++{
++  struct unit *first = nullptr;
++  struct player *pplayer = client_player();
++
++  *count_out = 0;
++  if (pplayer == nullptr) {
++    return nullptr;
++  }
++  unit_list_iterate(get_units_in_focus(), punit) {
++    if (unit_needs_orders(punit)) {
++      first = punit;
++      break;
++    }
++  } unit_list_iterate_end;
++  unit_list_iterate(pplayer->units, punit) {
++    if (unit_needs_orders(punit)) {
++      (*count_out)++;
++      if (first == nullptr) {
++        first = punit;
++      }
++    }
++  } unit_list_iterate_end;
++
++  return first;
++}
++
++/************************************************************************//**
++  A city counts as seen for the rest of the turn once it was opened from
++  here or shown in the city overlay; the timer checks the overlay even
++  while the button hides under it
++****************************************************************************/
++void what_next_button::note_seen_city()
++{
++  struct city *shown;
++
++  if (seen_turn != game.info.turn) {
++    seen_turn = game.info.turn;
++    seen_cities.clear();
++  }
++  if (gui() == nullptr || gui()->cityoverlay_wdg == nullptr) {
++    return;
++  }
++  shown = gui()->cityoverlay_wdg->shown_city();
++  if (shown != nullptr) {
++    seen_cities.insert(shown->id);
++  }
++}
++
++/************************************************************************//**
++  The first own city that needs production: it finished something at this
++  turn's start, or was founded this turn, has nothing queued after the
++  current item, and was not seen this turn. The server sends the worklist
++  and production-changed events to no message window by default, so the
++  city's own data decides, not the messages. Founding stamps
++  turn_last_built too, so a stamp equal to the founding turn is not a
++  finished build.
++****************************************************************************/
++struct city *what_next_button::city_waiting(int *count_out)
++{
++  struct city *first = nullptr;
++  struct player *pplayer = client_player();
++
++  *count_out = 0;
++  if (pplayer == nullptr) {
++    return nullptr;
++  }
++  note_seen_city();
++  city_list_iterate(pplayer->cities, pcity) {
++    bool finished = (city_built_last_turn(pcity)
++                     && pcity->turn_last_built != pcity->turn_founded);
++
++    if ((finished || pcity->turn_founded == game.info.turn)
++        && worklist_is_empty(&pcity->worklist)
++        && !seen_cities.contains(pcity->id)) {
++      (*count_out)++;
++      if (first == nullptr) {
++        first = pcity;
++      }
++    }
++  } city_list_iterate_end;
++
++  return first;
++}
++
++/************************************************************************//**
++  Work out the step, in decision 10's order: research unset, a unit that
++  needs orders, a city that needs production, then End turn
++****************************************************************************/
++void what_next_button::refresh()
++{
++  struct player *pplayer = client_player();
++  bool playing = (pplayer != nullptr && !client_is_global_observer()
++                  && C_S_RUNNING <= client_state());
++  bool no_research = false;
++  int units = 0, cities = 0, total;
++  struct unit *punit = nullptr;
++  struct city *pcity = nullptr;
++  QString text, tip;
++
++  if (!isVisible()) {
++    return;
++  }
++  if (playing) {
++    const struct research *presearch = research_get(pplayer);
++
++    no_research = (presearch != nullptr
++                   && presearch->researching == A_UNSET);
++    punit = unit_waiting(&units);
++    pcity = city_waiting(&cities);
++  }
++  total = (no_research ? 1 : 0) + units + cities;
++
++  if (no_research) {
++    step = NEXT_RESEARCH;
++    // TRANS: the Freeciv45 "what next" button
++    text = _("Choose research");
++    tip = _("Nothing is being researched; opens the research report");
++  } else if (punit != nullptr) {
++    step = NEXT_UNIT;
++    // TRANS: the Freeciv45 "what next" button
++    text = _("Unit needs orders");
++    tip = QString(PL_("%1 unit waits for orders; shows the next one, "
++                      "as W does",
++                      "%1 units wait for orders; shows the next one, "
++                      "as W does", units)).arg(units);
++  } else if (pcity != nullptr) {
++    step = NEXT_CITY;
++    // TRANS: the Freeciv45 "what next" button
++    text = _("City needs production");
++    tip = QString(_("%1 has nothing queued; opens the city"))
++          .arg(city_name_get(pcity));
++  } else {
++    step = NEXT_END_TURN;
++    // TRANS: the Freeciv45 "what next" button
++    text = _("End turn");
++    tip = _("End the turn (Shift+Return); nothing else waits");
++  }
++
++  if (what->text() != text) {
++    what->setText(text);
++  }
++  if (toolTip() != tip) {
++    setToolTip(tip);
++  }
++  if (total > 1) {
++    // TRANS: the Freeciv45 "what next" button, "1 of 3" waiting items
++    count->setText(QString(_("1 of %1")).arg(total));
++    count->show();
++  } else {
++    count->hide();
++  }
++  setEnabled(step != NEXT_END_TURN || end_turn_enabled);
++  {
++    QString state = (step == NEXT_END_TURN ? (end_turn_attention ? "ready"
++                                                                 : "end")
++                                           : "blocked");
++
++    if (property("step").toString() != state) {
++      // The labels too: the theme colours them by the step
++      for (QWidget *w : { (QWidget *) this, (QWidget *) what,
++                          (QWidget *) count }) {
++        w->setProperty("step", state);
++        w->style()->unpolish(w);
++        w->style()->polish(w);
++      }
++    }
++  }
++}
++
++/************************************************************************//**
++  A click does the step
++****************************************************************************/
++void what_next_button::do_next()
++{
++  int n;
++
++  refresh();
++  switch (step) {
++  case NEXT_RESEARCH:
++    side_left_click_science(true);
++    break;
++  case NEXT_UNIT:
++    {
++      struct unit *punit = unit_waiting(&n);
++      struct unit *head = head_of_units_in_focus();
++
++      if (punit == nullptr) {
++        break;
++      }
++      side_show_map(true);
++      if (head != nullptr && unit_needs_orders(head)) {
++        // The next one, as W does
++        key_unit_wait();
++      } else {
++        unit_focus_set_and_select(punit);
++        center_tile_mapcanvas(unit_tile(punit));
++      }
++    }
++    break;
++  case NEXT_CITY:
++    {
++      struct city *pcity = city_waiting(&n);
++
++      if (pcity != nullptr) {
++        seen_cities.insert(pcity->id);
++        side_show_map(true);
++        qtg_real_city_dialog_popup(pcity);
++      }
++    }
++    break;
++  case NEXT_END_TURN:
++    if (end_turn_enabled) {
++      key_end_turn();
++    }
++    break;
++  }
++  refresh();
++}
++
++/************************************************************************//**
++  End turn is greyed out while the turn cannot be ended
++****************************************************************************/
++void what_next_button::set_end_turn_enabled(bool enabled)
++{
++  end_turn_enabled = enabled;
++  refresh();
++}
++
++/************************************************************************//**
++  End turn stands out when every unit has moved
++****************************************************************************/
++void what_next_button::set_end_turn_attention(bool attention)
++{
++  end_turn_attention = attention;
++  refresh();
++}
++
+ /************************************************************************//**
+   With gui_qt_freeciv45_edges on, the strip and the column replace the
+   left sidebar; off brings the sidebar back
+@@ -608,4 +961,7 @@ void apply_freeciv45_edges(void)
+   if (on && gui()->edgecolumn_wdg != nullptr) {
+     gui()->edgecolumn_wdg->update_badges();
+   }
++  if (gui()->whatnext_wdg != nullptr) {
++    gui()->whatnext_wdg->place();
++  }
+ }
+diff --git a/client/gui-qt/edgebar.h b/client/gui-qt/edgebar.h
+index 157c009..bd7eed2 100644
+--- a/client/gui-qt/edgebar.h
++++ b/client/gui-qt/edgebar.h
+@@ -21,12 +21,16 @@
+ // Qt
+ #include <QFrame>
+ #include <QList>
++#include <QPushButton>
++#include <QSet>
+ #include <QToolButton>
+ 
+ class QLabel;
+-class QPushButton;
++class QTimer;
+ class QVBoxLayout;
++struct city;
+ struct message;
++struct unit;
+ 
+ /****************************************************************************
+   The top strip: the empire's numbers, each a button that opens its report,
+@@ -97,6 +101,38 @@ private:
+   edge_badge *more_badge;
+ };
+ 
++/****************************************************************************
++  The "what next" button above the minimap: what the turn needs next, and a
++  click does it (panels.md section 8.3)
++****************************************************************************/
++class what_next_button : public QPushButton
++{
++  Q_OBJECT
++public:
++  what_next_button(QWidget *minimap, QWidget *parent);
++  void refresh();
++  void place();
++  void set_end_turn_enabled(bool enabled);
++  void set_end_turn_attention(bool attention);
++protected:
++  bool eventFilter(QObject *obj, QEvent *event) override;
++private:
++  enum next_step { NEXT_RESEARCH, NEXT_UNIT, NEXT_CITY, NEXT_END_TURN };
++  void do_next();
++  struct unit *unit_waiting(int *count);
++  struct city *city_waiting(int *count);
++  void note_seen_city();
++  QWidget *minimap;
++  QLabel *what;
++  QLabel *count;
++  QTimer *timer;
++  enum next_step step;
++  bool end_turn_enabled;
++  bool end_turn_attention;
++  int seen_turn;
++  QSet<int> seen_cities;
++};
++
+ void apply_freeciv45_edges(void);
+ 
+ #endif // FC__EDGEBAR_H
+diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
+index 6dec099..5e6de95 100644
+--- a/client/gui-qt/fc_client.cpp
++++ b/client/gui-qt/fc_client.cpp
+@@ -130,6 +130,7 @@ fc_client::fc_client() : QMainWindow()
+   cityoverlay_wdg = nullptr;
+   topstrip_wdg = nullptr;
+   edgecolumn_wdg = nullptr;
++  whatnext_wdg = nullptr;
+   battlelog_wdg = nullptr;
+   interface_locked = false;
+   map_scale = 1.0f;
+diff --git a/client/gui-qt/fc_client.h b/client/gui-qt/fc_client.h
+index d327d30..664dfb1 100644
+--- a/client/gui-qt/fc_client.h
++++ b/client/gui-qt/fc_client.h
+@@ -68,6 +68,7 @@ class MainWindow;
+ class pregame_options;
+ class top_strip;
+ class unit_bar;
++class what_next_button;
+ class QApplication;
+ class QDialog;
+ class QLabel;
+@@ -277,6 +278,7 @@ public:
+   city_overlay *cityoverlay_wdg;
+   top_strip *topstrip_wdg;
+   edge_column *edgecolumn_wdg;
++  what_next_button *whatnext_wdg;
+   hud_battle_log *battlelog_wdg;
+   bool interface_locked;
+   fc_sidewidget *sw_cunit;
+diff --git a/client/gui-qt/pages.cpp b/client/gui-qt/pages.cpp
+index 6eaea1f..dcd33a9 100644
+--- a/client/gui-qt/pages.cpp
++++ b/client/gui-qt/pages.cpp
+@@ -782,6 +782,8 @@ void fc_client::create_game_page()
+ 
+   minimapview_wdg = new minimap_view(mapview_wdg);
+   minimapview_wdg->show();
++  // Freeciv45: "what next" follows the minimap; hidden until a game runs
++  whatnext_wdg = new what_next_button(minimapview_wdg, mapview_wdg);
+   unitinfo_wdg = new hud_units(mapview_wdg);
+   battlelog_wdg = new hud_battle_log(mapview_wdg);
+   battlelog_wdg->hide();
+diff --git a/client/gui-qt/sidebar.cpp b/client/gui-qt/sidebar.cpp
+index 67ebbd5..01a04be 100644
+--- a/client/gui-qt/sidebar.cpp
++++ b/client/gui-qt/sidebar.cpp
+@@ -685,6 +685,9 @@ void side_disable_endturn(bool do_restore)
+   if (gui()->topstrip_wdg != nullptr) {
+     gui()->topstrip_wdg->set_turn_done_enabled(do_restore);
+   }
++  if (gui()->whatnext_wdg != nullptr) {
++    gui()->whatnext_wdg->set_end_turn_enabled(do_restore);
++  }
+ }
+ 
+ /***********************************************************************//**
+@@ -700,6 +703,9 @@ void side_blink_endturn(bool do_restore)
+   if (gui()->topstrip_wdg != nullptr) {
+     gui()->topstrip_wdg->set_turn_done_attention(!do_restore);
+   }
++  if (gui()->whatnext_wdg != nullptr) {
++    gui()->whatnext_wdg->set_end_turn_attention(!do_restore);
++  }
+ }
+ 
+ /***********************************************************************//**
+diff --git a/data/themes/gui-qt/NightStalker/resource.qss b/data/themes/gui-qt/NightStalker/resource.qss
+index 714229f..d5917ff 100644
+--- a/data/themes/gui-qt/NightStalker/resource.qss
++++ b/data/themes/gui-qt/NightStalker/resource.qss
+@@ -1006,3 +1006,41 @@ edge_badge[kind="research"] {
+ edge_badge[kind="other"], edge_badge[kind="more"] {
+   border-color: #7b8494;
+ }
++/* Freeciv45 "what next" (edgebar.cpp): the labels carry the button's step
++   property, since pseudo-states of an ancestor do not reach a child here */
++what_next_button {
++  background-color: #5c4310;
++  border: 1px solid #f2c14e;
++  border-radius: 6px;
++}
++what_next_button:hover {
++  background-color: #6e5115;
++}
++what_next_button[step="end"] {
++  background-color: #323843;
++  border-color: #47515f;
++}
++what_next_button[step="end"]:hover {
++  background-color: #3d4552;
++}
++what_next_button[step="ready"] {
++  background-color: #2f6b3e;
++  border-color: #4f9a62;
++}
++what_next_button:disabled {
++  background-color: #262b33;
++  border-color: #3a414c;
++}
++QLabel#what_next_text {
++  color: #f7e7c0;
++  font-weight: bold;
++}
++QLabel#what_next_text[step="end"], QLabel#what_next_text[step="ready"] {
++  color: #e6e9ef;
++}
++QLabel#what_next_text:disabled {
++  color: #7b8494;
++}
++QLabel#what_next_count {
++  color: #e3cf9c;
++}
+diff --git a/data/themes/gui-qt/System/resource.qss b/data/themes/gui-qt/System/resource.qss
+index 224f550..e44836a 100644
+--- a/data/themes/gui-qt/System/resource.qss
++++ b/data/themes/gui-qt/System/resource.qss
+@@ -226,3 +226,41 @@ edge_badge[kind="research"] {
+ edge_badge[kind="other"], edge_badge[kind="more"] {
+   border-color: #8a9099;
+ }
++/* Freeciv45 "what next" (edgebar.cpp): the labels carry the button's step
++   property, since pseudo-states of an ancestor do not reach a child here */
++what_next_button {
++  background-color: #f6e3b4;
++  border: 1px solid #c98a00;
++  border-radius: 6px;
++}
++what_next_button:hover {
++  background-color: #f1d796;
++}
++what_next_button[step="end"] {
++  background-color: #dfe3e9;
++  border-color: #b8bcc4;
++}
++what_next_button[step="end"]:hover {
++  background-color: #d2d8e1;
++}
++what_next_button[step="ready"] {
++  background-color: #bfe3c8;
++  border-color: #4f9a62;
++}
++what_next_button:disabled {
++  background-color: #eceef1;
++  border-color: #c9cdd4;
++}
++QLabel#what_next_text {
++  color: #3b2a00;
++  font-weight: bold;
++}
++QLabel#what_next_text[step="end"], QLabel#what_next_text[step="ready"] {
++  color: #1d1f23;
++}
++QLabel#what_next_text:disabled {
++  color: #8a9099;
++}
++QLabel#what_next_count {
++  color: #6b5300;
++}
+-- 
+2.56.0
+
