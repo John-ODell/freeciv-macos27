@@ -1,0 +1,52 @@
+From 899c4d8e63f0fb0fdb1020f1a6f6e53d4f5b4316 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 12:37:57 -0500
+Subject: [PATCH] Overhead blending: land fades only into land and water only
+ into water
+
+With a blend mask (overhead view), a terrain now fades into its
+neighbours only when both are of the same terrain class. Freeciv45 lets
+the water depths blend into each other; without this, land textures
+would also fade into the sea and water into the land, where the
+tileset's own shore cells draw the coast.
+---
+ client/tilespec.c | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/client/tilespec.c b/client/tilespec.c
+index f9f602b..a74017c 100644
+--- a/client/tilespec.c
++++ b/client/tilespec.c
+@@ -5583,11 +5583,11 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
+   enum direction4 dir = 0;
+ 
+   if (NULL != t->sprites.blend_mask) {
+-    /* Overhead view: every neighbour of another blending terrain fades a
+-     * little way into this tile, across the shared edge or, for a diagonal
+-     * neighbour, into the shared corner. A corner is left to the edges when
+-     * a neighbour beside it has the corner's terrain, so the same terrain
+-     * is not laid twice there. */
++    /* Overhead view: every neighbour of another blending terrain of the
++     * same class (land or water) fades a little way into this tile, across
++     * the shared edge or, for a diagonal neighbour, into the shared
++     * corner. A corner is left to the edges when a neighbour beside it has
++     * the corner's terrain, so the same terrain is not laid twice there. */
+     enum direction8 dir8;
+ 
+     for (dir8 = 0; dir8 < DIR8_MAGIC_MAX; dir8++) {
+@@ -5605,6 +5605,12 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
+         sprs += fill_blend_variant(t, sprs, ptile, tile1, pterrain, dir8);
+         continue;
+       }
++      if (terrain_type_terrain_class(pterrain)
++          != terrain_type_terrain_class(other)) {
++        /* Land fades into land and water into water. Where the two meet,
++         * the shore is the tileset's to draw (the water tiles' cells). */
++        continue;
++      }
+       odraw = t->sprites.drawing[terrain_index(other)];
+       if ((0 == odraw->blending && NULL == odraw->blender)
+           || NULL == odraw->blend[dir8]) {
+-- 
+2.56.0
+
