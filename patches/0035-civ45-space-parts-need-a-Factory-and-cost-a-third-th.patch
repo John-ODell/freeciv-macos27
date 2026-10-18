@@ -1,0 +1,159 @@
+From d8b3d1e7c51d6483bc640f5601539c576f6a902c Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 13:03:07 -0500
+Subject: [PATCH 35/41] civ45: space parts need a Factory and cost a third; the
+ AI launches a ship in time
+
+Issue 164: no AI ever launched a spaceship. The three parts needed a
+Factory, a Library, a University and a Research Lab, which few AI cities
+build, and cost 150, 300 and 600 shields; and the default AI launched
+only a ship with all 60 parts. Each part now needs its tech, the Apollo
+Program and a Factory, and costs 50, 100 and 200. The AI also launches
+a ship that is not complete, with a success rate of at least 90 %, on
+the last four turns on which it would still arrive before endturn.
+---
+ ai/default/aihand.c          | 28 ++++++++++++++++++++++++++++
+ data/civ45/README.civ45      | 12 +++++++-----
+ data/civ45/buildings.ruleset | 15 +++------------
+ 3 files changed, 38 insertions(+), 17 deletions(-)
+
+diff --git a/ai/default/aihand.c b/ai/default/aihand.c
+index fda77d1..d06f527 100644
+--- a/ai/default/aihand.c
++++ b/ai/default/aihand.c
+@@ -22,6 +22,7 @@
+ #include "timing.h"
+ 
+ /* common */
++#include "calendar.h"
+ #include "city.h"
+ #include "game.h"
+ #include "government.h"
+@@ -92,6 +93,30 @@
+ #define PCT_DELTA_TAX 50
+ #define PCT_DELTA_SCI 10
+ 
++/*************************************************************************//**
++  Freeciv45: whether a ship that is not complete should be launched now,
++  because it can still arrive before the game's last turn and waiting for
++  more parts would let that turn pass first.
++*****************************************************************************/
++static bool dai_spaceship_deadline(const struct player *pplayer)
++{
++  const struct player_spaceship *ship = &pplayer->spaceship;
++  struct packet_game_info next = game.info;
++  int years_per_turn, turns_left, turns_needed;
++
++  if (game.server.end_turn <= 0 || ship->success_rate < 0.9) {
++    return FALSE;
++  }
++
++  game_next_year(&next);
++  years_per_turn = MAX(1, next.year - game.info.year);
++  turns_left = game.server.end_turn - game.info.turn;
++  turns_needed = (int) (ship->travel_time / years_per_turn) + 2;
++
++  /* Launch on the last turns that still arrive in time. */
++  return turns_needed <= turns_left && turns_left <= turns_needed + 3;
++}
++
+ /*************************************************************************//**
+   Handle spaceship related stuff
+ *****************************************************************************/
+@@ -106,6 +131,9 @@ static void dai_manage_spaceship(struct player *pplayer)
+           && (pplayer->spaceship.components == NUM_SS_COMPONENTS)
+           && (pplayer->spaceship.modules == NUM_SS_MODULES))
+         handle_spaceship_launch(pplayer);
++      else if (dai_spaceship_deadline(pplayer)) {
++        handle_spaceship_launch(pplayer);
++      }
+     }
+   }
+ }
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 48c655d..dad53fb 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -50,11 +50,13 @@ Differences from sandbox
+   world's citizens for three turns running, checked from turn 100 by the
+   ruleset's script. Culture: 30000 culture points and a quarter more
+   than the runner-up (sandbox asks 20000 and double). Space: a spaceship
+-  that arrives (endspaceship enabled). Alliance: the last alliance
+-  standing wins together. Score: the game ends after turn 475 (the year
+-  2050) and at the start of that turn the living player with the highest
+-  score is named the winner, so the game ends with a victor rather than a
+-  turn-limit notice. The thresholds are first values, untuned.
++  that arrives (endspaceship enabled); its parts need the Apollo Program,
++  their tech and a Factory, and cost 50, 100 and 200 shields, and the AI
++  launches a ship that is not complete when waiting would miss turn 475.
++  Alliance: the last alliance standing wins together. Score: the game
++  ends after turn 475 (the year 2050) and at the start of that turn the
++  living player with the highest score is named the winner, so the game
++  ends with a victor rather than a turn-limit notice. The thresholds are first values, untuned.
+ - The tech tree has 92 advances in seven eras (Ancient, Classical,
+   Medieval, Renaissance, Industrial, Modern, Information), each a tech
+   class whose cost_pct (100, 100, 110, 120, 130, 140, 150) scales the
+diff --git a/data/civ45/buildings.ruleset b/data/civ45/buildings.ruleset
+index f8e693d..2049732 100644
+--- a/data/civ45/buildings.ruleset
++++ b/data/civ45/buildings.ruleset
+@@ -1232,9 +1232,6 @@ reqs	=
+     { "type", "name", "range"
+       "Tech", "Superconductors", "Player"
+       "Building", "Factory", "City"
+-      "Building", "Library", "City"
+-      "Building", "University", "City"
+-      "Building", "Research Lab", "City"
+     }
+ graphic         = "b.space_component"
+ graphic_alt     = "-"
+@@ -1242,7 +1239,7 @@ graphic_alt2    = "-"
+ obsolete_by	=
+     { "type", "name", "range"
+     }
+-build_cost	= 300
++build_cost	= 100
+ upkeep		= 0
+ sabotage	= 100
+ sound		= "b_space_component"
+@@ -1301,9 +1298,6 @@ reqs	=
+     { "type", "name", "range"
+       "Tech", "Environmentalism", "Player"
+       "Building", "Factory", "City"
+-      "Building", "Library", "City"
+-      "Building", "University", "City"
+-      "Building", "Research Lab", "City"
+     }
+ graphic         = "b.space_modules"
+ graphic_alt     = "-"
+@@ -1311,7 +1305,7 @@ graphic_alt2    = "-"
+ obsolete_by	=
+     { "type", "name", "range"
+     }
+-build_cost	= 600
++build_cost	= 200
+ upkeep		= 0
+ sabotage	= 100
+ sound		= "b_space_module"
+@@ -1342,9 +1336,6 @@ reqs	=
+     { "type", "name", "range"
+       "Tech", "Space Flight", "Player"
+       "Building", "Factory", "City"
+-      "Building", "Library", "City"
+-      "Building", "University", "City"
+-      "Building", "Research Lab", "City"
+     }
+ graphic         = "b.space_structural"
+ graphic_alt     = "-"
+@@ -1352,7 +1343,7 @@ graphic_alt2    = "-"
+ obsolete_by	=
+     { "type", "name", "range"
+     }
+-build_cost	= 150
++build_cost	= 50
+ upkeep		= 0
+ sabotage	= 100
+ sound		= "b_space_structural"
+-- 
+2.56.0
+

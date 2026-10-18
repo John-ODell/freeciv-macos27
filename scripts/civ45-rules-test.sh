@@ -89,6 +89,15 @@ NW=$(grep -c '^\[effect_city_walls_\(melee\|archer\|mounted\|siege\)\]' "$DATA/c
 if [ "$NW" = 4 ] && ! grep -q '^\[effect_city_walls_0\]' "$DATA/civ45/effects.ruleset"; then
   echo "FC45TEST PASS effects.ruleset: City Walls are keyed on the attacker's class flag"
 else echo "FC45TEST FAIL effects.ruleset: City Walls are not keyed on the attacker's class flag"; RC=1; fi
+# Space parts (issue 164): the tech, the Apollo Program and a Factory are all they need, at 50, 100 and 200 shields.
+BR="$DATA/civ45/buildings.ruleset"
+for p in structural:50 component:100 module:200; do
+  SEC=$(sed -n "/^\[building_space_${p%%:*}\]/,/^obsolete_by/p" "$BR")
+  NB=$(echo "$SEC" | grep -c '"Building"'); FAC=$(echo "$SEC" | grep -c '"Building", "Factory", "City"')
+  COST=$(sed -n "/^\[building_space_${p%%:*}\]/,/^\[building_/p" "$BR" | sed -n 's/^build_cost\t*= *//p')
+  if [ "$NB" = 1 ] && [ "$FAC" = 1 ] && [ "$COST" = "${p##*:}" ]; then echo "FC45TEST PASS buildings.ruleset: Space ${p%%:*} needs only a Factory and costs ${p##*:}"
+  else echo "FC45TEST FAIL buildings.ruleset: Space ${p%%:*} has $NB building reqs (Factory $FAC) and costs $COST (want 1, 1, ${p##*:})"; RC=1; fi
+done
 # Great people: the points table in script.lua mirrors the User_Effect_3 rows, and the counters are saved
 # (scalar globals in the first autosave after the pledge case, written right after the test's first turn; the
 # save after the second turn may not be written before the runner stops the server).

@@ -143,6 +143,16 @@ Notes, all derived unless marked:
 - Parts are the three `Special` buildings behind Apollo Program's `Enable_Space` (`civ45/buildings.ruleset:1338-1347`
   for Space Structural; `civ45/effects.ruleset` `apollo_program_1`, observed). Their techs are Space Flight,
   Superconductors and Environmentalism; the tech-tree design keeps them in the last era.
+- Changed 2026-10-18 (issue 164, balance report 2): each part needs a Factory in the city as well as its tech
+  and the Apollo Program, and costs 50, 100 and 200 shields (Structural, Component, Module). Until then a part
+  needed a Factory, a Library, a University and a Research Lab and cost 150, 300 and 600: in two Normal-AI games Research
+  Labs stood in 1 and 5 of about 105 cities at turn 475, and the ships of balance report 1 stopped at 16 to 23
+  structurals with no module. The whole ship is 5,600 shields instead of 16,800.
+- The default AI launched only a complete ship (all 32 structurals, 16 components and 12 modules,
+  `ai/default/aihand.c`, `dai_manage_spaceship`). The fork's AI also launches a ship that is not complete when
+  it has a success rate of at least 90 % and the game's last turn (`endturn`) is close enough that waiting
+  longer would miss it: on the last four turns on which its flight time still ends before `endturn`
+  (`dai_spaceship_deadline`).
 - If a ship arrives, `rank_users()` marks every other player surrendered for the ranking (`up/server/score.c:445-461`).
 
 ### 2.5 Diplomatic: allied now, a vote later
