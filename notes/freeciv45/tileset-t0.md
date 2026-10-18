@@ -158,11 +158,12 @@ Run 9's pine row is two colour families: cool blue-green c1-c3 and warm olive c4
 
 - **Cool pine is left out** (drawn since issue 127, "Cool pine next to tundra and glacier" below). It belongs on
   forest next to tundra or glacier, and Freeciv 3.2's tilespec cannot pick a whole-tile cell set by neighbour
-  terrain: a whole-tile layer either picks a numbered variant by tile index or one of 16 sprites by whether each neighbour has the *same* match type, and whole-tile `MATCH_PAIR`/`MATCH_FULL`
-  are "Not yet defined" (`fc_assert(FALSE)` in `client/tilespec.c`, loader and drawing). Corner cells with
-  `MATCH_PAIR` do see neighbours, but only as quarter-tile overlays, and glacier is a `water` match on layer 1.
-  The hooks that would work (a client patch for neighbour-chosen variant sets, a Boreal Forest terrain in the
-  ruleset, or a latitude rule) are written up in issue 127.
+  terrain: a whole-tile layer either picks a numbered variant by tile index or one of 16 sprites by whether each
+  neighbour has the *same* match type, and whole-tile `MATCH_PAIR`/`MATCH_FULL` are "Not yet defined"
+  (`fc_assert(FALSE)` in `client/tilespec.c`, loader and drawing). Corner cells with `MATCH_PAIR` do see neighbours,
+  but only as quarter-tile overlays, and glacier is a `water` match on layer 1. The hooks that would work (a client
+  patch for neighbour-chosen variant sets, a Boreal Forest terrain in the ruleset, or a latitude rule) are written
+  up in issue 127.
 - **Olive pine does not join the temperate forest.** Added as `forest11` and `forest12` (`--olive-pine`), the two
   cells show as dark squares with black gaps between star-shaped crowns among the broadleaf tiles
   (`olive-pine-1to1.jpg`; luminance 62 and 58 against 68-103): a patchwork. The committed build leaves them out.
