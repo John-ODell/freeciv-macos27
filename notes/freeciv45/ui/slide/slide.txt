@@ -1,0 +1,29 @@
+# Units slide between tiles (issue 82): the focus unit is moved one tile west, twice (west because the start
+# tile can sit in the map's last column; the Lua reads the unit's own tile, since the focus can pass to the next
+# unit after a move), from the server's Lua console
+# with smooth_move_unit_msec at 1500, and the map is shot about 0.3 s, 0.8 s and 3 s after each move. drive.log gives
+# the milliseconds of every line, so a client that freezes during the move shows as late shots.
+pace 100
+wait 4000
+dismiss
+wait 1000
+option smooth_move_unit_msec 1500
+chat /lua cmd for dx = -3, 1 do for dy = -1, 1 do edit.change_terrain(find.tile($X + dx, $Y + dy), find.terrain("Grassland")) end end
+wait 4000
+dismiss
+shot 00-start
+chat /lua cmd local u = find.unit(nil, $UNIT); u:move(find.tile(u.tile.nat_x - 1, u.tile.nat_y), 0)
+wait 300
+shot 01-move1-a
+wait 500
+shot 01-move1-b
+wait 2200
+shot 01-move1-c
+chat /lua cmd local u = find.unit(nil, $UNIT); u:move(find.tile(u.tile.nat_x - 1, u.tile.nat_y), 0)
+wait 300
+shot 02-move2-a
+wait 500
+shot 02-move2-b
+wait 2200
+shot 02-move2-c
+quit

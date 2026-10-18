@@ -1,0 +1,181 @@
+From 0a53188bec6addcd1bf67daa26ef88d40d2eff26 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 12:10:02 -0500
+Subject: [PATCH] Qt client: units slide between tiles instead of freezing the
+ client and jumping
+
+The Qt client now uses frame by frame animation like the GTK clients. A
+new hook in mapview_common.c (set_animation_start_callback) tells the
+client when the first animation is queued; a 16 ms timer then steps
+update_animation() and flushes the map until nothing is queued. Before,
+the generic loop in move_unit_map_canvas() blocked the event loop for
+smooth_move_unit_msec, so the map was never repainted during the move.
+---
+ client/gui-qt/gui_main.cpp |  7 ++++++-
+ client/gui-qt/mapview.cpp  | 32 ++++++++++++++++++++++++++++++++
+ client/gui-qt/mapview.h    |  3 +++
+ client/mapview_common.c    | 24 ++++++++++++++++++++++++
+ client/mapview_common.h    |  2 ++
+ 5 files changed, 67 insertions(+), 1 deletion(-)
+
+diff --git a/client/gui-qt/gui_main.cpp b/client/gui-qt/gui_main.cpp
+index d4fa8b7..1c7c7f5 100644
+--- a/client/gui-qt/gui_main.cpp
++++ b/client/gui-qt/gui_main.cpp
+@@ -57,6 +57,7 @@
+ #include "gui_main.h"
+ #include "helpdlg.h"
+ #include "hudwidget.h"
++#include "mapview.h"
+ #include "cityoverlay.h"
+ #include "edgebar.h"
+ #include "unitbar.h"
+@@ -96,7 +97,11 @@ class fc_client *gui()
+   Do any necessary pre-initialization of the UI, if necessary.
+ **************************************************************************/
+ void qtg_ui_init()
+-{}
++{
++  // Freeciv45: animations run from a timer (qt_animation_started())
++  set_frame_by_frame_animation();
++  set_animation_start_callback(qt_animation_started);
++}
+ 
+ /**********************************************************************//**
+   Entry point for whole freeciv client program.
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index 837196d..b5ddd1b 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -19,6 +19,7 @@
+ #include <QMouseEvent>
+ #include <QPainter>
+ #include <QPixmap>
++#include <QPointer>
+ #include <QToolTip>
+ #include <QWheelEvent>
+ 
+@@ -71,6 +72,9 @@ extern int last_center_enemy_city;
+ // Canvas pixels per map widget point; follows the tileset's pixel_ratio
+ static qreal map_canvas_density = 1.0;
+ 
++// Drives update_animation() while an animation is queued
++static QPointer<QTimer> animation_timer;
++
+ /**********************************************************************//**
+   How many map canvas pixels make one point of the map widget. A tileset
+   drawn for high density screens (pixel_ratio 2: 192 px tiles meant as
+@@ -1267,6 +1271,34 @@ void flush_dirty(void)
+   num_dirty_rects = 0;
+ }
+ 
++/**********************************************************************//**
++  Freeciv45: an animation (a unit moving, a battle, an explosion) has been
++  queued. The client uses frame by frame animation, so instead of a loop
++  that blocks the event loop until the move is over, a timer steps the
++  animation about 60 times a second and stops when nothing is queued; the
++  unit slides from tile to tile and the client stays responsive.
++**************************************************************************/
++void qt_animation_started(void)
++{
++  if (animation_timer.isNull()) {
++    if (gui() == nullptr || gui()->mapview_wdg == nullptr) {
++      return;
++    }
++    animation_timer = new QTimer(gui()->mapview_wdg);
++    animation_timer->setInterval(16);
++    QObject::connect(animation_timer, &QTimer::timeout, [] () {
++      update_animation();
++      flush_dirty();
++      if (!animation_pending()) {
++        animation_timer->stop();
++      }
++    });
++  }
++  if (!animation_timer->isActive()) {
++    animation_timer->start();
++  }
++}
++
+ /**********************************************************************//**
+   Do any necessary synchronization to make sure the screen is up-to-date.
+   The canvas should have already been flushed to screen via flush_dirty -
+diff --git a/client/gui-qt/mapview.h b/client/gui-qt/mapview.h
+index 4f85b6e..236caa4 100644
+--- a/client/gui-qt/mapview.h
++++ b/client/gui-qt/mapview.h
+@@ -56,6 +56,9 @@ QPoint map_canvas_pos(const QPoint &widget_pos);
+ int map_widget_width(void);
+ int map_widget_height(void);
+ 
++// Freeciv45: units slide between tiles (frame by frame animation)
++void qt_animation_started(void);
++
+ /**************************************************************************
+   Struct used for idle callback to execute some callbacks later
+ **************************************************************************/
+diff --git a/client/mapview_common.c b/client/mapview_common.c
+index bf95eba..376e062 100644
+--- a/client/mapview_common.c
++++ b/client/mapview_common.c
+@@ -76,6 +76,7 @@ struct view mapview;
+ bool can_slide = TRUE;
+ 
+ static bool frame_by_frame_animation = FALSE;
++static void (*animation_start_callback)(void) = NULL;
+ 
+ const struct tile *center_tile = NULL;
+ 
+@@ -239,6 +240,19 @@ static void animation_add(struct animation *anim)
+   anim->finished = FALSE;
+   anim->old_x = -1; /* Initial frame */
+   animation_list_append(animations, anim);
++
++  if (animation_list_size(animations) == 1
++      && animation_start_callback != NULL) {
++    animation_start_callback();
++  }
++}
++
++/************************************************************************//**
++  Whether an animation is queued or running (frame by frame animation).
++****************************************************************************/
++bool animation_pending(void)
++{
++  return animations != NULL && animation_list_size(animations) > 0;
+ }
+ 
+ /************************************************************************//**
+@@ -4125,6 +4139,16 @@ void set_frame_by_frame_animation(void)
+   frame_by_frame_animation = TRUE;
+ }
+ 
++/************************************************************************//**
++  With frame by frame animation, have callback called whenever the first
++  animation is queued, so a client without a redraw loop of its own can
++  start driving update_animation().
++****************************************************************************/
++void set_animation_start_callback(void (*callback)(void))
++{
++  animation_start_callback = callback;
++}
++
+ /************************************************************************//**
+   Return currently selected infratile, if any
+ ****************************************************************************/
+diff --git a/client/mapview_common.h b/client/mapview_common.h
+index 2f06faf..a0cadb7 100644
+--- a/client/mapview_common.h
++++ b/client/mapview_common.h
+@@ -372,6 +372,8 @@ const char *describe_topology(int topo);
+ void animations_init(void);
+ void animations_free(void);
+ void set_frame_by_frame_animation(void);
++void set_animation_start_callback(void (*callback)(void));
++bool animation_pending(void);
+ void update_animation(void);
+ 
+ #ifdef __cplusplus
+-- 
+2.56.0
+
