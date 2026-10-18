@@ -20,7 +20,7 @@ index 18820d7..a3e4574 100644
  	cityrep.h	\
  	colors.cpp	\
 diff --git a/client/gui-qt/citydlg.cpp b/client/gui-qt/citydlg.cpp
-index a7a59fc..7f03de3 100644
+index a7a59fc..4d4a642 100644
 --- a/client/gui-qt/citydlg.cpp
 +++ b/client/gui-qt/citydlg.cpp
 @@ -57,12 +57,14 @@
@@ -38,7 +38,7 @@ index a7a59fc..7f03de3 100644
  #include "colors.h"
  #include "fc_client.h"
  #include "gui_main.h"
-@@ -3817,9 +3819,28 @@ void city_dialog::update_title()
+@@ -3817,9 +3819,32 @@ void city_dialog::update_title()
  
  /************************************************************************//**
    Pop up (or bring to the front) a dialog for the given city.  It may or
@@ -58,6 +58,10 @@ index a7a59fc..7f03de3 100644
 +    gui()->cityoverlay_wdg->open_for(pcity);
 +    return;
 +  }
++  // A foreign city's dialog does not open over an own city's overlay
++  if (gui()->cityoverlay_wdg != nullptr) {
++    gui()->cityoverlay_wdg->close_overlay();
++  }
 +  real_city_dialog_popup_full(pcity);
 +}
 +
@@ -68,7 +72,7 @@ index a7a59fc..7f03de3 100644
  {
    if (!::city_dlg_created) {
      ::city_dlg = new city_dialog(gui()->mapview_wdg);
-@@ -3849,6 +3870,10 @@ void destroy_city_dialog()
+@@ -3849,6 +3874,10 @@ void destroy_city_dialog()
  ****************************************************************************/
  void qtg_popdown_city_dialog(struct city *pcity)
  {
@@ -79,7 +83,7 @@ index a7a59fc..7f03de3 100644
    if (!::city_dlg_created) {
      return;
    }
-@@ -3861,6 +3886,9 @@ void qtg_popdown_city_dialog(struct city *pcity)
+@@ -3861,6 +3890,9 @@ void qtg_popdown_city_dialog(struct city *pcity)
  ****************************************************************************/
  void qtg_popdown_all_city_dialogs()
  {
@@ -89,7 +93,7 @@ index a7a59fc..7f03de3 100644
    destroy_city_dialog();
  }
  
-@@ -3869,6 +3897,11 @@ void qtg_popdown_all_city_dialogs()
+@@ -3869,6 +3901,11 @@ void qtg_popdown_all_city_dialogs()
  ****************************************************************************/
  void qtg_real_city_dialog_refresh(struct city *pcity)
  {
@@ -101,7 +105,7 @@ index a7a59fc..7f03de3 100644
    if (!::city_dlg_created) {
      return;
    }
-@@ -3924,6 +3957,11 @@ void qtg_refresh_unit_city_dialogs(struct unit *punit)
+@@ -3924,6 +3961,11 @@ void qtg_refresh_unit_city_dialogs(struct unit *punit)
  ****************************************************************************/
  bool qtg_city_dialog_is_open(struct city *pcity)
  {

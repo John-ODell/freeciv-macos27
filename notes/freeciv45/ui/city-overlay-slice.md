@@ -40,7 +40,7 @@ also from the info label's update, so the treasury and a new turn reach Buy and 
 turns every city's drawing off, `handle_start_phase`). It closes itself when the city is lost.
 
 Switch the option off and a city opens the full dialog as today; switching it off while the overlay is open closes
-the overlay. Foreign cities (those the player may inspect) still open the dialog.
+the overlay. Foreign cities (those the player may inspect) still open the dialog, and close the overlay first.
 
 ## Not in this slice
 
@@ -65,7 +65,7 @@ theme blocks.
 | `data/themes/gui-qt/NightStalker/resource.qss`, `System/resource.qss` | `city_part` blocks: the unit bar's translucent box and text colours, a transparent buildings list, the progress bar |
 | `meson.build`, `client/gui-qt/Makefile.am` | The new files in the moc and source lists |
 
-1159 lines added, 2 removed, 15 files. No change to `common/`, `server/` or `client/*.c`.
+1163 lines added, 2 removed, 15 files. No change to `common/`, `server/` or `client/*.c`.
 
 The parts are themed like the unit bar: they are `QFrame`s with `Q_OBJECT`, so `resource.qss` type selectors
 reach them (`city_part` matches all four, `city_yields` and the rest one each). A first version painted its own
@@ -128,6 +128,9 @@ What the runs turned up, all fixed in the diff before it was written down:
   label's update now refreshes the overlay.
 - Folding Citizens left the column at its old height: the scroll area kept its own size hint. The buildings list
   is now sized to its rows and the column's layout is redone on a fold.
+- Found reading the diff for review, not in a run: a foreign city's dialog would have opened with an own city's
+  overlay still up. It now closes the overlay first. The clean build and the drive script were run again after
+  this change: same log, line for line.
 
 Noticed, not filed:
 
