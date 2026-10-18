@@ -76,7 +76,7 @@ GRADE = {"floor": (28, 2, -20)}
 BLEND_DEPTH = 0.375
 RELIEF_BASE = [
     ("hills", "run6", ["r3c1", "r3c2", "r3c3", "r3c4", "r3c5"]),        # plains, under the hills
-    ("mountains", "run12", ["r5c1", "r5c2", "r5c3", "r5c4", "r5c5"]),   # rocky desert, under the mountains
+    ("mountains", "run19", ["r5c1", "r5c2", "r5c3", "r5c4", "r5c5"]),   # rocky desert, under the mountains
 ]
 
 def square_point(x, y):
