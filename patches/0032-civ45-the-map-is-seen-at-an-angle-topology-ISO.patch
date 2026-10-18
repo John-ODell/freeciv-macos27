@@ -1,0 +1,82 @@
+From 5198a80eb395cbdf96108a2e33d3a4ae6e121073 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 13:58:47 -0500
+Subject: [PATCH] civ45: the map is seen at an angle (topology ISO)
+
+Freeciv45 moves to the isometric view. civ45's [settings] set topology
+to ISO; the tiles stay square, so movement, the 21-tile city radius and
+every rule are unchanged, and the map still wraps east to west only.
+The ruleset still suggests no tileset; a fresh client switches to its
+square-tile default, amplio2.
+---
+ data/civ45/README.civ45 | 12 +++++++-----
+ data/civ45/game.ruleset | 12 +++++++-----
+ 2 files changed, 14 insertions(+), 10 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 4a17751..fbcf7b1 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -18,15 +18,17 @@ Differences from sandbox
+   stack is attacked its best defender fights, and if it loses, only that
+   unit dies (server setting killstack disabled; sandbox kills the whole
+   stack outside cities and fortresses).
+-- Square map seen from above (topology "", overhead tilesets such as
+-  trident) that wraps east to west only (wrap WRAPX), instead of
+-  sandbox's isometric map wrapping both ways.
++- Square tiles seen at an angle (topology ISO, isometric tilesets such
++  as amplio2) on a map that wraps east to west only (wrap WRAPX),
++  instead of sandbox's isometric map wrapping both ways. The tiles are
++  still squares, so movement, city radius and every rule are the same
++  as on a map seen from above; an overhead tileset still works.
+ - Each city works 21 tiles: radius_sq 5 on a square map, the "fat cross"
+   shape. Earlier slices grew the radius with culture; that is gone (on a
+   square map it would reach 29 and then 45 tiles). Sandbox's Space
+   Elevator and Space Elevator Tether still enlarge their own city's radius.
+-- The ruleset suggests the trident tileset, the only overhead square
+-  tileset Freeciv ships, until a Freeciv45 tileset exists.
++- The ruleset suggests no tileset, so players keep their own; a fresh
++  client starts on amplio2.
+ - Cultural victory is enabled alongside spacerace and allied victory.
+ - Combat is to the death: a fight lasts until the attacker or the
+   defender dies (sandbox stops every fight after 15 rounds). Units with
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index 9a63903..e9f6989 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -73,9 +73,10 @@ global_init_buildings = "Palace"
+ [tileset]
+ ; If preferred tileset is set, clients that support the feature will suggest
+ ; using that tileset with the ruleset.
+-; civ45: no suggestion. The Freeciv45 test tileset is not shipped with the build
+-; yet, and suggesting trident made the client offer to replace the painted tiles
+-; at every game start. Players keep the tileset they chose.
++; civ45: no suggestion. The Freeciv45 tilesets are not shipped with the build
++; yet, and suggesting one made the client offer to replace the player's tileset
++; at every game start. Players keep the tileset they chose; with the iso map a
++; fresh client starts on amplio2.
+ preferred = ""
+ 
+ [soundset]
+@@ -919,7 +920,8 @@ colorlist =
+ ; etc...
+ 
+ [settings]
+-; freeciv game settings for civ45 (Freeciv45): overhead square map wrapping east to west,
++; freeciv game settings for civ45 (Freeciv45): square tiles seen at an angle (isometric view,
++; topology ISO) wrapping east to west,
+ ; only the defender dies when a stack loses, cultural victory enabled, the game ends when a
+ ; spaceship arrives, and it ends after turn 475 (the year 2050) on score (script.lua names the winner)
+ ;
+@@ -927,7 +929,7 @@ set =
+     { "name", "value", "lock"
+       "aifill", 12, FALSE
+       "generator", "FRACTAL", FALSE
+-      "topology", "", FALSE
++      "topology", "ISO", FALSE
+       "victories", "SPACERACE|ALLIED|CULTURE", FALSE
+       "endspaceship", "ENABLED", FALSE
+       "endturn", 475, FALSE
+-- 
+2.56.0
+

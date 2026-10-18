@@ -182,7 +182,7 @@ scripts/test.sh ~/freeciv-builds/qt --ruleset civ45 --no-client`, `logs/test-qt-
 
 | | civ45 slice 2 (now civ54) T101 | Freeciv45 slice 1 T101 |
 |---|---|---|
-| map | hex, wraps both ways | square seen from above, wraps east to west |
+| map | hex, wraps both ways | square seen from above, wraps east to west (seen at an angle since issue 188, 2026-10-18) |
 | cities | 64 | 89 |
 | units | 259 | 277 |
 | stacked tiles outside cities | 0 | 10 |
