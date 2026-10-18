@@ -4,7 +4,7 @@ Date: 2026-10-17. Source: John's reading of a modern 4X's screens, kept in the l
 `mapset_refs/` folder and described here in words. The clean-room rule stands: nothing in that folder is a
 visual reference for art or for the look of our widgets; this note only records which information the player
 sees, where the controls sit and how the screens connect, so our own design (`panels.md`) has one list of
-requirements. Freeciv45's visual style is its own (plan row Q1 to Q3, `panels.md` section 4).
+requirements. Freeciv45's visual style is its own (plan row Q1 to Q3, `panels.md` sections 2.5 and 3.5).
 
 ## 1. Persistent regions of the main screen
 
@@ -14,7 +14,7 @@ requirements. Freeciv45's visual style is its own (plan row Q1 to Q3, `panels.md
 | Bottom left | The selected unit's card (section 2) | Unit info widget, text heavy, fixed | `panels.md` section 2: the unit bar, first slice built (`first-slice.md`) |
 | Bottom right | Minimap with overlay toggles; directly above it one big call-to-action button for what the turn needs next (choose production, choose research, unit needs orders, end turn) | Minimap; turn done button in the top bar; messages window separate | Keep the minimap; add the single "what next" button above it that cycles through blocking items and becomes End Turn when nothing blocks |
 | Right edge, vertical | A column of round buttons: overview screens (section 4) at the top, then the notification stack (section 5), then the "what next" button | Nothing comparable; messages are a dock widget | Column of round buttons, notifications as badges, see section 5 |
-| Left edge, vertical | A short column of unit action icons next to the unit card (attack, fortify, sleep, alert, skip) and a collapse arrow | Actions live in menus and keyboard | Folded into the unit bar's action row (`panels.md` section 2.4) |
+| Left edge, vertical | A short column of unit action icons next to the unit card (attack, fortify, sleep, alert, skip) and a collapse arrow | Actions live in menus and keyboard | Folded into the unit bar's action row (`panels.md` section 2.3) |
 
 ## 2. The selected unit card (bottom left)
 
@@ -103,6 +103,9 @@ the richer tooltip (Q2) and badge-style banners drawn in the test tileset's styl
   first playable has no espionage points; the Spymaster uses native diplomat actions (decision 14).
 
 ## 8. What this changes in panels.md
+
+Folded into `panels.md` on 2026-10-17 (issue 118): item 1 in its 2.3, item 2 in its section 3, items 3 and 4 in
+its new section 8, and the mockup redrawn with a map frame and a city frame.
 
 1. Add the previous/next-needing-orders arrows to the unit bar's title.
 2. The city panel becomes a map overlay set (left yields, right collapsible sections, bottom production), not a
