@@ -104,6 +104,8 @@ The old sidebar's wheel and right-click shortcuts sit on the matching edge butto
 In overhead view the edge between two terrains wanders instead of running as a straight band, and two variants of
 one terrain fade into each other at the tile edge, when the tileset gives the masks for it (patch 0028,
 `notes/freeciv45/tileset-t0.md`, "Wandering edges and variant fades").
+In the Qt client a moving unit slides between tiles instead of freezing the client and jumping (patch 0029,
+`notes/freeciv45/ui/slide/slide.md`).
 
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It

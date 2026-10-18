@@ -23,7 +23,7 @@ new file mode 100644
 index 0000000..691a6b0
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,771 @@
+@@ -0,0 +1,780 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -46,6 +46,7 @@ index 0000000..691a6b0
 +  running game with a focus unit, then runs one line of the script every
 +  "pace" milliseconds. Input goes through QTest, so Qt's own enter, leave,
 +  hover and tooltip handling runs as for a real mouse.
++  drive.log gives each line with the milliseconds since the script started.
 +
 +    pace MS                 delay between lines (default 900)
 +    wait MS                 extra delay
@@ -71,7 +72,7 @@ index 0000000..691a6b0
 +    clicktile DX DY         left click the tile DX, DY from the focus unit
 +                            (through action_button_pressed, which the map's
 +                            mouse release calls, since that reads QCursor)
-+    option [NAME] on|off    a boolean client option through its callback
++    option [NAME] on|off|N  a boolean or number client option through its callback
 +                            (default gui_qt_freeciv45_panels)
 +    chat TEXT               send a chat line or a /command to the server
 +    dismiss                 close the modal boxes (welcome message...)
@@ -92,6 +93,7 @@ index 0000000..691a6b0
 +#include <QApplication>
 +#include <QDialog>
 +#include <QDir>
++#include <QElapsedTimer>
 +#include <QFile>
 +#include <QLabel>
 +#include <QMenu>
@@ -144,6 +146,7 @@ index 0000000..691a6b0
 +static QString out_dir;
 +static QTimer *drive_timer = nullptr;
 +static bool started = false;
++static QElapsedTimer drive_clock;   // since the script started
 +
 +/************************************************************************//**
 +  Append to drive.log
@@ -484,7 +487,7 @@ index 0000000..691a6b0
 +  w = line.split(' ', Qt::SkipEmptyParts);
 +  QString cmd = w.isEmpty() ? QString() : w[0];
 +
-+  drive_log("> " + line);
++  drive_log(QString("> %1   [%2 ms]").arg(line).arg(drive_clock.elapsed()));
 +  if (cmd == "pace" && w.size() > 1) {
 +    pace = w[1].toInt();
 +  } else if (cmd == "wait" && w.size() > 1) {
@@ -608,9 +611,14 @@ index 0000000..691a6b0
 +  } else if (cmd == "option" && w.size() > 1) {
 +    QString name = (w.size() > 2 ? w[1] : QString("gui_qt_freeciv45_panels"));
 +
-+    option_bool_set(optset_option_by_name(client_optset,
-+                                          name.toUtf8().constData()),
-+                    w.last() == "on");
++    struct option *opt = optset_option_by_name(client_optset,
++                                               name.toUtf8().constData());
++
++    if (opt != nullptr && option_type(opt) == OT_INTEGER) {
++      option_int_set(opt, w.last().toInt());
++    } else {
++      option_bool_set(opt, w.last() == "on");
++    }
 +  } else if (cmd == "chat" && w.size() > 1) {
 +    send_chat(QStringList(w.mid(1)).join(' ').toUtf8().constData());
 +  } else if (cmd == "dismiss") {
@@ -751,6 +759,7 @@ index 0000000..691a6b0
 +        && head_of_units_in_focus() != nullptr
 +        && gui()->unitbar_wdg != nullptr) {
 +      started = true;
++      drive_clock.start();
 +      gui()->raise();
 +      gui()->activateWindow();
 +      QApplication::setActiveWindow(gui());
