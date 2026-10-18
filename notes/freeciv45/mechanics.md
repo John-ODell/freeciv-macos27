@@ -1018,4 +1018,6 @@ turns: the default AI rarely drafts more than once a turn.
 - "The city keeps at least 5 citizens" for a draft and "at most half the population" for a whip are not built
   (filed); they are a design call because they would end most of the AI's drafting.
 - The AI does not weigh the unrest when it drafts.
+- A captured city keeps its unrest under its new owner (the record is the city's, and a building lost in the
+  capture is put back).
 
