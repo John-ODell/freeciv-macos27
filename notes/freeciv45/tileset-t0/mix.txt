@@ -1,0 +1,11 @@
+# grassland next to forest (west block, with a grassland hole), plains (east block) and hills (south block),
+# plus a lone forest and a lone hills tile in the grassland
+pace 1000
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd local function pick(dx, dy) if dx == -5 and dy == 3 then return "Grassland" end; if dx >= -7 and dx <= -3 and dy >= 1 and dy <= 5 then return "Forest" end; if dx >= 3 and dx <= 7 and dy >= 1 and dy <= 5 then return "Plains" end; if dx >= -1 and dx <= 1 and dy >= 4 and dy <= 6 then return "Hills" end; if dx == -2 and dy == -1 then return "Forest" end; if dx == 2 and dy == -1 then return "Hills" end; return "Grassland" end; for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do local x0, y0 = u.tile.nat_x, u.tile.nat_y; for dy = -3, 8 do for dx = -9, 9 do local t = find.tile(x0 + dx, y0 + dy); if t then edit.change_terrain(t, find.terrain(pick(dx, dy))) end end end; break end end end
+wait 15000
+dismiss
+shot mix
+quit

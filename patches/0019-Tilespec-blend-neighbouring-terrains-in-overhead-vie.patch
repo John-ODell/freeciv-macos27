@@ -1,0 +1,168 @@
+From 37a68fe0bf705a5b0122adf8305468497d64962e Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 21:34:12 -0500
+Subject: [PATCH] Tilespec: blend neighbouring terrains in overhead view with a
+ tileset mask
+
+Freeciv blends terrains only in isometric view: blend_layer crops quarter
+tiles at iso offsets and masks them with t.dither_tile, which is loaded for
+isometric tilesets only. An overhead square tileset now gets blending when
+it provides t.blend_mask, a 3x3-tile alpha mask with the terrain's own tile
+in the middle that says how strongly the terrain shows in each of the eight
+tiles around it. For each terrain with a blender, the client crops eight
+whole-tile sprites, one per direction, from the blender through the part of
+the mask that lies on the tile in that direction. A tile whose terrain has
+blend_layer draws, after that layer, the sprite of every neighbour of
+another blending terrain: across the edge for the four sides, into the
+corner for the diagonals. A corner is skipped when a side neighbour next to
+it has the corner's terrain, so the same terrain is not laid twice there.
+
+Each direction's part of the mask is cut out as a whole tile first, and the
+mask may be a pixel per tile off 3x3 tiles, so a tileset scaled by the Qt
+client's zoom, which rounds the mask and the tile size separately, still
+blends, with no unmasked strip where the scaled mask comes up short.
+
+Without t.blend_mask nothing changes: isometric tilesets and overhead
+tilesets (hex2t sets blend_layer) take the old path, and a mask of another
+size is reported and ignored.
+---
+ client/tilespec.c | 88 ++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 84 insertions(+), 4 deletions(-)
+
+diff --git a/client/tilespec.c b/client/tilespec.c
+index 6397cdd..f6a2d8a 100644
+--- a/client/tilespec.c
++++ b/client/tilespec.c
+@@ -196,7 +196,9 @@ struct drawing_data {
+ 
+   int blending; /* layer, 0 = none */
+   struct sprite *blender;
+-  struct sprite *blend[4]; /* indexed by a direction4 */
++  struct sprite *blend[8]; /* Indexed by a direction4 in isometric view,
++                            * by a direction8 in overhead view with
++                            * t.blend_mask */
+ };
+ 
+ struct city_style_threshold {
+@@ -246,7 +248,9 @@ struct named_sprites {
+ 
+     /* The panel sprites for showing tax % allocations. */
+     *tax_luxury, *tax_science, *tax_gold,
+-    *dither_tile;     /* Only used for isometric view */
++    *dither_tile,     /* Only used for isometric view */
++    *blend_mask;      /* Overhead square tilesets only, optional: 3x3 tiles,
++                       * how far a terrain fades into each neighbour */
+ 
+   struct {
+     struct sprite
+@@ -666,7 +670,7 @@ static void drawing_data_destroy(struct drawing_data *draw)
+   if (draw->name != NULL) {
+     free(draw->name);
+   }
+-  for (i = 0; i < 4; i++) {
++  for (i = 0; i < ARRAY_SIZE(draw->blend); i++) {
+     if (draw->blend[i]) {
+       free_sprite(draw->blend[i]);
+     }
+@@ -3182,6 +3186,24 @@ static void tileset_lookup_sprite_tags(struct tileset *t)
+   SET_SPRITE(arrow[ARROW_MINUS], "s.minus");
+   if (t->type == TS_ISOMETRIC) {
+     SET_SPRITE(dither_tile, "t.dither_tile");
++  } else if (t->hex_width == 0 && t->hex_height == 0) {
++    /* Blending in overhead view: the tileset's own soft mask, if any. */
++    SET_SPRITE_OPT(blend_mask, "t.blend_mask");
++    if (t->sprites.blend_mask != NULL) {
++      int mw, mh;
++
++      /* A scaled tileset (the Qt client's zoom) rounds the mask and the
++       * tile size separately, so allow a pixel per tile. */
++      get_sprite_dimensions(t->sprites.blend_mask, &mw, &mh);
++      if (abs(mw - 3 * t->normal_tile_width) > 3
++          || abs(mh - 3 * t->normal_tile_height) > 3) {
++        log_error("Tileset \"%s\": t.blend_mask is %dx%d, not 3x3 tiles "
++                  "(%dx%d); no blending in overhead view.",
++                  tileset_name_get(t), mw, mh,
++                  3 * t->normal_tile_width, 3 * t->normal_tile_height);
++        t->sprites.blend_mask = NULL;
++      }
++    }
+   }
+ 
+   if (tileset_is_isometric(tileset)) {
+@@ -4392,7 +4414,30 @@ void tileset_setup_tile_type(struct tileset *t,
+     }
+   }
+ 
+-  if (NULL != draw->blender) {
++  if (NULL != draw->blender && NULL != t->sprites.blend_mask) {
++    /* Overhead view: t.blend_mask is 3x3 tiles with this terrain's tile in
++     * the middle, and says how strongly the terrain shows in each of the
++     * eight tiles around it. blend[dir] is the whole blender tile seen
++     * through the part of the mask that lies on the tile which has this
++     * terrain in direction dir. That part is cut out first as a whole
++     * tile, so where a scaled mask comes up a pixel short the piece is
++     * transparent there rather than leaving the blender unmasked. */
++    const int W = t->normal_tile_width;
++    const int H = t->normal_tile_height;
++    enum direction8 dir;
++
++    for (dir = 0; dir < DIR8_MAGIC_MAX; dir++) {
++      struct sprite *piece;
++      int dx, dy;
++
++      DIRSTEP(dx, dy, dir);
++      piece = crop_sprite(t->sprites.blend_mask, (1 - dx) * W, (1 - dy) * H,
++                          W, H, NULL, 0, 0, 1.0f, FALSE);
++      draw->blend[dir] = crop_sprite(draw->blender, 0, 0, W, H, piece, 0, 0,
++                                     1.0f, FALSE);
++      free_sprite(piece);
++    }
++  } else if (NULL != draw->blender) {
+     /* Set up blending sprites. This only works in iso-view! */
+     const int W = t->normal_tile_width;
+     const int H = t->normal_tile_height;
+@@ -5170,6 +5215,41 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
+   };
+   enum direction4 dir = 0;
+ 
++  if (NULL != t->sprites.blend_mask) {
++    /* Overhead view: every neighbour of another blending terrain fades a
++     * little way into this tile, across the shared edge or, for a diagonal
++     * neighbour, into the shared corner. A corner is left to the edges when
++     * a neighbour beside it has the corner's terrain, so the same terrain
++     * is not laid twice there. */
++    enum direction8 dir8;
++
++    for (dir8 = 0; dir8 < DIR8_MAGIC_MAX; dir8++) {
++      struct tile *tile1 = mapstep(&(wld.map), ptile, dir8);
++      struct terrain *other = tterrain_near[dir8];
++      struct drawing_data *odraw;
++
++      if (!tile1
++          || client_tile_get_known(tile1) == TILE_UNKNOWN
++          || NULL == other
++          || pterrain == other) {
++        continue;
++      }
++      odraw = t->sprites.drawing[terrain_index(other)];
++      if ((0 == odraw->blending && NULL == odraw->blender)
++          || NULL == odraw->blend[dir8]) {
++        continue;
++      }
++      if (!is_cardinal_dir(dir8)
++          && (tterrain_near[dir_cw(dir8)] == other
++              || tterrain_near[dir_ccw(dir8)] == other)) {
++        continue;
++      }
++      ADD_SPRITE_FULL(odraw->blend[dir8]);
++    }
++
++    return sprs - saved_sprs;
++  }
++
+   /*
+    * We want to mark unknown tiles so that an unreal tile will be
+    * given the same marking as our current tile - that way we won't
+-- 
+2.56.0
+
