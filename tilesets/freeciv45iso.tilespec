@@ -151,6 +151,7 @@ files =
   "freeciv45iso/coast.spec",
   "freeciv45iso/blend.spec",
   "freeciv45iso/maglev.spec",
+  "freeciv45iso/terrain2.spec",
   "freeciv45iso/hills.spec",
   "freeciv45iso/mountains.spec",
   "freeciv45iso/water.spec",
@@ -207,7 +208,7 @@ match_types = "desert", "forest", "grassland", "hills", "jungle", "mountains", "
 match_types = "water", "land", "ice"
 
 [layer2]
-match_types = "water", "arctic", "hills"
+match_types = "water", "arctic", "hills", "forest", "jungle"
 
 ; Water graphics referenced by terrain.ruleset
 ;
@@ -290,7 +291,8 @@ layer0_match_with = "tundra"
 layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
-layer2_match_type = "water"
+layer2_match_type = "forest"
+layer2_match_with = "forest"
 
 [tile_grassland]
 tag = "grassland"
@@ -321,7 +323,8 @@ layer0_match_type = "jungle"
 layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
-layer2_match_type = "water"
+layer2_match_type = "jungle"
+layer2_match_with = "jungle"
 
 [tile_mountains]
 tag = "mountains"

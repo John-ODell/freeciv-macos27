@@ -23,18 +23,20 @@ fork's patch 0033 reads for isometric tilesets. There is no t.blend_mask_same in
 two variants of one terrain meet without a fade, as in amplio2.
 
 Hills and mountains (issue 194): a painted square seen from above reads as flat ground once turned, so they draw
-amplio2's relief overlays (RELIEF, on layer 2) over flat painted ground (RELIEF_BASE). Forest, jungle and the cool
-pine keep the painted canopy, which reads as forest at the angle.
+amplio2's relief overlays (RELIEF, on layer 2) over flat painted ground (RELIEF_BASE). Forest and jungle (issue
+199): the painted canopy read flat in a real game, so they draw amplio2's tree overlays the same way (CANOPY) over
+painted grassland (CANOPY_BASE), until our own tree props replace them; --canopy painted keeps the canopy.
 
 From amplio2 (Freeciv 3.2.6, GPL-2.0-or-later, the artists named in each spec's [info] section, copied verbatim):
-every spec file amplio2.tilespec lists under amplio2/ except the forest and jungle overlays and ocean cells the
-painted ground replaces (SKIPPED), each sprite scaled 2x with nearest-neighbour sampling (recut). The tilespec is amplio2's with the sizes
+every spec file amplio2.tilespec lists under amplio2/ except the ocean cells the painted ground replaces
+(SKIPPED; the forest and jungle overlays too with --canopy painted), each sprite scaled 2x with nearest-neighbour sampling (recut). The tilespec is amplio2's with the sizes
 and offsets doubled, pixel_ratio 2, the file list renamed, and freeciv45test's layer and terrain sections.
 
 usage: make-freeciv45iso.py --data ~/freeciv-builds/qt/share/freeciv
                             --art ~/Desktop/asset_generator/freeciv45/01_terrain_ground [--cutter SEAMLESS.py]
                             [--out tilesets] [--olive-pine] [--no-tone-match] [--no-level] [--no-blend]
-                            [--no-relief] [--relief-base flat|painted]
+                            [--no-relief] [--relief-base flat|painted] [--canopy amplio2|painted]
+                            [--land-grade L,A,B]
 Needs Pillow (python3.14 on this Mac has it).
 """
 import argparse, importlib.util, os, random, re, tempfile
@@ -49,8 +51,8 @@ W, H = 192, 96          # the diamond: amplio2's 96 x 48, doubled
 T = 192                 # the square masters and freeciv45test's tile (make-freeciv45test.py --tile 192)
 SS = 4                  # point samples per pixel, per axis
 AMPLIO_SCALE = 2
-# amplio2 spec files left out: the forest, jungle, hills and mountains overlays and the ocean's corner cells, which
-# the painted ground replaces. water.spec stays for the rivers; its lake and ice cells are dropped (DROP_PREFIX), and so
+# amplio2 spec files left out: the ocean's corner cells, which the painted ground replaces, and the forest and jungle
+# overlays unless --canopy amplio2 (CANOPY, the default) takes them back. water.spec stays for the rivers; its lake and ice cells are dropped (DROP_PREFIX), and so
 # are terrain1.spec's t.blend.* textures, which the client would fade in instead of the painted variant 1.
 SKIPPED = ("amplio2/terrain2.spec", "amplio2/ocean.spec")
 DROP_PREFIX = {"amplio2/water.spec": ("t.l0.", "t.l1."), "amplio2/terrain1.spec": ("t.blend.",)}
@@ -78,6 +80,13 @@ RELIEF_BASE = [
     ("hills", "run6", ["r3c1", "r3c2", "r3c3", "r3c4", "r3c5"]),        # plains, under the hills
     ("mountains", "run19", ["r5c1", "r5c2", "r5c3", "r5c4", "r5c5"]),   # rocky desert, under the mountains
 ]
+# Forest and jungle (issue 199): --canopy amplio2 draws amplio2's tree overlays (terrain2.spec, 16 forms each, matched
+# to same-type neighbours) on layer 2 like the relief, over flat grassland (CANOPY_BASE) instead of the painted
+# canopy. The cool pine next to tundra stays painted ground under the trees.
+CANOPY = {"amplio2/terrain2.spec": ("forest", "jungle")}
+CANOPY_BASE = [("forest", "run15", sq.row(1) + sq.row(2)), ("jungle", "run15", sq.row(1) + sq.row(2))]
+# A CIE Lab offset (L, a, b, as GRADE) for every painted land cell, after GRADE (issue 199; --land-grade).
+LAND_GRADE = (0, 0, 0)
 
 def square_point(x, y):
     """The square tile point (u, v) under the diamond's pixel centre (x, y)."""
@@ -179,12 +188,13 @@ def ground(out_dir, record):
         cell = square.crop((c * T, r * T, (c + 1) * T, (r + 1) * T))
         terrain = re.match(r"t\.l0\.([a-z_]+?)\d+$", tag).group(1)
         if terrain in GRADE: cell = grade(cell, *GRADE[terrain])
+        if any(LAND_GRADE) and terrain not in sq.WATER: cell = grade(cell, *LAND_GRADE)
         sheet.paste(iso_ground(cell), (c * W, r * H))
     sheet.save(path, optimize=True)
     record.append("| `%s/terrain45.spec` | the cells above, each turned 45 degrees and squashed 2:1 (to_iso, %dx%d "
-                  "samples, binary outline); graded in Lab: %s | %dx%d diamonds | %dx%d |"
-                  % (NAME, SS, SS, ", ".join("%s %+d %+d %+d" % ((t,) + g) for t, g in GRADE.items()), W, H, cols * W,
-                     rows * H))
+                  "samples, binary outline); graded in Lab: %s%s | %dx%d diamonds | %dx%d |"
+                  % (NAME, SS, SS, ", ".join("%s %+d %+d %+d" % ((t,) + g) for t, g in GRADE.items()),
+                     "; land %+d %+d %+d" % LAND_GRADE if any(LAND_GRADE) else "", W, H, cols * W, rows * H))
     return {tag for _, _, tag in cells}
 
 def coast(out_dir, record, relief=True):
@@ -250,14 +260,20 @@ def square_sections(data, files):
         if name and (name.startswith("layer") or name.startswith("tile_")): sections[name].append(line)
     return {k: "\n".join(v).rstrip() + "\n" for k, v in sections.items() if k.startswith(("layer", "tile_"))}
 
-def relief_sections(ours):
+def relief_sections(ours, canopy=False):
     """freeciv45test's sections with RELIEF on layer 2: hills and mountains matched as "hills" (amplio2's
     16 forms), mountains tall and 12 px lower (amplio2's 6, doubled), and the water tiles' ice edge matched as a pair
-    against arctic, so a hill next to water draws no ice."""
+    against arctic, so a hill next to water draws no ice. With canopy, forest and jungle are matched the same way on
+    layer 2, each as its own type."""
+    trees = [t for ts in CANOPY.values() for t in ts] if canopy else []
     out = {}
     for name, text in ours.items():
         if name == "layer2":
-            text = re.sub(r'match_types = "water", "arctic"', 'match_types = "water", "arctic", "hills"', text)
+            text = re.sub(r'match_types = "water", "arctic"',
+                          'match_types = "water", "arctic", "hills"' + "".join(', "%s"' % t for t in trees), text)
+        elif name[5:] in trees:
+            text = text.replace('layer2_match_type = "water"',
+                                'layer2_match_type = "%s"\nlayer2_match_with = "%s"' % (name[5:], name[5:]))
         elif name[5:] in RELIEF.values():
             extra = '\nlayer2_is_tall = TRUE\nlayer2_offset_y = %d' % (6 * AMPLIO_SCALE) if name == "tile_mountains" else ""
             text = text.replace('layer2_match_type = "water"',
@@ -266,13 +282,14 @@ def relief_sections(ours):
             text = text.replace('layer2_match_with = "water"', 'layer2_match_with = "arctic"')
         out[name] = text
     assert "hills" in out["layer2"] and 'layer2_match_with = "hills"' in out["tile_mountains"]
+    assert all('layer2_match_with = "%s"' % t in out["tile_" + t] for t in trees)
     return out
 
-def tilespec(data, out_root, files, blend=True, relief=True):
+def tilespec(data, out_root, files, blend=True, relief=True, canopy=False):
     """amplio2.tilespec with sizes and offsets doubled, pixel_ratio 2, the file list renamed, and freeciv45test's
     layer and terrain sections in place of amplio2's (amplio2's other terrains kept, matched as mountains)."""
     ours = square_sections(data, files)
-    if relief: ours = relief_sections(ours)
+    if relief: ours = relief_sections(ours, canopy)
     out, section, in_files, inserted, skipping = [], None, False, False, False
     for raw in open(os.path.join(data, "amplio2.tilespec"), errors="replace"):
         line = raw.rstrip("\n")
@@ -334,11 +351,11 @@ terrains need the fork's patch 0033 (an unpatched client blends through amplio2'
 
 ## From amplio2, scaled
 
-Every spec file that `amplio2.tilespec` lists under `amplio2/`, except %(skipped)s (the forest and jungle overlays
-and ocean cells the painted ground replaces), is re-cut from Freeciv 3.2.6's amplio2 tileset (GPL-2.0-or-later; the artists are
+Every spec file that `amplio2.tilespec` lists under `amplio2/`, except %(skipped)s (cells the painted ground
+replaces), is re-cut from Freeciv 3.2.6's amplio2 tileset (GPL-2.0-or-later; the artists are
 named in each spec's `[info]` section, copied verbatim): each sprite scaled 2x with nearest-neighbour sampling, so it
 looks as amplio2 does on a 2x screen today. `water.spec` keeps only the rivers. `hills.spec` and `mountains.spec` are the relief
-over the flat hills and mountains ground (issue 194), moved from layer 1 to layer 2. `misc/citybar` and `misc/overlays`
+over the flat hills and mountains ground (issue 194), moved from layer 1 to layer 2.%(canopy)s `misc/citybar` and `misc/overlays`
 are re-cut too, because the client draws them on the map; the other `misc/` files are read from the installed data.
 
 | spec | source | scaling | sheet |
@@ -346,6 +363,7 @@ are re-cut too, because the client draws them on the map; the other `misc/` file
 """
 
 def main():
+    global LAND_GRADE
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True, help="a Freeciv data dir with amplio2.tilespec, amplio2/ and trident.tilespec")
     ap.add_argument("--art", required=True, help="the art repo's freeciv45/01_terrain_ground, with the runs in PANELS")
@@ -357,9 +375,16 @@ def main():
     ap.add_argument("--no-relief", action="store_true", help="no amplio2 relief: painted hills and mountains, flat")
     ap.add_argument("--relief-base", choices=("flat", "painted"), default="flat",
                     help="the ground under the relief: RELIEF_BASE's flat cells, or the painted hills and mountains")
+    ap.add_argument("--canopy", choices=("painted", "amplio2"), default="amplio2",
+                    help="forest and jungle: the painted canopy, or amplio2's tree overlays over CANOPY_BASE")
+    ap.add_argument("--land-grade", default=",".join(map(str, LAND_GRADE)), metavar="L,A,B",
+                    help="CIE Lab offset for the painted land, after GRADE")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
+    LAND_GRADE = tuple(int(v) for v in a.land_grade.split(","))
+    canopy = a.canopy == "amplio2"
+    if canopy and a.no_relief: ap.error("--canopy amplio2 needs the relief layer (no --no-relief)")
     sq.BLEND_DEPTH = round(BLEND_DEPTH * T)
     for key, value in SHORE.items(): setattr(sq, key, value)
     out_dir = os.path.join(a.out, NAME); os.makedirs(out_dir, exist_ok=True)
@@ -370,6 +395,8 @@ def main():
     if relief and a.relief_base == "flat":
         plan = [p for p in plan if p[0] not in RELIEF.values()] + RELIEF_BASE
     plan = [p for p in plan if p[0] != "plains"] + ISO_PLAINS
+    if canopy:
+        plan = [p for p in plan if p[0] not in [t for ts in CANOPY.values() for t in ts]] + CANOPY_BASE
     plan.sort(key=lambda p: [t for t, _, _ in sq.PLAN].index(p[0]))
     painted_record, amplio_record = [], []
     sq.painted(panels, cutter, out_dir, painted_record, plan, tone_match=not a.no_tone_match, level=not a.no_level)
@@ -382,7 +409,7 @@ def main():
     files, drop = [], Drop(own)
     sq.OVERRIDDEN = drop
     for rel in listed:
-        if rel in SKIPPED or (rel in RELIEF and not relief): continue
+        if (rel in SKIPPED and not (canopy and rel in CANOPY)) or (rel in RELIEF and not relief): continue
         if rel.startswith("amplio2/"):
             drop.prefixes = DROP_PREFIX.get(rel, ())
             sq.recut(a.data, rel, out_dir, amplio_record, scale=AMPLIO_SCALE)
@@ -390,6 +417,10 @@ def main():
             if rel in RELIEF:       # amplio2 draws its relief on layer 1; here it is layer 2
                 spec = os.path.join(out_dir, os.path.basename(rel)); text = open(spec).read()
                 open(spec, "w").write(text.replace('"t.l1.%s_' % RELIEF[rel], '"t.l2.%s_' % RELIEF[rel]))
+            if rel in CANOPY:       # the same for the trees
+                spec = os.path.join(out_dir, os.path.basename(rel)); text = open(spec).read()
+                for t in CANOPY[rel]: text = text.replace('"t.l1.%s_' % t, '"t.l2.%s_' % t)
+                open(spec, "w").write(text)
             if rel == "amplio2/terrain1.spec":
                 files += ["%s/terrain45.spec" % NAME, "%s/coast.spec" % NAME] + ([] if a.no_blend else ["%s/blend.spec" % NAME])
         elif sq.map_misc_scale(rel) and sq.map_misc_scale(rel) != 1:
@@ -397,9 +428,11 @@ def main():
             sq.recut(a.data, rel, out_dir, amplio_record, scale=sq.map_misc_scale(rel))
             files.append("%s/%s" % (NAME, os.path.basename(rel)))
         else: files.append(rel)
-    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief)
+    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy)
     with open(os.path.join(out_dir, "RECORD.md"), "w") as f:
-        f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED)})
+        f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED if not (canopy and s in CANOPY)),
+                             "canopy": " `terrain2.spec`, the forest and jungle overlays, moves the same way over painted "
+                                       "grassland (issue 199)." if canopy else ""})
         f.write("\n".join(amplio_record) + "\n\n## Painted ground, shore and blend masks\n\n"
                 "Cut as `make-freeciv45test.py` cuts them (the same panels, cells, cutter and tone match), then turned "
                 "into diamonds.\n\n| spec | source | scaling | sheet |\n|---|---|---|---|\n"

@@ -78,6 +78,7 @@ left. That suits grassland, plains, desert, tundra, swamp, glacier and water. Hi
   - Hills stand on plains cells (run 6 row 3), mountains on rocky desert (run 19 row 5 since issue 201).
   - The painted hills and mountains stay in freeciv45test.
 - Forest, jungle and the cool pine keep the painted canopy, which reads as forest at the angle (picture above).
+  Changed by issue 199: in a real game the canopy read flat, so forest and jungle now draw amplio2's trees too.
 
 **How (observed, source and run):**
 - The overlays come in 16 forms each, matched to same-type neighbours on the four edges.
@@ -150,7 +151,7 @@ build, offscreen. The crops are at the parent's `mid.png` offset, so the three r
 - Grassland and plains are close in hue: plains are yellow-green, grassland a duller green.
 - Desert is golden where amplio2's is pale.
 - A diagonal coast still steps tile by tile, as amplio2's does, but softer.
-- Forest and jungle overlays and a brightness lift are the parent's items 4 and 5.
+- Forest and jungle overlays and a brightness lift are the parent's items 4 and 5 (issue 199, below).
 
 ## Terrain retakes, runs 18 to 21 (issue 201, 2026-10-18)
 
@@ -173,6 +174,39 @@ The art repo kept four retakes (BK-Art PR 66, commit 1e805b1). Both builders now
 ![amplio2, after 198, with the retakes; mapseed 21, 1:1](retakes-seed21-1to1.jpg)
 
 ![every civ45 terrain by name: amplio2, after 198, with the retakes; 1:1](retakes-terrain-names-1to1.jpg)
+
+## Forest, jungle and brightness (issue 199, 2026-10-18)
+
+**Forest and jungle now draw amplio2's tree overlays** (`--canopy amplio2`, the default).
+- The overlays come from amplio2's `terrain2.spec`: 16 forms each, matched to same-type neighbours. They sit on
+  layer 2 like the hill relief, over painted grassland (`CANOPY_BASE`, run 15 rows 1 and 2).
+- In the same-seed game and on the field, the trees stand up off the ground the way amplio2's do. The painted canopy
+  read as a flat green carpet.
+- This is an interim step. The Codex tree props (BK-Art `02_terrain_features`) are meant to replace amplio2's trees;
+  the plan is in the shared notes, `freeciv45iso-scatter-plan.md`.
+- `--canopy painted` gives back the build of issues 190 to 201.
+- The cool pine next to tundra is still painted ground, now under amplio2's broadleaf trees. It shows as a darker
+  blue-green floor at the forest's tundra side.
+
+**Brightness: no lift.** Measured on land only (mean luminance of three land boxes in the same-seed crop, observed):
+
+| box | amplio2 | ours | ours, lightness +8 |
+|---|---|---|---|
+| around the start | 88.2 | 87.4 | 88.8 |
+| north-west | 56.9 | 56.1 | 57.3 |
+| south-east | 91.4 | 90.8 | 92.4 |
+
+- Our land is already as light as amplio2's. The darker look in the whole window comes from the water.
+- **The olive look is hue.** amplio2's land has green above red by 6 to 15 levels; ours by -2 to 8.
+  - A land-wide shift toward green (`--land-grade 0,-5,0`) moved red by only about 2 levels, and it would green the
+    desert too.
+  - The fix is the grassland and plains art, or a per-terrain grade. That is for the art side to decide (`GRADE`
+    takes per-terrain offsets).
+- `--land-grade L,A,B` stays in the builder, off by default.
+
+![amplio2, painted canopy, amplio2 trees; mapseed 21, 1:1](canopy-seed21-1to1.jpg)
+
+![forest and jungle blocks of the field: amplio2, painted canopy, amplio2 trees; 1:1](canopy-field-1to1.jpg)
 
 ## Not done, and findings
 
