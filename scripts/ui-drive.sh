@@ -8,6 +8,12 @@
 # Usage: scripts/ui-drive.sh <drive-script> <outdir> [port] [theme]
 #   FREECIV_DRIVE_PREFIX  install prefix of the driver build (required; see below)
 #   port                  server port (default 5720); theme: Qt theme name (default NightStalker)
+#   FREECIV_DRIVE_TILESET   tileset to force with -t (default trident)
+#   FREECIV_DRIVE_TILESETS  a dir with that tileset's .tilespec, put first on the client's FREECIV_DATA_PATH
+#   FREECIV_DRIVE_SERV      extra server lines for game.serv, e.g. "set fogofwar DISABLED"
+#   FREECIV_DRIVE_VISIBLE=1 show the client window; by default it runs with QT_QPA_PLATFORM=offscreen (or
+#                           $FREECIV_DRIVE_QPA, e.g. "offscreen:configfile=screen.json" for a bigger screen), since the
+#                           driver's shots grab the widgets and need no screen
 #
 # The driver is test code and never goes into the fork or a release. Build it in a copy:
 #   git -C port/freeciv archive HEAD | tar -x -C <copy>
@@ -21,9 +27,9 @@
 # throwaway HOME with a copy of ~/.freeciv/freeciv-client-rc-3.2. The client reads its options through a short
 # relative FREECIV_OPT because the options path is a 256-byte buffer (client/options.c) and a long <outdir>
 # truncates it. The connection gets cmdlevel admin after the start, so "chat /lua cmd ..." lines work.
-# The client window shows on screen while it runs: clicking into it changes the run.
+# With FREECIV_DRIVE_VISIBLE=1 the client window shows on screen while it runs: clicking into it changes the run.
 set -u
-[ $# -ge 2 ] || { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+[ $# -ge 2 ] || { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 SCRIPT="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; OUT="$2"; PORT="${3:-5720}"; THEME="${4:-NightStalker}"
 BIN="${FREECIV_DRIVE_PREFIX:?set FREECIV_DRIVE_PREFIX to the install prefix of the driver build}/bin"
 mkdir -p "$OUT"; OUT="$(cd "$OUT" && pwd)"
@@ -50,6 +56,7 @@ set size 2
 set revealmap START
 set dispersion 0
 set startunits cwxdd
+${FREECIV_DRIVE_SERV:-}
 SERV
 HOME="$OUT/home" "$BIN/freeciv-server" -p "$PORT" --Announce none --read "$OUT/game.serv" --saves "$OUT" \
   < "$OUT/fifo" > "$OUT/server.log" 2>&1 &
@@ -57,8 +64,11 @@ SPID=$!
 ( exec sleep 1800 ) > "$OUT/fifo" &
 HPID=$!
 sleep 3
+QPA="${FREECIV_DRIVE_QPA:-offscreen}"; [ "${FREECIV_DRIVE_VISIBLE:-0}" = 1 ] && QPA="${QT_QPA_PLATFORM:-cocoa}"
+DATA="$(dirname "$BIN")/share/freeciv"; [ -n "${FREECIV_DRIVE_TILESETS:-}" ] && DATA="$FREECIV_DRIVE_TILESETS:$DATA"
 ( cd "$OUT" && HOME="$OUT/home" FREECIV_OPT=home/.freeciv/freeciv-client-rc-3.2 FREECIV_UI_DRIVE="$SCRIPT" \
-  FREECIV_UI_DRIVE_OUT="$OUT" exec "$BIN/freeciv-qt" -a -s localhost -p "$PORT" -n Probe -t trident \
+  FREECIV_UI_DRIVE_OUT="$OUT" QT_QPA_PLATFORM="$QPA" FREECIV_DATA_PATH="$DATA" \
+  exec "$BIN/freeciv-qt" -a -s localhost -p "$PORT" -n Probe -t "${FREECIV_DRIVE_TILESET:-trident}" \
   > "$OUT/client.log" 2>&1 ) &
 CPID=$!
 sleep 10

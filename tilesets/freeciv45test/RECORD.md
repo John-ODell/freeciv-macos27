@@ -8,6 +8,8 @@ Rebuild with (`T` is the art repo's `freeciv45/01_terrain_ground`)
         --panel $T/run6/panel1/grassland_and_plains.png --panel4 $T/run8/panel4/forest_and_jungle.png \
         --panel4-retake $T/run9/panel4/forest_and_jungle.png --cutter ~/Desktop/asset_generator/freeciv45/tools/seamless.py
 
+(`--no-tone-match` gives the build from before issue 138, byte for byte.)
+
 Licence of the whole folder: GPL-2.0-or-later, like Freeciv and like the Freeciv45 art pack.
 
 ## Placeholders: trident, scaled
@@ -64,7 +66,8 @@ made 2026-10-17 with the same workflow, in the Brothers-Keeper-Art repo on main:
 (`freeciv45/01_terrain_ground/run8/panel4/`, commit 62d9b9f, PR 31) for rows 1-3 and run 9's retake
 (`run9/panel4/`, commit 1f5634f, PR 34) for row 4. Both panels are 1254x1254, 5x5. Cut the same way as panel 1
 (`tools/seamless.py` at commit 58d08c9: 3 px inset, 192 px LANCZOS master, half-shift wrap; then 96 px LANCZOS);
-every cell is pixel-identical to `seamless.py PANEL OUT --all --size 192 --inset 3` scaled to 96 px.
+before the tone match below, every cell is pixel-identical to `seamless.py PANEL OUT --all --size 192 --inset 3`
+scaled to 96 px.
 
 | tag | panel cell | tag | panel cell |
 |---|---|---|---|
@@ -77,3 +80,22 @@ cannot select (freeciv-macos27 issue 127); its warm olive c4-c5 shows as a patch
 game (`--olive-pine` adds them as `forest11`-`12` for that test; see `notes/freeciv45/tileset-t0.md`).
 Licence inputs: original generated art, intended GPL-2.0-or-later; John's iPhone forest picture and the 3x3 grid
 reference were inspiration only (run 8's RECORD.md), and no pixel of them is in the panels or here.
+
+## Tone match of the variants (issue 138)
+
+The client puts any two variants of a terrain side by side, so a field showed every tile boundary as a straight
+step in brightness and colour. Since issue 138 the build matches the 192 px masters of each terrain to each other
+before scaling them to 96 px (`match_tone` in the script): in CIE Lab (Pillow's ImageCms, sRGB profile) each
+channel of each cell is mapped linearly so that its mean is the mean of the terrain's cells and its standard
+deviation the mean of their standard deviations, the contrast scale held to 0.75-1.33 so a cell keeps its own
+texture. Only the levels change; no pixel moves. Mean luma per variant at 96 px, before and after:
+
+| terrain | before (min-max) | after |
+|---|---|---|
+| grassland (10) | 85-166 | 128 |
+| plains (10) | 122-196 | 166 |
+| forest (10) | 68-103 | 83 |
+| jungle (10) | 50-76 | 62 |
+
+The two autumn forest cells (r2c2, r2c4) are pulled towards the forest's green with the rest: their orange crowns
+are still there but quieter. Results in game: `notes/freeciv45/tileset-t0.md`, "Variants matched in tone".

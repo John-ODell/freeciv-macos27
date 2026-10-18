@@ -1,0 +1,10 @@
+# grassland field (west of the start stack) next to a forest field (east)
+pace 1000
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do local x0, y0 = u.tile.nat_x, u.tile.nat_y; for dy = -8, 8 do for dx = -12, 12 do local t = find.tile(x0 + dx, y0 + dy); if t then edit.change_terrain(t, find.terrain((dx < 0) and "Grassland" or "Forest")) end end end; break end end end
+wait 15000
+dismiss
+shot field
+quit
