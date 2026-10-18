@@ -325,6 +325,22 @@ function fc45_gp_test_later()
     check("a settled Sage is recorded for the city and re-created after the city changes hands",
           record == "Sage;" and city:has_building(resident))
   end
+  -- The AI's rule (issue 121): the Sage's pledge from a turn ago still waits, no age runs, and a Great Magnate
+  -- is born now; the rule pledges it at once, which makes the two kinds the second age needs.
+  if rawget(_G, fc45_gp_key("fc45_golden_until_", pid)) == nil and fc45_gp_get(fc45_gp_key("fc45_golden_pledges_", pid)) == 1 then
+    local magnate = edit.create_unit(tester, city.tile, find.unit_type("Great Magnate"), 0, city, -1)
+    local mid = magnate.id
+    fc45_gp_ai(tester, game.turn())
+    local still = false
+    for u in city.tile:units_iterate() do if u.id == mid then still = true end end
+    log.normal("FC45TEST ai pledge: count %s, until %s, magnate left %s", tostring(rawget(_G, fc45_gp_key("fc45_golden_count_", pid))),
+               tostring(rawget(_G, fc45_gp_key("fc45_golden_until_", pid))), tostring(still))
+    check("the AI rule pledges a Great Magnate born a turn after the Sage's pledge, which starts the second golden age",
+          not still and fc45_gp_get(fc45_gp_key("fc45_golden_count_", pid)) == 2
+          and rawget(_G, fc45_gp_key("fc45_golden_until_", pid)) == game.turn() + 10)
+  else
+    log.normal("FC45TEST SKIP the AI pledge case: an age runs or no pledge waits")
+  end
 end
 
 -- The tech tree: the six new techs and the three restored ones (John's decision of 2026-10-17) exist, and the
