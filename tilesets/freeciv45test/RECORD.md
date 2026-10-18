@@ -9,7 +9,8 @@ Rebuild with (`T` is the art repo's `freeciv45/01_terrain_ground`)
         --panel4-retake $T/run9/panel4/forest_and_jungle.png --panel5 $T/run7/panel5/hills_and_mountains.png \
         --cutter ~/Desktop/asset_generator/freeciv45/tools/seamless.py
 
-(`--no-tone-match` gives the build from before issue 138, `--no-blend` the one from before issue 141, byte for byte.)
+(`--no-tone-match` leaves out the tone match of issue 138 and `--no-blend` the blending of issue 141; the builds
+from before those issues also had fewer painted terrains, so they are rebuilt from that commit's script.)
 
 Licence of the whole folder: GPL-2.0-or-later, like Freeciv and like the Freeciv45 art pack.
 
