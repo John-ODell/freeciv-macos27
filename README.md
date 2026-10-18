@@ -113,6 +113,10 @@ into each other; land and water no longer blend into each other (patch 0031, `no
 "Coastline from the painted art").
 civ45 maps are seen at an angle (topology ISO; patch 0032, `notes/freeciv45/iso-default.md`): same square tiles and
 rules, isometric tilesets such as amplio2.
+`tilesets/freeciv45iso` is the angled tileset: the painted ground as 192 x 96 diamonds with soft, wandering edges,
+amplio2 (scaled 2x) for units, cities, rivers and the rest (patch 0033 lets isometric tilesets blend through the
+masks; `notes/freeciv45/iso/freeciv45iso.md`). `tilesets/make-freeciv45iso.py` rebuilds it from the same cut as
+freeciv45test.
 
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It

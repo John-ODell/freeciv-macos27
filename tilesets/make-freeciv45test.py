@@ -122,6 +122,7 @@ def recut(data, spec_rel, out_dir, record, scale=None):
     for g in grids:
         g["cells"] = [(r, c, [t for t in tags if t not in OVERRIDDEN]) for r, c, tags in g["cells"]]
         g["cells"] = [cell for cell in g["cells"] if cell[2]]
+    grids = [g for g in grids if g["cells"]]          # a grid whose every tag is overridden is left out
     gfx = next(re.search(r'gfx\s*=\s*"([^"]+)"', h).group(1) for h in header if re.search(r'gfx\s*=\s*"', h))
     src = Image.open(os.path.join(data, gfx + ".png")).convert("RGBA")
     base = os.path.basename(spec_rel)[:-5]

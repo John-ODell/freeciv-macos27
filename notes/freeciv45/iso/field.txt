@@ -1,0 +1,16 @@
+# Every terrain on the angled map (issue 190): 3 x 3 tile blocks in map coordinates around the tile 3 east and 3 south of the
+# start stack (straight below it on screen, where the whole field is in view), land in two
+# rows, water in the third, so on screen each block is a diamond. Run with QT_SCALE_FACTOR=2 on the 1728 x 1030 pt
+# screen; the shot is 1:1 device pixels.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd local n = {{"Grassland", "Plains", "Forest", "Jungle", "Hills"}, {"Mountains", "Desert", "Tundra", "Glacier", "Swamp"}, {"Ocean", "Lake", "Deep Ocean", "Inaccessible", "Ocean"}}; local u0; for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do u0 = u.tile; break end end end; for t in whole_map_iterate() do local dx, dy = t.x - u0.x - 3, t.y - u0.y - 3; if dx >= -7 and dx <= 7 and dy >= -4 and dy <= 4 then edit.change_terrain(t, find.terrain(n[math.floor((dy + 4) / 3) + 1][math.floor((dx + 7) / 3) + 1])) end end
+wait 8000
+key escape
+wait 1000
+dismiss
+state all
+shot field
+quit

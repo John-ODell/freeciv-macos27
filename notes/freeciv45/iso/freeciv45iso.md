@@ -1,0 +1,80 @@
+# freeciv45iso: the painted terrain on the angled map (issue 190, 2026-10-18)
+
+civ45 plays on the angled map since issue 188 (topology ISO, patch 0032), and John prefers that look. His words:
+"convert our painted terrain into angled tiles, and use amplio2 units and cities for now". This note says what
+was built, what changed in the client (patch 0033), and how it was checked. Labels: observed (seen in a run or read
+in the source), inferred (my reading), unverified (not checked).
+
+## What it is
+
+- **Geometry:** amplio2's 96 x 48 diamond doubled, 192 x 96 px at `pixel_ratio = 2` (patch 0025). On a 2x screen a
+  tile is 96 x 48 points like amplio2, and every pixel of the painted ground is drawn.
+- **Painted ground:** the same cells freeciv45test uses, cut the same way. `make-freeciv45iso.py` imports
+  `make-freeciv45test.py`, so it has the same `PANELS` and `PLAN` from the TERRAIN_GROUND.md runs log, the same
+  seamless cutter, the same tone match and the same cool pine. Each 192 px square master is then turned 45 degrees and
+  squashed 2:1. A square tile point (u, v) lands on x = (u - v) / 2 + 96, y = (u + v) / 4, so the tile's north edge
+  becomes the diamond's upper right edge, as the client draws map north.
+  - Each pixel averages 4 x 4 point samples of the master, which wraps, so neighbouring diamonds join as the square
+    tiles do.
+  - The outline is binary: a pixel belongs to a tile when its centre does, so diamonds never overlap or leave gaps.
+- **Shore:** freeciv45test's coastline cells (beach on both sides of a coast, ice next to glacier), turned the same
+  way into the client's isometric corner cells (96 x 48, the top, bottom, right and left quarters of the diamond).
+- **Blending:** freeciv45test's four wandering masks, turned tile by tile. Each of the 3 x 3 tiles is a diamond in its
+  own rectangle, in map order. Land fades into land and water into water (patch 0031).
+  - There is no `t.blend_mask_same` in iso, because its strips are square. Two variants of one terrain meet without a
+    fade, as they do in amplio2.
+- **From amplio2:** everything else, scaled 2x with nearest-neighbour sampling, with its artists' credits kept in each
+  spec. That covers units, cities, rivers, roads, specials and resources, bases, fog, borders, grid, select and
+  explosions.
+  - Left out: amplio2's forest, jungle, hills and mountains overlays, its ocean corner cells, its lake and ice cells,
+    and its `t.blend.*` textures. The painted ground replaces them.
+  - `misc/citybar` and `misc/overlays` are re-cut, as freeciv45test does.
+- **Size:** 8.9 MB, of which 7.7 MB is the painted sheet. freeciv45test is larger (its square sheet alone is 14 MB).
+- **Retakes:** when runs 18 to 21 land, add them to `PANELS` and `PLAN` in `make-freeciv45test.py` and run both
+  builders. Two builds in a row give identical files (observed).
+
+## Patch 0033 (fork `client/tilespec.c`)
+
+- **Observed, source:** the masks were read only for overhead square tilesets. An isometric tileset got only
+  `t.dither_tile`, and amplio2's dither tile is a thin diagonal line, so amplio2 barely blends.
+- Now any square tileset can have the masks, overhead or isometric. With them, the client uses the masks in place of
+  the dither tile. `t.blend_mask_same` stays overhead only.
+- **Observed, run:** the first run drew the blend pieces half a tile too high. They were added at the "full tile"
+  offset, which is 0 in overhead view but -H/2 in isometric view (a full iso tile is 1.5 tiles tall), and the next
+  tiles painted over most of them.
+  - The pieces are one tile in size, so they now go at the tile's own origin.
+  - Overhead tilesets are unchanged: there the full tile is the tile, so the offset was 0 before and after (inferred
+    from the source; freeciv45test was not re-run on the patched client).
+- An unpatched client still loads freeciv45iso and blends it through amplio2's dither tile (inferred).
+
+## Check (observed)
+
+Offscreen client on the driver build (patch 0033 plus `../ui/bar-test/uidrive.diff`), `QT_SCALE_FACTOR=2` on the
+1728 x 1030 pt screen, scene `field.txt`.
+
+- The scene paints every civ45 terrain in 3 x 3 blocks, in map coordinates, south of the start stack, on the ISO
+  civ45 map. The same game and view were run with amplio2 and with freeciv45iso.
+- The client log for freeciv45iso has no tileset error or warning, and amplio2's run has none either.
+  - The first build listed `misc/flags.spec` twice and logged 1154 duplicate-flag warnings. That is fixed, and the
+    count is now 0.
+
+![amplio2 and freeciv45iso, 1:1 device pixels](field-amplio2-vs-freeciv45iso-1to1.jpg)
+
+- The whole windows, at half size: `field-window-amplio2.jpg` and `field-window-freeciv45iso.jpg`. The top strip,
+  edge column, unit card, what-next button and minimap sit where they do with amplio2.
+- Desert into tundra, tundra into glacier, forest into jungle, ocean into lake and lake into deep ocean all fade over
+  wandering edges.
+  - Beaches run along every coast.
+  - The ice edge shows where water meets glacier.
+  - amplio2's rivers, specials, cities and units draw on the painted ground.
+
+## Not done, and findings
+
+- **Hills and mountains have no relief.** They are the top-down paintings squashed, while amplio2 stands tall sprites
+  on them. This needs art drawn for the angle (overlay sprites like amplio2's layer 1) or a choice to keep them flat.
+  Filed as a finding.
+- **Inaccessible against deep ocean is a hard edge.** It is the same in freeciv45test, because civ45's Inaccessible
+  is not in the water class.
+- **Two variants of one terrain meet without a fade** in iso (see above).
+- **Not checked:** a real Cocoa window on John's screen, an unpatched client, the GTK and SDL clients (which ignore
+  `pixel_ratio`), fog of war and borders on the painted ground in a long game, and drawing speed.
