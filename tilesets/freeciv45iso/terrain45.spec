@@ -63,11 +63,11 @@ tiles = { "row", "column", "tag"
   7, 2, "t.l0.jungle8"   ; run15 r2c3
   7, 3, "t.l0.jungle9"   ; run15 r2c4
   7, 4, "t.l0.jungle10"   ; run15 r2c5
-  8, 0, "t.l0.hills1"   ; run6 r3c1
-  8, 1, "t.l0.hills2"   ; run6 r3c2
-  8, 2, "t.l0.hills3"   ; run6 r3c3
-  8, 3, "t.l0.hills4"   ; run6 r3c4
-  8, 4, "t.l0.hills5"   ; run6 r3c5
+  8, 0, "t.l0.hills1"   ; run6 r1c1
+  8, 1, "t.l0.hills2"   ; run6 r1c2
+  8, 2, "t.l0.hills3"   ; run6 r1c3
+  8, 3, "t.l0.hills4"   ; run6 r1c4
+  8, 4, "t.l0.hills5"   ; run6 r1c5
   9, 0, "t.l0.mountains1"   ; run19 r5c1
   9, 1, "t.l0.mountains2"   ; run19 r5c2
   9, 2, "t.l0.mountains3"   ; run19 r5c3
@@ -178,7 +178,9 @@ tiles = { "row", "column", "tag"
   30, 2, "t.l0.inaccessible3"   ; run11 r4c3
   30, 3, "t.l0.inaccessible4"   ; run11 r4c4
   30, 4, "t.l0.inaccessible5"   ; run11 r4c5
-  31, 0, "t.l0.forest_tundra1"   ; run9 r5c1
-  31, 1, "t.l0.forest_tundra2"   ; run9 r5c2
-  31, 2, "t.l0.forest_tundra3"   ; run9 r5c3
+  31, 0, "t.l0.forest_tundra1"   ; run19 r3c1
+  31, 1, "t.l0.forest_tundra2"   ; run19 r3c2
+  31, 2, "t.l0.forest_tundra3"   ; run19 r3c3
+  31, 3, "t.l0.forest_tundra4"   ; run19 r3c4
+  31, 4, "t.l0.forest_tundra5"   ; run19 r3c5
 }

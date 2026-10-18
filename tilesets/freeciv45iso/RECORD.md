@@ -15,20 +15,17 @@ terrains need the fork's patch 0033 (an unpatched client blends through amplio2'
 
 ## From amplio2, scaled
 
-Every spec file that `amplio2.tilespec` lists under `amplio2/`, except `ocean.spec` (cells the painted ground
+Every spec file that `amplio2.tilespec` lists under `amplio2/`, except `terrain2.spec`, `ocean.spec` (cells the painted ground
 replaces), is re-cut from Freeciv 3.2.6's amplio2 tileset (GPL-2.0-or-later; the artists are
 named in each spec's `[info]` section, copied verbatim): each sprite scaled 2x with nearest-neighbour sampling, so it
 looks as amplio2 does on a 2x screen today. `water.spec` keeps only the rivers. `hills.spec` and `mountains.spec` are the relief
-over the flat hills and mountains ground (issue 194), moved from layer 1 to layer 2. `terrain2.spec`, the forest and jungle overlays, moves the same way over painted grassland (issue 199). `misc/citybar` and `misc/overlays`
+over the flat hills and mountains ground (issue 194), moved from layer 1 to layer 2. `misc/citybar` and `misc/overlays`
 are re-cut too, because the client draws them on the map; the other `misc/` files are read from the installed data.
 
 | spec | source | scaling | sheet |
 |---|---|---|---|
 | `freeciv45iso/terrain1.spec` | `amplio2/terrain1.spec` (41 tags, 1 grids) | nearest 2x | 1728x1536 |
 | `freeciv45iso/maglev.spec` | `amplio2/maglev.spec` (9 tags, 1 grids) | nearest 2x | 1728x96 |
-| `freeciv45iso/terrain2.spec` | `amplio2/terrain2.spec` (32 tags, 1 grids) | nearest 2x | 1536x576 |
-| `freeciv45iso/hills.spec` | `amplio2/hills.spec` (16 tags, 1 grids) | nearest 2x | 768x384 |
-| `freeciv45iso/mountains.spec` | `amplio2/mountains.spec` (16 tags, 1 grids) | nearest 2x | 768x528 |
 | `freeciv45iso/water.spec` | `amplio2/water.spec` (20 tags, 1 grids) | nearest 2x | 1536x480 |
 | `freeciv45iso/volcano.spec` | `amplio2/volcano.spec` (3 tags, 1 grids) | nearest 2x | 192x288 |
 | `freeciv45iso/tiles.spec` | `amplio2/tiles.spec` (76 tags, 1 grids) | nearest 2x | 2112x672 |
@@ -55,7 +52,6 @@ Cut as `make-freeciv45test.py` cuts them (the same panels, cells, cutter and ton
 | spec | source | scaling | sheet |
 |---|---|---|---|
 | `freeciv45iso/terrain45.spec` | `run6` (grassland_and_plains.png): plains 10, hills 5, through `seamless.py` | LANCZOS 192, level | 960x6144 |
-| `freeciv45iso/terrain45.spec` | `run9` (forest_and_jungle.png): forest_tundra 3, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run10` (shallow_ocean_and_lake.png): coast 15, lake 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run11` (deep_ocean_and_impassable.png): floor 15, inaccessible 5, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run12` (desert_and_tundra.png): desert 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
@@ -63,16 +59,21 @@ Cut as `make-freeciv45test.py` cuts them (the same panels, cells, cutter and ton
 | `freeciv45iso/terrain45.spec` | `run14` (shores_and_banks.png): desert 5, tundra 5, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run15` (grassland_and_plains.png): grassland 10, forest 10, jungle 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
 | `freeciv45iso/terrain45.spec` | `run18` (glacier_and_swamp.png): swamp 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
-| `freeciv45iso/terrain45.spec` | `run19` (desert_and_tundra.png): mountains 5, desert 5, tundra 10, through `seamless.py` | LANCZOS 192, level | 960x6144 |
-| tone match | on | mean luma per variant at 192 px, min-max | grassland 92-116 -> 104-104; plains 85-166 -> 128-128; forest 92-116 -> 104-104; jungle 92-116 -> 104-104; hills 132-196 -> 168-169; mountains 176-178 -> 177-177; desert 173-182 -> 176-176; tundra 115-132 -> 123-124; arctic 191-197 -> 193-193; swamp 74-76 -> 75-75; coast 120-130 -> 125-126; lake 73-77 -> 74-75; floor 29-33 -> 32-32; inaccessible 67-69 -> 68-68; forest_tundra 56-63 -> 60-61 |
-| `freeciv45iso/terrain45.spec` | the cells above, each turned 45 degrees and squashed 2:1 (to_iso, 4x4 samples, binary outline); graded in Lab: floor +28 +2 -20, desert +0 -12 -14 | 192x96 diamonds | 960x3072 |
+| `freeciv45iso/terrain45.spec` | `run19` (desert_and_tundra.png): mountains 5, desert 5, tundra 10, forest_tundra 5, through `seamless.py` | LANCZOS 192, level | 960x6144 |
+| tone match | on | mean luma per variant at 192 px, min-max | grassland 92-116 -> 104-104; plains 85-166 -> 128-128; forest 92-116 -> 104-104; jungle 92-116 -> 104-104; hills 98-164 -> 134-134; mountains 176-178 -> 177-177; desert 173-182 -> 176-176; tundra 115-132 -> 123-124; arctic 191-197 -> 193-193; swamp 74-76 -> 75-75; coast 120-130 -> 125-126; lake 73-77 -> 74-75; floor 29-33 -> 32-32; inaccessible 67-69 -> 68-68; forest_tundra 119-132 -> 126-127 |
+| `freeciv45iso/terrain45.spec` | the cells above, each turned 45 degrees and squashed 2:1 (to_iso, 4x4 samples, binary outline); graded in Lab: floor +28 +2 -20, desert +0 -12 -14, mountains -6 -13 -32 | 192x96 diamonds | 960x3072 |
 | `freeciv45iso/resources.spec` | the art pack's resource props (`freeciv45/03_resources`, cut by `tools/props.py`), one pick per tag: wheat `run1/wheat_1`, buffalo `run1/buffalo_1`, horses `run1/horses_1`, grassland_resources `run1/grassland_resources_2`, fruit `run1/fruit_1`, gems `run2/gems_1`, oasis `run1/oasis_1`, oil `run2/oil_1`, pheasant `run1/pheasant_1`, silk `run2/silk_1`, coal `run2/coal_2`, wine `run2/wine_1`, gold `run2/gold_1`, iron `run2/iron_1`, tundra_game `run1/tundra_game_2`, furs `run1/furs_1`, arctic_ivory `run1/arctic_ivory_1`, peat `run2/peat_1`, spice `run2/spice_1`, fish `run1/fish_2`, whales `run1/whales_1` | none (as cut, 192x96) | 960x480 |
 | `freeciv45iso/coast.spec` | `run14` r1c3 (shores_and_banks.png), through `seamless.py`: beach cells for water tiles next to land, layer 1 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | `run14` r1c3 (shores_and_banks.png), through `seamless.py`: sand cells for land tiles next to water, layer 1 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | `run13` r1c1 (glacier_and_swamp.png), through `seamless.py`: ice cells for water tiles next to glacier, layer 2 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | the shore cells above as isometric corner cells (to_iso, each quarter padded by its own edge) | 96x48 cells | 3072x144 |
 | `freeciv45iso/blend.spec` | generated: freeciv45test's `t.blend_mask` and `_2`-`_4` (seeds 1-4) turned per tile; `mask.tile`, the diamond | none | 2304x384 |
+| `freeciv45iso/features.spec` | the art pack's standing props (`freeciv45/02_terrain_features`, runs 1-4, `post/raw`): `broadleaf_1`, `broadleaf_2`, `broadleaf_3`, `broadleaf_4`, `broadleaf_5`, `broadleaf_group_1`, `broadleaf_group_2`, `broadleaf_group_3`, `broadleaf_group_4`, `broadleaf_group_5`, `hill_dome`, `hill_double`, `hill_dry_1`, `hill_dry_2`, `hill_dry_3`, `hill_dry_4`, `hill_dry_5`, `hill_flat`, `hill_green_1`, `hill_green_2`, `hill_green_3`, `hill_green_4`, `hill_green_5`, `hill_knoll`, `hill_ridge`, `hill_rocky_1`, `hill_rocky_2`, `hill_rocky_3`, `hill_rocky_4`, `hill_rocky_5`, `jungle_1`, `jungle_2`, `jungle_3`, `jungle_4`, `jungle_5`, `jungle_6`, `jungle_7`, `jungle_8`, `jungle_group_1`, `jungle_group_2`, `jungle_group_3`, `jungle_group_4`, `jungle_group_5`, `palm_1`, `palm_2`, `palm_3`, `peak_bare_1`, `peak_bare_2`, `peak_bare_3`, `peak_bare_4`, `peak_bare_5`, `peak_cliff`, `peak_dark_1`, `peak_dark_2`, `peak_dark_3`, `peak_dark_4`, `peak_dark_5`, `peak_massif`, `peak_ridge`, `peak_snow_1`, `peak_snow_2`, `peak_snow_3`, `peak_snow_4`, `peak_snow_5`, `peak_spire`, `peak_twin`, `pine_1`, `pine_2`, `pine_3`, `pine_4`, `pine_5`, `pine_group_1`, `pine_group_2`, `pine_group_3`, `pine_snow_1`, `pine_snow_2`, `range_1`, `range_2`, `range_3`, `range_4`, `range_5`, `swamp_mangrove`, `swamp_reeds`, `swamp_snag`, `swamp_tussock`, `tree_fern_1`, `tree_fern_2`; variants forest 12, forest_tundra 8, jungle 12, swamp 8, hills 15, hills_desert 5, mountains 15, mountains_tundra 5, inaccessible 5 | LANCZOS (SCATTER and STAND scales) | 1920x1296 |
 
 ## Resources
 
 `resources.spec` / `resources.png`: the 21 resource sprites, one per `ts.*` tag of civ45's `terrain.ruleset`, from the Freeciv45 art pack (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/03_resources`, runs 1 and 2, the picks in its `RESOURCES.md`). Each is an isometric prop on a transparent 192x96 tile, cut by the art repo's `tools/props.py` (standing on the tile's foot point, soft contact shadow) and copied unchanged. Only the picks the tileset draws are copied: no alternates, panels or 1x copies. They replace amplio2's resource sprites of the same tags (issue 206). GPL-2.0-or-later, like the rest of the folder.
+
+## Trees, hills and mountains
+
+`features.spec` / `features.png`: forest, jungle, swamp, hills, mountains and inaccessible drawn with the Freeciv45 art pack's standing props (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/02_terrain_features`, runs 1 to 4, placed as its `TREES_AND_RELIEF.md` says). The props are scattered (trees) or stood (one hill or mountain) on 192x144 full tiles in a few variants per terrain, so the client draws one sprite per tile on layer 2 (issue 224). Only these 87 props are used, and only inside the baked variants: `broadleaf_1`, `broadleaf_2`, `broadleaf_3`, `broadleaf_4`, `broadleaf_5`, `broadleaf_group_1`, `broadleaf_group_2`, `broadleaf_group_3`, `broadleaf_group_4`, `broadleaf_group_5`, `hill_dome`, `hill_double`, `hill_dry_1`, `hill_dry_2`, `hill_dry_3`, `hill_dry_4`, `hill_dry_5`, `hill_flat`, `hill_green_1`, `hill_green_2`, `hill_green_3`, `hill_green_4`, `hill_green_5`, `hill_knoll`, `hill_ridge`, `hill_rocky_1`, `hill_rocky_2`, `hill_rocky_3`, `hill_rocky_4`, `hill_rocky_5`, `jungle_1`, `jungle_2`, `jungle_3`, `jungle_4`, `jungle_5`, `jungle_6`, `jungle_7`, `jungle_8`, `jungle_group_1`, `jungle_group_2`, `jungle_group_3`, `jungle_group_4`, `jungle_group_5`, `palm_1`, `palm_2`, `palm_3`, `peak_bare_1`, `peak_bare_2`, `peak_bare_3`, `peak_bare_4`, `peak_bare_5`, `peak_cliff`, `peak_dark_1`, `peak_dark_2`, `peak_dark_3`, `peak_dark_4`, `peak_dark_5`, `peak_massif`, `peak_ridge`, `peak_snow_1`, `peak_snow_2`, `peak_snow_3`, `peak_snow_4`, `peak_snow_5`, `peak_spire`, `peak_twin`, `pine_1`, `pine_2`, `pine_3`, `pine_4`, `pine_5`, `pine_group_1`, `pine_group_2`, `pine_group_3`, `pine_snow_1`, `pine_snow_2`, `range_1`, `range_2`, `range_3`, `range_4`, `range_5`, `swamp_mangrove`, `swamp_reeds`, `swamp_snag`, `swamp_tussock`, `tree_fern_1`, `tree_fern_2`. No panels, alternates or other files from the art repo. GPL-2.0-or-later, like the rest of the folder.

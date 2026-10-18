@@ -39,8 +39,8 @@ usage: make-freeciv45iso.py --data ~/freeciv-builds/qt/share/freeciv
                             [--land-grade L,A,B]
 Needs Pillow (python3.14 on this Mac has it).
 """
-import argparse, importlib.util, os, random, re, tempfile
-from PIL import Image, ImageChops, ImageCms
+import argparse, glob, importlib.util, math, os, random, re, tempfile
+from PIL import Image, ImageChops, ImageCms, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location("make_freeciv45test", os.path.join(HERE, "make-freeciv45test.py"))
@@ -76,7 +76,7 @@ SHORE = {"SHORE_DEPTH": 0.07, "SHORE_WAVE": 0.6, "SHORE_SHALLOW": 0.10, "LAND_DE
          "SHORE_ROUND": 0.15}
 # Desert (issue 209): graded from orange (a +16, b +44) toward straw at the same lightness, so the ground round a
 # desert start no longer reads as orange sand.
-GRADE = {"floor": (28, 2, -20), "desert": (0, -12, -14)}
+GRADE = {"floor": (28, 2, -20), "desert": (0, -12, -14), "mountains": (-6, -13, -32)}
 BLEND_DEPTH = 0.375
 RELIEF_BASE = [
     ("hills", "run6", ["r3c1", "r3c2", "r3c3", "r3c4", "r3c5"]),        # plains, under the hills
@@ -104,6 +104,41 @@ RESOURCES = [
     ("ts.arctic_ivory", "run1", "arctic_ivory_1"), ("ts.peat", "run2", "peat_1"), ("ts.spice", "run2", "spice_1"),
     ("ts.fish", "run1", "fish_2"), ("ts.whales", "run1", "whales_1"),
 ]
+
+# Trees, hills and mountains (issue 224): the Freeciv45 art pack's standing props (the art repo's
+# freeciv45/02_terrain_features, --features-art), cut at 192 px = one tile wide (post/raw), placed the way its
+# TREES_AND_RELIEF.md ("Runs 1 to 4") says. The client draws one sprite per layer per tile, so each terrain gets
+# variants baked here, each a scatter of trees or one hill or mountain on a full tile (W x 3H/2, drawn tall on layer
+# 2); the client picks one per tile. A "<terrain>_<type>" set is drawn where one of the eight neighbours has that layer
+# 2 match type (patch 0030): pines and snowy peaks next to tundra, dry hills next to desert. Only the props named here
+# end up in the tileset, baked into features.png.
+FH = H * 3 // 2                       # the full tile: the diamond at the bottom, half a tile of headroom
+FEATURE_PANELS = {"trees": "run1/panel1", "plants": "run2/panel2", "hills": "run3/panel3", "peaks": "run4/panel4"}
+# tag: (panel, props, props per tile (min, max), scale, variants, one more of these on every tile)
+SCATTER = {
+    "forest": ("trees", ["broadleaf_[1-5]", "broadleaf_group_*", "pine_[1-4]"], (6, 7), 0.6, 12, None),
+    "forest_tundra": ("trees", ["pine_[1-5]", "pine_group_*", "pine_snow_*"], (6, 7), 0.6, 8, None),
+    "jungle": ("plants", ["jungle_[1-8]", "jungle_group_*"], (7, 7), 0.45, 12, ["palm_*", "tree_fern_*"]),
+    "swamp": ("plants", ["swamp_mangrove", "swamp_snag", "swamp_reeds", "swamp_tussock"], (3, 3), 0.6, 8, None),
+}
+# tag: (panel, props, scale, foot below the diamond centre in px, share of the height faded out at the bottom); one
+# variant per prop. A prop too tall for the full tile is scaled down to fit (FH), so redraws never clip it.
+STAND = {
+    "hills": ("hills", ["hill_green_*", "hill_rocky_*", "hill_dome", "hill_double", "hill_flat", "hill_knoll",
+                        "hill_ridge"], 0.85, 22, 0.18),
+    "hills_desert": ("hills", ["hill_dry_*"], 0.85, 22, 0.18),
+    "mountains": ("peaks", ["peak_bare_*", "range_*", "peak_spire", "peak_massif", "peak_twin", "peak_ridge",
+                            "peak_cliff"], 0.78, 26, 0),
+    "mountains_tundra": ("peaks", ["peak_snow_*"], 0.78, 26, 0),
+    "inaccessible": ("peaks", ["peak_dark_*"], 0.82, 30, 0),
+}
+STRIP = ("peak_spire", "peak_massif", "peak_twin", "peak_ridge", "peak_cliff", "range_1", "range_2")  # cell above at top
+# Each tile's layer 2: (match type, the neighbour type of its second set or None).
+FEATURE_TILES = {"forest": ("forest", "tundra"), "jungle": ("jungle", None), "swamp": ("swamp", None),
+                 "hills": ("hills", "desert"), "mountains": ("mountains", "tundra"), "inaccessible": ("inaccessible", None)}
+# Ground under the props: green-gold plains under hills, tundra under the pines next to tundra (forest_tundra), and
+# under mountains the rocky desert, graded grey-brown (GRADE). Forest and jungle stand on CANOPY_BASE's grassland.
+FEATURE_BASE = [("hills", "run6", sq.row(1)), ("mountains", "run19", sq.row(5)), ("forest_tundra", "run19", sq.row(3))]
 
 def square_point(x, y):
     """The square tile point (u, v) under the diamond's pixel centre (x, y)."""
@@ -283,6 +318,104 @@ def resources(res_dir, out_dir, record):
                      cols * W, rows * H))
     return {t for t, _, _ in RESOURCES}
 
+def strip(im):
+    """A prop without the strip of the cell above at its top: everything above the last empty row in the top 40 %
+    (the art repo's judge/stand-relief.py), then trimmed."""
+    a = im.getchannel("A"); w, h = a.size; last = 0
+    for y in range(1, int(h * 0.4)):
+        if a.crop((0, y, w, y + 1)).getextrema()[1] < 16 and a.crop((0, y - 1, w, y)).getextrema()[1] >= 16: last = y
+    im = im.crop((0, last, w, h)); return im.crop(im.getbbox())
+
+def fade(im, frac):
+    """The bottom frac of the prop's height faded out, so a hill melts into the ground instead of a hard rim."""
+    n = max(1, int(im.height * frac)); g = Image.new("L", im.size, 255); d = ImageDraw.Draw(g)
+    for i in range(n): d.line([(0, im.height - 1 - i), (im.width, im.height - 1 - i)], fill=255 * i // n)
+    im = im.copy(); im.putalpha(ImageChops.multiply(im.getchannel("A"), g)); return im
+
+def scaled(im, s):
+    im = im.convert("RGBa").resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
+    return im.convert("RGBA")
+
+def features(feat_dir, out_dir, record):
+    """features.png and features.spec: SCATTER's and STAND's variants, ten to a row, each a W x FH full tile."""
+    def props(panel, pats):
+        out = []
+        for pat in pats:
+            for path in sorted(glob.glob(os.path.join(feat_dir, FEATURE_PANELS[panel], "post", "raw", pat + ".png"))):
+                name = os.path.basename(path)[:-4]
+                im = Image.open(path).convert("RGBA")
+                out.append((name, strip(im) if name in STRIP else im.crop(im.getbbox())))
+        assert out, (panel, pats)
+        return out
+    cx, cy = W / 2, FH - H / 2           # the diamond's centre on the canvas
+    cells, used = [], set()
+    for tag, (panel, pats, (lo, hi), scale, count, extra) in SCATTER.items():
+        pool, more = props(panel, pats), props(panel, extra) if extra else []
+        for k in range(count):
+            rng = random.Random("%s %d" % (tag, k)); canvas = Image.new("RGBA", (W, FH), (0, 0, 0, 0)); placed = []
+            for name, im in [rng.choice(pool) for _ in range(rng.randint(lo, hi))] + ([rng.choice(more)] if more else []):
+                im = scaled(im, scale * rng.uniform(0.85, 1.1))
+                for _ in range(400):     # a foot inside the diamond, off the rim, the prop inside the canvas
+                    u, v = rng.uniform(-0.8, 0.8), rng.uniform(-0.8, 0.8)
+                    x, y = cx + u * W / 2, cy + v * H / 2
+                    if abs(u) + abs(v) > 0.8 or y - im.height < 0: continue
+                    x = min(max(x, im.width / 2), W - im.width / 2)
+                    if all(math.hypot(x - ox, 2 * (y - oy)) >= 0.35 * (im.width + ow) / 2 for ox, oy, ow, _, _ in placed):
+                        placed.append((x, y, im.width, im, name)); break
+            for x, y, _, im, name in sorted(placed, key=lambda t: t[1]):
+                canvas.alpha_composite(im, (round(x - im.width / 2), min(FH, round(y + 2)) - im.height)); used.add(name)
+            cells.append(("t.l2.%s%d" % (tag, k + 1), canvas))
+    for tag, (panel, pats, scale, foot, frac) in STAND.items():
+        rng = random.Random(tag)
+        for k, (name, im) in enumerate(props(panel, pats)):
+            if frac: im = fade(im, frac)
+            s = min(scale * rng.uniform(0.92, 1.05), (cy + foot) / im.height, W / im.width)
+            im = scaled(im, s); canvas = Image.new("RGBA", (W, FH), (0, 0, 0, 0))
+            canvas.alpha_composite(im, (round(cx - im.width / 2), round(cy + foot) - im.height)); used.add(name)
+            cells.append(("t.l2.%s%d" % (tag, k + 1), canvas))
+    cols = 10; rows = (len(cells) + cols - 1) // cols
+    sheet = Image.new("RGBA", (cols * W, rows * FH), (0, 0, 0, 0))
+    for i, (_, canvas) in enumerate(cells): sheet.paste(canvas, ((i % cols) * W, (i // cols) * FH))
+    sheet.save(os.path.join(out_dir, "features.png"), optimize=True)
+    with open(os.path.join(out_dir, "features.spec"), "w") as f:
+        f.write("; Trees, hills and mountains for the Freeciv45 iso tileset: the Freeciv45 art pack's standing props\n"
+                "; (freeciv45/02_terrain_features), scattered or stood on full tiles by tilesets/make-%s.py (see RECORD.md).\n\n"
+                '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    John O\'Dell (sheet workflow)\n"\n\n'
+                '[file]\ngfx = "%s/features"\n\n[grid_main]\n\nx_top_left = 0\ny_top_left = 0\ndx = %d\ndy = %d\n\n'
+                'tiles = { "row", "column", "tag"\n%s\n}\n'
+                % (NAME, NAME, W, FH, "\n".join('  %d, %d, "%s"' % (i // cols, i % cols, t) for i, (t, _) in enumerate(cells))))
+    sets = ["%s %d" % (t, sum(1 for c, _ in cells if re.fullmatch(r"t\.l2\.%s\d+" % t, c))) for t in list(SCATTER) + list(STAND)]
+    record.append("| `%s/features.spec` | the art pack's standing props (`freeciv45/02_terrain_features`, runs 1-4, "
+                  "`post/raw`): %s; variants %s | LANCZOS (SCATTER and STAND scales) | %dx%d |"
+                  % (NAME, ", ".join("`%s`" % n for n in sorted(used)), ", ".join(sets), cols * W, rows * FH))
+    return {t for t, _ in cells}, sorted(used)
+
+def feature_sections(ours):
+    """freeciv45test's sections with the props on layer 2 (FEATURE_TILES): whole-tile variants, tall, with a second
+    set where a neighbour has the pair type; tundra and desert get their own layer 2 types for those pairs (they draw
+    nothing there), and the water tiles' ice edge is matched as a pair against arctic."""
+    types = ["water", "arctic", "tundra", "desert"] + [t for t, _ in FEATURE_TILES.values()]
+    assert len({t[0] for t in types}) == len(types)            # the client tells match types by their first letter
+    out = {}
+    for name, text in ours.items():
+        terrain = name[5:]
+        if name == "layer2":
+            text = re.sub(r'match_types = "water", "arctic"', "match_types = " + ", ".join('"%s"' % t for t in types), text)
+        elif terrain in FEATURE_TILES:
+            kind, pair = FEATURE_TILES[terrain]
+            text = re.sub(r'layer2_match_type = "water"\n(layer2_match_with = "\w+"\n)?',
+                          'layer2_match_type = "%s"\n%slayer2_is_tall = TRUE\n'
+                          % (kind, 'layer2_match_with = "%s"\n' % pair if pair else ""), text)
+            text = text.replace('layer2_sprite_type = "corner"\n', "")
+        elif terrain in ("tundra", "desert"):
+            text = text.replace('layer2_match_type = "water"', 'layer2_match_type = "%s"' % terrain)
+        elif terrain in sq.WATER:
+            text = text.replace('layer2_match_with = "water"', 'layer2_match_with = "arctic"')
+        out[name] = text
+    for terrain, (kind, pair) in FEATURE_TILES.items():
+        assert 'layer2_match_type = "%s"' % kind in out["tile_" + terrain] and "layer2_is_tall" in out["tile_" + terrain]
+    return out
+
 class Drop:
     """Tags recut() leaves out: the ones this tileset draws itself, and DROP_PREFIX's for the spec being cut."""
     def __init__(self, own): self.own, self.prefixes = own, ()
@@ -325,11 +458,12 @@ def relief_sections(ours, canopy=False):
     assert all('layer2_match_with = "%s"' % t in out["tile_" + t] for t in trees)
     return out
 
-def tilespec(data, out_root, files, blend=True, relief=True, canopy=False):
+def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False):
     """amplio2.tilespec with sizes and offsets doubled, pixel_ratio 2, the file list renamed, and freeciv45test's
     layer and terrain sections in place of amplio2's (amplio2's other terrains kept, matched as mountains)."""
     ours = square_sections(data, files)
-    if relief: ours = relief_sections(ours, canopy)
+    if bk: ours = feature_sections(ours)
+    elif relief: ours = relief_sections(ours, canopy)
     out, section, in_files, inserted, skipping = [], None, False, False, False
     for raw in open(os.path.join(data, "amplio2.tilespec"), errors="replace"):
         line = raw.rstrip("\n")
@@ -419,36 +553,47 @@ def main():
                     help="forest and jungle: the painted canopy, or amplio2's tree overlays over CANOPY_BASE")
     ap.add_argument("--land-grade", default=",".join(map(str, LAND_GRADE)), metavar="L,A,B",
                     help="CIE Lab offset for the painted land, after GRADE")
+    ap.add_argument("--features", choices=("bk", "amplio2"), default="bk",
+                    help="trees, hills and mountains: the art pack's props (bk), or amplio2's overlays (--canopy, "
+                         "--no-relief and --relief-base apply)")
+    ap.add_argument("--features-art", help="the art repo's freeciv45/02_terrain_features (default: next to --art)")
     ap.add_argument("--resources", help="the art repo's freeciv45/03_resources (default: next to --art)")
     ap.add_argument("--no-resources", action="store_true", help="keep amplio2's resource sprites")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
     LAND_GRADE = tuple(int(v) for v in a.land_grade.split(","))
-    canopy = a.canopy == "amplio2"
+    bk = a.features == "bk"
+    canopy = a.canopy == "amplio2" and not bk
     if canopy and a.no_relief: ap.error("--canopy amplio2 needs the relief layer (no --no-relief)")
     sq.BLEND_DEPTH = round(BLEND_DEPTH * T)
     for key, value in SHORE.items(): setattr(sq, key, value)
     out_dir = os.path.join(a.out, NAME); os.makedirs(out_dir, exist_ok=True)
     cutter = a.cutter or os.path.join(os.path.dirname(os.path.abspath(a.art)), "tools", "seamless.py")
     panels = {key: os.path.join(a.art, rel) for key, rel in sq.PANELS.items()}
-    relief = not a.no_relief
+    relief = not a.no_relief and not bk
     plan = sq.PLAN + ([sq.OLIVE_PINE] if a.olive_pine else [])
     if relief and a.relief_base == "flat":
         plan = [p for p in plan if p[0] not in RELIEF.values()] + RELIEF_BASE
     plan = [p for p in plan if p[0] != "plains"] + ISO_PLAINS
-    if canopy:
+    if canopy or bk:
         plan = [p for p in plan if p[0] not in [t for ts in CANOPY.values() for t in ts]] + CANOPY_BASE
+    if bk:
+        plan = [p for p in plan if p[0] not in [t for t, _, _ in FEATURE_BASE]] + FEATURE_BASE
     plan.sort(key=lambda p: [t for t, _, _ in sq.PLAN].index(p[0]))
-    painted_record, amplio_record = [], []
+    painted_record, amplio_record, feature_props = [], [], []
     sq.painted(panels, cutter, out_dir, painted_record, plan, tone_match=not a.no_tone_match, level=not a.no_level)
     own = ground(out_dir, painted_record) | {"mask.tile"}
     if not a.no_resources:
         own |= resources(a.resources or os.path.join(os.path.dirname(os.path.abspath(a.art)), "03_resources"),
                          out_dir, painted_record)
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
-    coast(out_dir, painted_record, relief)
+    coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
+    if bk:
+        tags, feature_props = features(a.features_art or os.path.join(os.path.dirname(os.path.abspath(a.art)),
+                                                                      "02_terrain_features"), out_dir, painted_record)
+        own |= tags
     spec_text = open(os.path.join(a.data, "amplio2.tilespec"), errors="replace").read()
     listed = re.findall(r'"([^"]+\.spec)"', spec_text.split("files =", 1)[1].split("files_", 1)[0])  # not files_svg
     files, drop = [], Drop(own)
@@ -469,12 +614,13 @@ def main():
             if rel == "amplio2/terrain1.spec":
                 files += ["%s/terrain45.spec" % NAME, "%s/coast.spec" % NAME] + ([] if a.no_blend else ["%s/blend.spec" % NAME])
                 files += [] if a.no_resources else ["%s/resources.spec" % NAME]
+                files += ["%s/features.spec" % NAME] if bk else []
         elif sq.map_misc_scale(rel) and sq.map_misc_scale(rel) != 1:
             drop.prefixes = ()
             sq.recut(a.data, rel, out_dir, amplio_record, scale=sq.map_misc_scale(rel))
             files.append("%s/%s" % (NAME, os.path.basename(rel)))
         else: files.append(rel)
-    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy)
+    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk)
     with open(os.path.join(out_dir, "RECORD.md"), "w") as f:
         f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED if not (canopy and s in CANOPY)),
                              "canopy": " `terrain2.spec`, the forest and jungle overlays, moves the same way over painted "
@@ -492,6 +638,15 @@ def main():
                     "the picks the tileset draws are copied: no alternates, panels or 1x copies. They replace amplio2's "
                     "resource sprites of the same tags (issue 206). GPL-2.0-or-later, like the rest of the folder.\n"
                     % (len(RESOURCES), W, H))
+        if bk:
+            f.write("\n## Trees, hills and mountains\n\n`features.spec` / `features.png`: forest, jungle, swamp, hills, "
+                    "mountains and inaccessible drawn with the Freeciv45 art pack's standing props (John O'Dell's sheet "
+                    "workflow with OpenAI image generation through Codex, art repo folder `freeciv45/02_terrain_features`, "
+                    "runs 1 to 4, placed as its `TREES_AND_RELIEF.md` says). The props are scattered (trees) or stood "
+                    "(one hill or mountain) on %dx%d full tiles in a few variants per terrain, so the client draws one "
+                    "sprite per tile on layer 2 (issue 224). Only these %d props are used, and only inside the baked "
+                    "variants: %s. No panels, alternates or other files from the art repo. GPL-2.0-or-later, like the "
+                    "rest of the folder.\n" % (W, FH, len(feature_props), ", ".join("`%s`" % n for n in feature_props)))
     print("\n".join(amplio_record + painted_record))
 
 if __name__ == "__main__":
