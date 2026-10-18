@@ -38,7 +38,7 @@ turn, so a stamp equal to `turn_founded` is not counted as a finished build (the
 founded the turn before). A city counts as seen for the rest of the turn once it is opened from the button or shown
 in the overlay, however it was opened; otherwise a player who keeps the advisor's choice would be asked again until
 the turn ends. Not covered: a city founded on turn T that finishes a build at the very next turn change is not asked
-about on T+1 (its stamp equals its founding turn).
+about on T+1 (its stamp equals its founding turn; #176).
 
 ### The strip's End turn stays
 
