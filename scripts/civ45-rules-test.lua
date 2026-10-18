@@ -473,6 +473,61 @@ function fc45_draft_test_run(tester, used)
   check("a Levy disbands into Testerburg's build and is gone", whipped and spot:num_units() == n - 1)
   log.normal("FC45TEST expect disbanded shields 30 in Testerburg")
   fc45_test.city = city
+  fc45_unrest_test_run(tester, city, spot, levy, militia)
+end
+
+-- Draft and whip unrest (issue 107). Lua cannot build a unit, so the ruleset's unit_built handler is called
+-- the way the signal calls it; the faces, the quota, a sold unrest building and the expiry are then read back.
+function fc45_unrest_test_run(tester, city, spot, levy, militia)
+  if fc45_draft_unit_built == nil then
+    check("the ruleset has the draft unrest rule (fc45_draft_unit_built)", false)
+    return
+  end
+  local key = fc45_gp_key("fc45_unrest_", city.id)
+  local u1, u2, u4 = find.building_type("Draft Unrest 1"), find.building_type("Draft Unrest 2"), find.building_type("Draft Unrest 4")
+  local mc0 = effects.city_bonus(city, "Make_Content")
+  local lv = edit.create_unit(tester, spot, levy, 0, city, -1)
+  fc45_draft_unit_built(lv, city)
+  local mc1, rec1 = effects.city_bonus(city, "Make_Content"), rawget(_G, key)
+  log.normal("FC45TEST unrest after a Levy: Make_Content %d to %d, record %s", mc0, mc1, tostring(rec1))
+  check("a Levy built in Testerburg costs one content face for ten turns (Draft Unrest 1)",
+        city:has_building(u1) and not city:has_building(u2) and mc1 == mc0 - 1
+        and rec1 == string.format("%d:1;", game.turn() + 10))
+  local ml = edit.create_unit(tester, spot, militia, 0, city, -1)
+  fc45_draft_unit_built(ml, city)
+  local mc2 = effects.city_bonus(city, "Make_Content")
+  check("a Militia drafted there too adds three faces, four in all (Draft Unrest 4 alone)",
+        city:has_building(u4) and not city:has_building(u2) and not city:has_building(u1) and mc2 == mc0 - 4)
+  edit.remove_building(city, u4)
+  fc45_unrest_lost(city, u4, "sold", nil)
+  check("an unrest building sold away comes straight back", city:has_building(u4))
+  local limit = fc45_draft_limit()
+  for i = 2, limit do fc45_draft_counted(tester, "Militia") end
+  local quota = find.building_type("Draft Quota")
+  log.normal("FC45TEST draft quota: limit %d, drafts %d, quota %s", limit,
+             fc45_gp_get(fc45_gp_key("fc45_drafts_n_", tester.id)), tostring(tester:has_wonder(quota)))
+  check("after the turn's draft limit no Militia can be raised, while a Levy (the whip) still can",
+        limit >= 1 and limit <= 5 and not tester:can_build_direct(militia) and tester:can_build_direct(levy))
+  lv:kill("disbanded", nil)
+  ml:kill("disbanded", nil)
+  -- The Levy's face ends next turn and the Militia's three stay.
+  fc45_gp_set(key, string.format("%d:1;%d:3;", game.turn() + 1, game.turn() + 10))
+  fc45_test.unrest_city = city.id
+end
+
+function fc45_unrest_test_later()
+  local city = find.city(nil, fc45_test.unrest_city)
+  if city == nil then
+    log.normal("FC45TEST SKIP Testerburg is gone for the unrest case")
+    return
+  end
+  local has = function(n) return city:has_building(find.building_type("Draft Unrest " .. n)) end
+  log.normal("FC45TEST unrest a turn later: record %s, buildings 1 %s, 2 %s, 4 %s",
+             tostring(rawget(_G, fc45_gp_key("fc45_unrest_", city.id))), tostring(has(1)), tostring(has(2)), tostring(has(4)))
+  check("a turn later the expired face is gone and the three left are Draft Unrest 2 and 1",
+        has(1) and has(2) and not has(4))
+  check("the draft quota is lifted at the next turn: Militia can be raised again",
+        city.owner:can_build_direct(find.unit_type("Militia")))
 end
 
 -- The roster (slice 10, notes/freeciv45/design/units-and-upgrades.md): the renamed units keep their rule
@@ -731,6 +786,7 @@ function fc45_rules_test_turn(turn, year)
   elseif fc45_test.stack_turn ~= nil and turn > fc45_test.stack_turn and fc45_test.done == nil then
     fc45_test.done = true
     if fc45_test.gp_city ~= nil then fc45_gp_test_later() end
+    if fc45_test.unrest_city ~= nil then fc45_unrest_test_later() end
     -- Run with --extra "set endturn <this turn>": the ruleset names the best score the winner at the
     -- start of the last turn, and the runner checks the server's victory line against this one.
     if fc45_best_score ~= nil and tonumber(server.setting.get("endturn")) == turn then

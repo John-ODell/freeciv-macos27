@@ -1,0 +1,325 @@
+From 88a1ad81d8ccd4461b35669dd6296fff13d5e674 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 22:54:20 -0500
+Subject: [PATCH] civ45: a draft or a whip costs the city content for ten
+ turns, and drafts are limited each turn
+
+Building a draft unit adds faces to the city for ten turns: one for the
+Levy, the whip, and three for Militia and Conscripts, the draft, adding up
+to seven. Three hidden buildings worth 1, 2 and 4 hold them as negative
+Make_Content; script.lua keeps the record per city, drops what expired at
+each turn start and puts back an unrest building that is sold. Since the
+city's Make_Content sum cannot go below zero, the unrest cancels content
+from temples and the like and leaves the base content citizens alone.
+
+An empire may draft once a turn per 400 land tiles, one to five: the draft
+that reaches the limit gives the player the hidden Draft Quota small wonder,
+which Militia and Conscripts require to be absent, until the next turn.
+---
+ data/civ45/buildings.ruleset | 106 ++++++++++++++++++++++++++++++++
+ data/civ45/effects.ruleset   |  29 +++++++++
+ data/civ45/script.lua        | 116 +++++++++++++++++++++++++++++++++++
+ data/civ45/units.ruleset     |   2 +
+ 4 files changed, 253 insertions(+)
+
+diff --git a/data/civ45/buildings.ruleset b/data/civ45/buildings.ruleset
+index 8d077d1..f8e693d 100644
+--- a/data/civ45/buildings.ruleset
++++ b/data/civ45/buildings.ruleset
+@@ -2938,6 +2938,112 @@ helptext	= _("\
+ A Great Spymaster has pledged your next golden age. Each age needs great people of different kinds, one more than the last: no second Spymaster can pledge until the age begins.\
+ ")
+ 
++[building_draft_unrest_1]
++name		= _("Draft Unrest 1")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.draft_unrest"
++graphic_alt     = "b.courthouse"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_draft_unrest"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++The city resents a recent whip or draft: its buildings make 1 fewer \
++citizen content. A Levy costs one face and Militia or Conscripts three, \
++for ten turns each, and the faces of several drafts add up (to seven at \
++most, held by Unrest 1, 2 and 4 together). It cannot be built, bought or \
++sold away: script.lua keeps it.\
++")
++
++[building_draft_unrest_2]
++name		= _("Draft Unrest 2")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.draft_unrest"
++graphic_alt     = "b.courthouse"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_draft_unrest"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++The city resents a recent whip or draft: its buildings make 2 fewer \
++citizens content. A Levy costs one face and Militia or Conscripts three, \
++for ten turns each, and the faces of several drafts add up (to seven at \
++most, held by Unrest 1, 2 and 4 together). It cannot be built, bought or \
++sold away: script.lua keeps it.\
++")
++
++[building_draft_unrest_4]
++name		= _("Draft Unrest 4")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.draft_unrest"
++graphic_alt     = "b.courthouse"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_draft_unrest"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++The city resents a recent whip or draft: its buildings make 4 fewer \
++citizens content. A Levy costs one face and Militia or Conscripts three, \
++for ten turns each, and the faces of several drafts add up (to seven at \
++most, held by Unrest 1, 2 and 4 together). It cannot be built, bought or \
++sold away: script.lua keeps it.\
++")
++
++[building_draft_quota]
++name		= _("Draft Quota")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.draft_quota"
++graphic_alt     = "b.barracks"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_draft_quota"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++This turn's drafts are spent: no city can raise Militia or Conscripts \
++until the next turn. The limit is one draft a turn for every 400 land \
++tiles of the map, from one to five.\
++")
++
+ [building_capitalization]
+ name		= _("Coinage")
+ genus		= "Convert"
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index 9b94b47..1971563 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -6302,3 +6302,32 @@ reqs    =
+     { "type", "name", "range"
+       "Building", "Telegraph Office", "City"
+     }
++
++; Freeciv45 draft and whip unrest (issue 107): script.lua keeps up to three hidden buildings in a city that
++; drafted or whipped in the last ten turns, worth 1, 2 and 4 faces. Make_Content sums with the city's temples and
++; the like, and a sum at or below zero makes nobody content (common/city.c, citizen_content_buildings), so the
++; unrest cancels content that buildings would give; it cannot make a base-content citizen unhappy.
++
++[effect_draft_unrest_1]
++type    = "Make_Content"
++value   = -1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Draft Unrest 1", "City"
++    }
++
++[effect_draft_unrest_2]
++type    = "Make_Content"
++value   = -2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Draft Unrest 2", "City"
++    }
++
++[effect_draft_unrest_4]
++type    = "Make_Content"
++value   = -4
++reqs    =
++    { "type", "name", "range"
++      "Building", "Draft Unrest 4", "City"
++    }
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index 9ca9e9f..f503900 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -1015,3 +1015,119 @@ function fc45_gp_ai(p, turn)
+     end
+   end
+ end
++
++
++-- Freeciv45 draft and whip unrest (issue 107; notes/freeciv45/mechanics.md, "Production, whipping and drafting").
++-- Building a draft unit spends a citizen at once, so the city resents it: FC45_UNREST_FACES[type] faces for
++-- FC45_UNREST_TURNS turns, where the Levy (the whip of eras I to III) costs one and Militia and Conscripts (the
++-- draft) three, and several add up. The faces are three hidden buildings worth 1, 2 and 4 (Make_Content -1, -2,
++-- -4 in effects.ruleset), so a city holds 0 to 7. Make_Content cannot go below zero in a city, so the unrest
++-- cancels content from temples and the like and never touches the base content citizens. Each city's record is
++-- a scalar global "<expiry turn>:<faces>;..." so it survives a save; turn_begin drops what expired and sets the
++-- buildings to match, and a sold or lost unrest building is put back at once.
++-- The draft limit: one draft a turn per FC45_DRAFT_LAND_PER land tiles of the map, 1 to 5. The draft that
++-- reaches it gives the player the hidden "Draft Quota" small wonder, which Militia and Conscripts require to be
++-- absent (units.ruleset), so no other city of that player completes one in the same turn's end; turn_begin
++-- removes it. The Levy, the whip, has no quota: a city can whip as long as it has citizens to spare.
++FC45_UNREST_TURNS = 10
++FC45_UNREST_FACES = { ["Levy"] = 1, ["Militia"] = 3, ["Conscripts"] = 3 }
++FC45_UNREST_PARTS = { { "Draft Unrest 4", 4 }, { "Draft Unrest 2", 2 }, { "Draft Unrest 1", 1 } }
++FC45_UNREST_MAX = 7
++FC45_DRAFT_LAND_PER = 400
++FC45_DRAFT_QUOTA_UNITS = { ["Militia"] = true, ["Conscripts"] = true }
++
++-- Drops the expired entries of a city's record, sets its unrest buildings to the faces left and returns them.
++function fc45_unrest_apply(city, turn)
++  local key = fc45_gp_key("fc45_unrest_", city.id)
++  local record = rawget(_G, key) or ""
++  local keep, faces = "", 0
++  for expiry, f in string.gmatch(record, "(%d+):(%d+);") do
++    if tonumber(expiry) > turn then
++      keep = keep .. expiry .. ":" .. f .. ";"
++      faces = faces + tonumber(f)
++    end
++  end
++  if keep == "" then keep = nil end
++  fc45_gp_set(key, keep)
++  faces = math.min(faces, FC45_UNREST_MAX)
++  local left = faces
++  for _, part in ipairs(FC45_UNREST_PARTS) do
++    local b = find.building_type(part[1])
++    local want = left >= part[2]
++    if want then left = left - part[2] end
++    if want and not city:has_building(b) then edit.create_building(city, b)
++    elseif not want and city:has_building(b) then edit.remove_building(city, b) end
++  end
++  return faces
++end
++
++function fc45_unrest_add(city, faces, why)
++  local key = fc45_gp_key("fc45_unrest_", city.id)
++  fc45_gp_set(key, (rawget(_G, key) or "") .. string.format("%d:%d;", game.turn() + FC45_UNREST_TURNS, faces))
++  local now = fc45_unrest_apply(city, game.turn())
++  log.normal("FC45UNREST turn %d %s of %s +%d by %s, now %d", game.turn(), city.name, city.owner.name, faces, why, now)
++  return now
++end
++
++-- One draft a turn per FC45_DRAFT_LAND_PER land tiles, 1 to 5; counted once and saved.
++function fc45_draft_limit()
++  local limit = rawget(_G, "fc45_draft_limit_n")
++  if limit == nil then
++    local land = 0
++    for tile in whole_map_iterate() do
++      if tile.terrain:class_name() == "Land" then land = land + 1 end
++    end
++    limit = math.max(1, math.min(5, land // FC45_DRAFT_LAND_PER))
++    fc45_gp_set("fc45_draft_limit_n", limit)
++  end
++  return limit
++end
++
++function fc45_draft_counted(p, utype_name)
++  local key_turn, key_n = fc45_gp_key("fc45_drafts_turn_", p.id), fc45_gp_key("fc45_drafts_n_", p.id)
++  if fc45_gp_get(key_turn) ~= game.turn() then
++    fc45_gp_set(key_turn, game.turn())
++    fc45_gp_set(key_n, 0)
++  end
++  local n = fc45_gp_get(key_n) + 1
++  fc45_gp_set(key_n, n)
++  local limit = fc45_draft_limit()
++  log.normal("FC45DRAFTS turn %d %s of %s is draft %d of %d this turn", game.turn(), utype_name, p.name, n, limit)
++  if n >= limit then
++    local home = fc45_gp_home(p)
++    if home ~= nil then edit.create_building(home, find.building_type("Draft Quota")) end
++  end
++end
++
++function fc45_draft_unit_built(unit, city)
++  if city == nil or not unit.utype:has_flag("Draft") then return end
++  local name = unit.utype:rule_name()
++  fc45_unrest_add(city, FC45_UNREST_FACES[name] or 1, name)
++  if FC45_DRAFT_QUOTA_UNITS[name] then fc45_draft_counted(unit.owner, name) end
++end
++signal.connect("unit_built", "fc45_draft_unit_built")
++
++function fc45_unrest_turn(turn, year)
++  local quota = find.building_type("Draft Quota")
++  for p in players_iterate() do
++    for c in p:cities_iterate() do
++      if c:has_building(quota) then edit.remove_building(c, quota) end
++      if rawget(_G, fc45_gp_key("fc45_unrest_", c.id)) ~= nil then fc45_unrest_apply(c, turn) end
++    end
++  end
++end
++signal.connect("turn_begin", "fc45_unrest_turn")
++
++-- A player who sells an unrest building, or a disaster that takes it, gets it back at once.
++function fc45_unrest_lost(city, building, reason, destroyer)
++  if string.sub(building:rule_name(), 1, 13) ~= "Draft Unrest " then return end
++  if city ~= nil and rawget(_G, fc45_gp_key("fc45_unrest_", city.id)) ~= nil then
++    fc45_unrest_apply(city, game.turn())
++  end
++end
++signal.connect("building_lost", "fc45_unrest_lost")
++
++function fc45_unrest_city_destroyed(city, loser, destroyer)
++  fc45_gp_set(fc45_gp_key("fc45_unrest_", city.id), nil)
++end
++signal.connect("city_destroyed", "fc45_unrest_city_destroyed")
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 432e327..f39f15f 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -1454,6 +1454,7 @@ reqs          =
+     "Gov",  "Republic",   "Player", FALSE
+     "Gov",  "Democracy",  "Player", FALSE
+     "Gov",  "Federation", "Player", FALSE
++    "Building", "Draft Quota", "Player", FALSE
+   }
+ obsolete_by   = "None"
+ graphic       = "u.militia"
+@@ -1500,6 +1501,7 @@ reqs          =
+     "Gov",  "Republic",   "Player", FALSE
+     "Gov",  "Democracy",  "Player", FALSE
+     "Gov",  "Federation", "Player", FALSE
++    "Building", "Draft Quota", "Player", FALSE
+   }
+ obsolete_by   = "None"
+ graphic       = "u.conscripts"
+-- 
+2.56.0
+

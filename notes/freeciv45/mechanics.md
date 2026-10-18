@@ -594,7 +594,7 @@ runner sets `endturn` 300, so the victory slice's score winner fired, as designe
 
 - The design note's question 1 (three draft units spanning the eras, or one per era) and the government list are
   decision 9 in the plan. The governments stand in for a civic until roadmap row 8.
-- Draft anger and a draft limit (spec 2.4, in-freeciv.md 4.2) are not built: issue 107.
+- Draft anger and a draft limit (spec 2.4, in-freeciv.md 4.2) are not built: issue 107. Built later as patch 0024, section 13.
 - The AI's use is as the autogame shows; nothing in the default AI knows what a draft is for (it treats a Levy as a
   cheap unit that happens to cost a citizen: `ai/default/daicity.c:712-735` prices the citizen in food, `:790` refuses
   it when the city is too small).
@@ -955,3 +955,69 @@ so the Residents-on-capture rule ran in no game; the handover case in the rules 
 - The pledge markers and the Golden Age fall with the capital, forgetting the pledges.
 - Art: `b.siege_workshop`, `b.apothecary`, `b.telegraph_office`, `b.pledge`, `u.zealots` and the `ts.horses`
   tile are borrowed until civ45-tileset draws them.
+
+## 13. Draft and whip unrest, and a draft limit (2026-10-17, patch 0024)
+
+Issue 107: a draft or a whip now costs the city content for a while, and an empire can draft only a few times a
+turn, as the reference behaviour in the "Production, whipping and drafting" paragraph of section 2 has it (one
+unhappy face for 10 turns per whip, three per draft, 1 to 5 drafts a turn by map size). Lines are the fork's at
+the patch.
+
+### What the ruleset says now
+
+| Rule | Built | Where |
+|---|---|---|
+| Unrest | Building a draft unit (the `Draft` flag) adds faces to the city for `FC45_UNREST_TURNS` 10 turns: the Levy (the whip of eras I to III) 1, Militia and Conscripts (the draft) 3. Faces of several drafts add up, to 7 at most | `script.lua`, `fc45_draft_unit_built`, `fc45_unrest_add` |
+| How a face is held | Three hidden buildings, Draft Unrest 1, 2 and 4 (genus Improvement, `MinYear 9999`, cost 1, no upkeep, sabotage 0), with `Make_Content` -1, -2 and -4; Lua keeps the set that sums to the faces. Each city's record is a scalar global `fc45_unrest_<city id>` = `"<expiry turn>:<faces>;..."`, so it survives a save | `buildings.ruleset`, `effects.ruleset` (end), `script.lua` `fc45_unrest_apply` |
+| Expiry | `turn_begin` drops the expired entries of every recorded city and sets its buildings to match | `fc45_unrest_turn` |
+| No escape by selling | Improvements can be sold (`common/improvement.c:1114`, `is_building_sellable` is genus Improvement); `building_lost` (emitted for a sale, `server/citytools.c:3000-3006`, and for disasters) puts an unrest building back at once. `edit.remove_building` emits nothing (`api_server_edit.c:769-786`), so Lua's own removals do not loop | `fc45_unrest_lost` |
+| The draft limit | One draft a turn per 400 land tiles of the map, 1 to 5 (`fc45_draft_limit`, counted once and saved as `fc45_draft_limit_n`; the default map of 10 to 12 players at `tilesperplayer` 100 gives 3). The draft that reaches the limit gives the player the hidden "Draft Quota" small wonder in its capital, which Militia and Conscripts require to be absent (`"Building", "Draft Quota", "Player", FALSE` in their `reqs`), so no other city of that player completes one in the same turn's end; `turn_begin` removes it. The Levy has no quota: whipping is limited by citizens, not by the empire | `units.ruleset` (Militia, Conscripts), `script.lua` `fc45_draft_counted` |
+| Logged | `FC45UNREST turn T <city> of <player> +F by <unit>, now N` and `FC45DRAFTS turn T <unit> of <player> is draft n of L this turn` in the server log | `script.lua` |
+
+### The limit of the unrest
+
+`Make_Content` is summed over the city's effects and a sum at or below zero makes nobody content
+(`common/city.c`, `citizen_content_buildings`: `while (faces > 0 && ...)`). So the unrest cancels content that a
+Temple, Colosseum, Cathedral or wonder would give, and does nothing to the base content citizens
+(`citizen_base_mood`, from `City_Unhappysize` and the empire size at Player range). A city with no content
+buildings feels no unrest at all; one with a Temple loses the Temple's one or two faces first. No requirement
+type lets a city-range effect lower the base content number (`EFT_CITY_UNHAPPYSIZE` and the empire-size effects
+are read with `get_player_bonus`, `common/city.c:2174-2195`, so a city requirement never holds there), and no other
+effect turns content citizens unhappy outside nationality and military units. A full malus needs an engine
+change (a city-range content penalty applied to the base mood); filed as an issue for civ54 or upstream.
+`notes/freeciv45/in-freeciv.md` 4.2 "Draft anger" had rated it "sees the malus"; that row now says what holds.
+
+### Refusing a draft needs no engine change
+
+Lua cannot cancel a build, but a requirement can: the quota is a Player-range small wonder that the draft units'
+`reqs` exclude, so for the rest of that turn's end `city_build_unit` finds the unit "no longer available", tells
+the owner and keeps the city's shields and its choice (`server/cityturn.c:2848-2860`); the city completes the draft
+on a later turn when the quota allows it. The design's question ("whether a refusal needs an engine change") is
+answered no. Barbarians skip that check (the same lines), but they never build draft units.
+
+### Seen in play
+
+Two 300-turn games, 10 AIs, seeds 42/42, diplomacy off, read from the server log (`FC45DRAFT`, `FC45WHIP`,
+`FC45UNREST`, `FC45DRAFTS`) and `scripts/civ45-combat-summary.py`:
+
+| | Without the unrest (patch 0021's rules) | With it |
+|---|---|---|
+| Draft units built | 25 (18 Conscripts, 6 Militia, 1 Levy) | 50 (35 Conscripts, 14 Militia, 1 Levy) |
+| Disbanded into a build | 26 | 23 |
+| Unrest after a draft | | 50 entries; the city then held 1 face once, 3 faces 35 times, 6 faces 11 times and the cap of 7 three times |
+| Turns at the draft limit (3 on this map) | | 1 (49 counted drafts: 43 turns with one, 5 with two, 1 with three) |
+| Attacks, cities changing hands | 568, 36 | 595, 36 |
+
+The two games part ways early (the extra buildings change the AI's choices), so the draft counts are two samples,
+not a measured effect; the AI does not know the unrest exists and drafts as before. The limit bit once in 300
+turns: the default AI rarely drafts more than once a turn.
+
+### Open
+
+- A full malus on base content needs an engine change (filed).
+- "The city keeps at least 5 citizens" for a draft and "at most half the population" for a whip are not built
+  (filed); they are a design call because they would end most of the AI's drafting.
+- The AI does not weigh the unrest when it drafts.
+- A captured city keeps its unrest under its new owner (the record is the city's, and a building lost in the
+  capture is put back).
+
