@@ -1,0 +1,88 @@
+# Freeciv45 unit bar: every control, one shot per state
+pace 1200
+wait 4000
+shot 00-start-dialogs
+dismiss
+wait 1000
+shot 01-start
+hover action Go to
+wait 1500
+shot 02-hover-goto
+hover action Fortify
+wait 1500
+shot 03-hover-fortify
+hover chip 2
+wait 1500
+shot 04-hover-chip
+# chips
+click chip 1
+shot 05-chip-select
+click chip 2 shift
+wait 300
+hover chip 2
+wait 1500
+shot 06-chip-shift-add
+click chip 0
+state chip-0-alone
+# the keyboard moves the focus, and the bar follows
+key w
+state key-w
+click chip 0
+hover portrait
+wait 1500
+shot 06b-hover-portrait
+# actions
+click action Fortify
+wait 800
+shot 07-fortify
+click action Sentry
+wait 800
+shot 08-sentry
+click action Wait
+wait 800
+shot 09-skip
+click action Done
+wait 800
+shot 10-done
+# go to: the button enters goto mode, then a tile is picked
+state before-goto
+click action Go to
+shot 11-goto-mode
+clicktile -1 2
+wait 2500
+shot 12-goto-moved
+hover chip 0
+wait 1500
+shot 12b-hover-fortified-chip
+unit 101
+# portrait centres the map
+scroll 400 300
+state scrolled
+click portrait
+wait 800
+state portrait-click
+# a wounded unit
+chat /lua cmd edit.unit_add_hitpoints(find.unit(nil, $UNIT), math.floor($HPMAX / 2) - $HP, "killed", nil)
+wait 1500
+shot 13-wounded-yellow
+chat /lua cmd edit.unit_add_hitpoints(find.unit(nil, $UNIT), math.floor($HPMAX / 4) - $HP, "killed", nil)
+wait 1500
+shot 14-wounded-red
+# the option, live
+option off
+wait 800
+shot 15-option-off
+option on
+wait 800
+shot 16-option-on
+# more than eight units: the +N chip
+chat /lua cmd local u = find.unit(nil, $UNIT); for i = 1, 8 do edit.create_unit(u.owner, u.tile, find.unit_type("Warriors"), 0, nil, -1) end
+wait 2000
+shot 17-plus-chip
+hover chip 8
+wait 1500
+shot 18-hover-plus
+click chip 8
+wait 1500
+shot 19-plus-chooser
+quit
