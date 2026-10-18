@@ -151,10 +151,8 @@ files =
   "freeciv45iso/coast.spec",
   "freeciv45iso/blend.spec",
   "freeciv45iso/resources.spec",
+  "freeciv45iso/features.spec",
   "freeciv45iso/maglev.spec",
-  "freeciv45iso/terrain2.spec",
-  "freeciv45iso/hills.spec",
-  "freeciv45iso/mountains.spec",
   "freeciv45iso/water.spec",
   "freeciv45iso/volcano.spec",
   "freeciv45iso/tiles.spec",
@@ -209,7 +207,7 @@ match_types = "desert", "forest", "grassland", "hills", "jungle", "mountains", "
 match_types = "water", "land", "ice"
 
 [layer2]
-match_types = "water", "arctic", "hills", "forest", "jungle"
+match_types = "water", "arctic", "tundra", "desert", "forest", "jungle", "swamp", "hills", "mountains", "inaccessible"
 
 ; Water graphics referenced by terrain.ruleset
 ;
@@ -257,10 +255,9 @@ num_layers = 3
 layer0_match_type = "water"
 layer1_match_type = "water"
 layer1_match_with = "land"
-layer2_match_type = "water"
-layer2_match_with = "arctic"
+layer2_match_type = "inaccessible"
+layer2_is_tall = TRUE
 layer1_sprite_type = "corner"
-layer2_sprite_type = "corner"
 
 ; Land graphics referenced by terrain.ruleset
 ;
@@ -281,7 +278,7 @@ layer0_match_type = "desert"
 layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
-layer2_match_type = "water"
+layer2_match_type = "desert"
 
 [tile_forest]
 tag = "forest"
@@ -293,7 +290,8 @@ layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
 layer2_match_type = "forest"
-layer2_match_with = "forest"
+layer2_match_with = "tundra"
+layer2_is_tall = TRUE
 
 [tile_grassland]
 tag = "grassland"
@@ -314,7 +312,8 @@ layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
 layer2_match_type = "hills"
-layer2_match_with = "hills"
+layer2_match_with = "desert"
+layer2_is_tall = TRUE
 
 [tile_jungle]
 tag = "jungle"
@@ -325,7 +324,7 @@ layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
 layer2_match_type = "jungle"
-layer2_match_with = "jungle"
+layer2_is_tall = TRUE
 
 [tile_mountains]
 tag = "mountains"
@@ -335,10 +334,9 @@ layer0_match_type = "mountains"
 layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
-layer2_match_type = "hills"
-layer2_match_with = "hills"
+layer2_match_type = "mountains"
+layer2_match_with = "tundra"
 layer2_is_tall = TRUE
-layer2_offset_y = 12
 
 [tile_plains]
 tag = "plains"
@@ -358,7 +356,8 @@ layer0_match_type = "swamp"
 layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
-layer2_match_type = "water"
+layer2_match_type = "swamp"
+layer2_is_tall = TRUE
 
 [tile_tundra]
 tag = "tundra"
@@ -368,7 +367,7 @@ layer0_match_type = "tundra"
 layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
-layer2_match_type = "water"
+layer2_match_type = "tundra"
 
 [tile_volcano]
 tag = "volcano"

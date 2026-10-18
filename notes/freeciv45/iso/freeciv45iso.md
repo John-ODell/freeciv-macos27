@@ -259,9 +259,49 @@ John saw the resources picture: the map looks better, but the ground round the s
 
 ![amplio2, before, desert toward straw; mapseed 21, 1:1](desert-seed21-1to1.jpg)
 
+## Our trees, hills and mountains (issue 224, 2026-10-18)
+
+Forest, jungle, swamp, hills, mountains and inaccessible now draw the Freeciv45 art pack's standing props. They come
+from BK-Art PR 75, commit 04cb963, `freeciv45/02_terrain_features/runN/panelN/post/raw`, placed as its
+`TREES_AND_RELIEF.md` ("Runs 1 to 4") says. amplio2's trees (PR 205) and its hill and mountain relief (PR 197) are
+gone from the tileset: `terrain2`, `hills` and `mountains` are no longer cut.
+- **Baked stands, not single props.** `features()` in the builder bakes a few variants per terrain, each a full tile
+  (192 x 144, the diamond plus half a tile of headroom). The client draws one per tile on layer 2 (`layer2_is_tall`),
+  picked with `fc_randomly(tile_index, N)`, as the scatter plan in the shared notes chose.
+  - Trees: 6 or 7 per forest tile at 0.6, 7 jungle plants at 0.45 with a palm or tree fern now and then, 3 swamp
+    pieces at 0.6. Feet stay inside the diamond, spaced by width, sorted back to front.
+  - Hills: one per tile at 0.85, foot 22 px below the centre, the bottom 18 % of the alpha faded into the ground.
+  - Mountains: one per tile at 0.78, foot 26 px below the centre. The top band is stripped from `peak_spire`,
+    `peak_massif`, `peak_twin`, `peak_ridge`, `peak_cliff`, `range_1` and `range_2`, as in the art repo's judge
+    script. Inaccessible gets `peak_dark_*` only.
+  - Each prop's scale is capped so it stays inside the full tile, which keeps the client's redraw from clipping it.
+  - Seeds come from the tag and the variant number, so two builds give identical files.
+- **Variants:** forest 12, jungle 12, swamp 8, hills 15, mountains 15, inaccessible 5. Through patch 0030's pairs:
+  forest next to tundra gets pines (8), mountains next to tundra get snowy peaks (5), hills next to desert get dry
+  hills (5). Tundra and desert get their own layer-2 match types for this.
+- **Ground under the props:** run 6 row 1 (the iso plains ground) under hills, rocky desert under mountains (run 19
+  row 5), and tundra under the pines (run 19 row 3). Mountains are graded toward grey-brown (`GRADE["mountains"]`).
+- **Only the props drawn are shipped.** `features.png` holds only the 87 baked stands, and RECORD.md "Trees, hills
+  and mountains" names the 87 props they use, under GPL-2.0-or-later. No panels, qa, judge files or alternates.
+- `--features amplio2` brings back the amplio2 trees and relief.
+
+**Check (observed):** mapseed 21, the same window, and the labelled field. The client log shows no tileset warning,
+and every terrain draws its stand.
+
+**Limits (findings):**
+- Hills no longer join into ranges. Each tile is a separate lump, because variants have no neighbour forms.
+- Glacier next to mountains doesn't bring snowy peaks. That would need glacier to share a layer-2 type with tundra,
+  and that would draw the ice edge on tundra coasts.
+- Inaccessible loses its ice-edge corner layer; the dark peaks replace it.
+- At 6 or 7 trees a tile, a forest reads as open woodland rather than a closed canopy.
+
+![amplio2, today, our props; mapseed 21, 1:1](features-seed21-1to1.jpg)
+
+![the labelled field: amplio2, today, our props; 1:1](features-terrain-names-1to1.jpg)
+
 ## Not done, and findings
 
-- Hills and mountains had no relief in the first build (issue 194). They now draw amplio2's relief (see above).
+- Hills and mountains had no relief in the first build (issue 194). They now draw our own props (issue 224).
 - **Inaccessible against deep ocean is a hard edge.** It is the same in freeciv45test, because civ45's Inaccessible
   is not in the water class.
 - **Two variants of one terrain meet without a fade** in iso (see above).
