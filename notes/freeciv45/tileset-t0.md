@@ -556,3 +556,50 @@ at patch 0029 with the committed tileset. After: patch 0030 with this build.
 
 ![Before, 1:1](tileset-t0/pine-before-1to1.png)
 ![After, 1:1](tileset-t0/pine-after-1to1.png)
+
+## Coastline from the painted art (issue 184, part of 81, 2026-10-18)
+
+#173 left two things on the water: trident's shore pieces, a blocky blue and green zigzag at 6.4x, and hard edges
+between the water depths. The coastline builder (`coastline()` in the builder) replaces the first, and blending the
+water terrains replaces the second.
+
+- **Shore.** Layer 1 of every water and land tile is now corner cells: four quarter tiles, each picked by the three
+  neighbours around its corner. Water tiles get run 14's beach (r1c3) from the edge facing land, with wet sand, a
+  foam line and sand seen through shallow water. Land tiles get the same sand from the edge facing water, thinning
+  out in grains into their ground. Both sides sample one texture at the same place and share one noise, so the
+  beach runs across the tile edge without a line. A diagonal neighbour alone gives a rounded spit or bite.
+- **Glacier.** Water next to glacier gets an ice edge instead (layer 2, run 13 r1c1, with a light lip and ice seen
+  under the water). Glacier gets its own layer 1 match type, `ice`, so neither side draws a beach there.
+- **Depths.** Ocean, deep ocean, lake and inaccessible get `blend_layer = 1`, so they fade into each other with the
+  wandering masks of #148 and their variants fade like the land's. The fork's **patch 0031** keeps a terrain from
+  fading into a neighbour of the other class (land into water or water into land), which the shore cells draw instead.
+- Run 14's rocky shore (row 2) stays unused: a lake's shore meets the same land cells as the sea's, so one beach
+  serves both.
+
+### How it was checked (observed)
+
+Offscreen client at `QT_SCALE_FACTOR=2`. Before: the fork at patch 0030 with the tileset on main. After: patch 0031
+with this build.
+
+- **The start view** (`coast-window-before.jpg`, `coast-window-after.jpg`, and the 1:1 crops `coast-before-1to1.jpg`
+  and `coast-after-1to1.jpg`: a forest islet under the glacier, two one-tile inlets):
+  - every coast is beach;
+  - the glacier front is a wavy ice edge;
+  - no trident shore piece is left on the map.
+- **`tileset-t0/coast.txt`** (deep ocean west, ocean east, a lake; `depth-before-1to1.jpg`, `depth-after-1to1.jpg`):
+  - deep and shallow ocean meet in a soft wandering edge instead of a straight line;
+  - the tile grid between ocean variants is much fainter (the variant fades).
+- The client logged no sprite error. A missing cell tag stops the client, so all 544 (17 terrains x 32) loaded.
+
+### Still visible
+
+- **One look everywhere.** The beach is the same width round every coast, mountains and swamp included. A rocky or
+  muddy shore by terrain would need cells per land terrain on the water side, which a corner cell cannot know.
+- **Deep water fades far.** Deep ocean reaches well into the shallows: the blend depth is the land's, 48 px.
+- **Unmeasured cost.** Every land and water tile now draws four layer 1 cells, mostly transparent, and every water
+  tile four more on layer 2.
+
+![Before, 1:1](tileset-t0/coast-before-1to1.jpg)
+![After, 1:1](tileset-t0/coast-after-1to1.jpg)
+![Depths before, 1:1](tileset-t0/depth-before-1to1.jpg)
+![Depths after, 1:1](tileset-t0/depth-after-1to1.jpg)
