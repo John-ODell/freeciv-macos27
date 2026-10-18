@@ -1,0 +1,53 @@
+From 6aaea20f9b285eee9e333d8e7ad3014b1cbfb4af Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 13:03:25 -0500
+Subject: [PATCH 35/42] civ45: culture victory at 30000 points and a quarter
+ more than the runner-up
+
+---
+ data/civ45/README.civ45 |  4 ++--
+ data/civ45/game.ruleset | 12 ++++++------
+ 2 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index fbcf7b1..48c655d 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -48,8 +48,8 @@ Differences from sandbox
+ - Six ways to win. Conquest: every rival is dead or has surrendered.
+   Domination: hold 60 percent of the land tiles and 50 percent of the
+   world's citizens for three turns running, checked from turn 100 by the
+-  ruleset's script. Culture: 8000 culture points and half again as much
+-  as the runner-up (sandbox asks 20000 and double). Space: a spaceship
++  ruleset's script. Culture: 30000 culture points and a quarter more
++  than the runner-up (sandbox asks 20000 and double). Space: a spaceship
+   that arrives (endspaceship enabled). Alliance: the last alliance
+   standing wins together. Score: the game ends after turn 475 (the year
+   2050) and at the start of that turn the living player with the highest
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index e9f6989..a604dd9 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -390,13 +390,13 @@ tech_upkeep_divider = 6000
+ free_tech_method = "Cheapest"
+ 
+ [culture]
+-; Minimum culture points for cultural domination victory. Freeciv45: 8000 (sandbox 20000),
+-; reachable near turn 350 to 400 at the current culture pace; re-tune with the culture slice.
+-victory_min_points = 8000
++; Minimum culture points for cultural domination victory. Freeciv45: 30000 (sandbox 20000),
++; which the top civ reaches near turn 375 in AI autogames (8000 came at turn 225; issue 165).
++victory_min_points = 30000
+ 
+-; How big lead relative to second best player is needed for victory. Freeciv45: half again
+-; as much as the runner-up (sandbox: double).
+-victory_lead_pct   = 50
++; How big lead relative to second best player is needed for victory. Freeciv45: a quarter
++; more than the runner-up (sandbox: double; 50 was met in one game of six, issue 165).
++victory_lead_pct   = 25
+ 
+ ; How much existing history grows each turn. This makes older history
+ ; of the same original value more valuable as newer history, as it has
+-- 
+2.56.0
+

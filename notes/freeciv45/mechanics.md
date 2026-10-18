@@ -476,7 +476,7 @@ Built from `notes/freeciv45/design/victory.md` (PR 77) as issue 92. Line numbers
 |---|---|---|
 | Conquest | Every rival dead or surrendered: the server's own rule, nothing set | `server/srv_main.c:524-546` |
 | Domination | Hold 60 % of the land tiles and 50 % of all citizens for 3 turns running, checked from turn 100; Lua on `turn_begin` walks the map and the cities and calls `edit.player_victory` | `data/civ45/script.lua`, `fc45_domination_check` (the constants `FC45_DOM_*` at its top) |
-| Culture | `victory_min_points` 8000 and `victory_lead_pct` 50 (sandbox 20000 and 100, which no player reached, design note 2.3) | `data/civ45/game.ruleset:390-397` |
+| Culture | `victory_min_points` 30000 and `victory_lead_pct` 25 (sandbox 20000 and 100, which no player reached, design note 2.3; 8000 and 50 until issue 165) | `data/civ45/game.ruleset:390-397` |
 | Space | `victories` keeps SPACERACE and `endspaceship` is written out as ENABLED: the ship must arrive | `game.ruleset:930-932` |
 | Alliance | `victories` keeps ALLIED: the last alliance standing wins together (a vote waits for later slices, design note 2.5) | `game.ruleset:930` |
 | Score | `endturn` 475; at the start of that turn Lua names the living civ with the highest `civilization_score` the winner, so the game ends with "Scenario victory to the X" instead of the turn-limit notice. The first civ found wins a tie | `game.ruleset:932`; `script.lua`, `fc45_score_winner` |

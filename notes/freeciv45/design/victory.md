@@ -194,8 +194,8 @@ as decision 5 of the plan keeps map and killstack unlocked.
 | `endspaceship` | engine default TRUE | `"endspaceship", "ENABLED", FALSE` written out | The ship must arrive, as the spec says; writing it makes the rule visible |
 | `spaceship_travel_pct` | 100 | 100 | No reason to change until the space era is tuned |
 | `endturn` | engine default 5000 | 475 | The turn the calendar reaches 2050 (2.6); a game that reaches it ends on score |
-| `[culture] victory_min_points` | 20000 | 8000 | Reachable near turn 350 to 400 by a player who builds for culture at today's pace, which is after space parts become possible, so the two races overlap (derived from 2.3; re-tune after roadmap row 8) |
-| `[culture] victory_lead_pct` | 100 | 50 | Needing double the runner-up punishes a two-builder game; half again still demands a clear lead |
+| `[culture] victory_min_points` | 20000 | 30000 | Reachable near turn 350 to 400 by a player who builds for culture at today's pace, which is after space parts become possible, so the two races overlap. 8000 until 2026-10-18 (issue 165): the top civ passed it at turn 225 to 275 in AI games, so only the lead decided; 30000 is the top AI civ's culture near turn 400 to 475 in Normal-AI games on seed 3, which do not build for culture; on the war-heavy seed 42 the top civ stayed under 14000 (balance-1.md, balance-2.md) |
+| `[culture] victory_lead_pct` | 100 | 25 | Needing double the runner-up punishes a two-builder game; a quarter more still demands a clear lead. 50 until 2026-10-18: met in one game of six in balance report 1, while leads of 20 to 45% were common |
 | Domination (Lua) | none | land 60%, citizens 50%, 3 turns, from turn 100 | A map share that needs real conquest on a 12-player map (the best AI holds about 15% of the land at turn 101: 185 of about 1,200 land tiles, `landarea` in the T101 save); citizens stop a land-rich, city-poor empire winning on borders alone |
 
 `citymindist`, `tilesperplayer` and `aifill` stay as they are (`civ45/game.ruleset:919-929`).
