@@ -100,6 +100,8 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - `~/.freeciv/3.2/freeciv45test.tilespec` and `~/.freeciv/3.2/freeciv45test`: symlinks into this repo's
   `tilesets/` (first made to the `tileset-t0` worktree, re-pointed to the main checkout after the merge), so any
   client on this machine can load the test tileset by name. Delete the two links to uninstall; nothing else.
+  Observed 2026-10-17 evening: the re-point had not happened and the links still went to the worktree's stale
+  copy; re-pointed to `~/Desktop/freeciv-port/tilesets/` then (issue 149).
 - `scripts/windows-of-pid` compiled again in the worktree (git-ignored).
 
 ## Added and removed 2026-10-17 midday (local terrain-texture generation trial; all deleted the same day)

@@ -1,0 +1,32 @@
+From 016a41ba6badfbba72b8cfd29c7f7fe8e583c389 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 21:54:47 -0500
+Subject: [PATCH] civ45: stop suggesting the trident tileset
+
+The ruleset named trident as its preferred tileset, so the client offered
+to switch away from the Freeciv45 test tileset at every game start.
+---
+ data/civ45/game.ruleset | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index c922e51..9a63903 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -73,9 +73,10 @@ global_init_buildings = "Palace"
+ [tileset]
+ ; If preferred tileset is set, clients that support the feature will suggest
+ ; using that tileset with the ruleset.
+-; civ45: trident is the only overhead square tileset Freeciv ships, until a
+-; Freeciv45 tileset exists.
+-preferred = "trident"
++; civ45: no suggestion. The Freeciv45 test tileset is not shipped with the build
++; yet, and suggesting trident made the client offer to replace the painted tiles
++; at every game start. Players keep the tileset they chose.
++preferred = ""
+ 
+ [soundset]
+ ; If preferred soundset is set, clients that support the feature will suggest
+-- 
+2.56.0
+
