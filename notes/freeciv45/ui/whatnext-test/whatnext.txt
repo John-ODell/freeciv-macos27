@@ -1,0 +1,133 @@
+# Freeciv45 "what next" above the minimap. Turn 1: units, a new city, End turn. Turn 2: research first, then units;
+# the city's first build is bought. Turn 3: units, then the city whose build finished, then End turn. Run with FREECIV_DRIVE_SERV="set sciencebox 1" so the first advance is done
+# at the first turn change and nothing is chosen next.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+option popup_new_cities off
+state start
+shot 01-units
+hover tip wait for orders
+wait 1500
+shot 02-hover-units
+# a click shows the next unit, as W does
+click tip wait for orders
+wait 1000
+state after-unit-click
+# every unit done with the Space key: End turn stands out
+key space
+wait 600
+key space
+wait 600
+key space
+wait 600
+key space
+wait 600
+key space
+wait 1500
+state all-done
+shot 03-end-turn
+# a new city with nothing queued; gold to buy its first build next turn
+chat /lua cmd edit.change_gold(find.unit(nil, 107).owner, 500)
+wait 1000
+chat /lua cmd edit.create_city(find.unit(nil, 107).owner, find.tile(35, 2), "Testburg")
+wait 2500
+dismiss
+wait 500
+state new-city
+shot 04-new-city
+click tip nothing queued
+wait 2000
+state city-opened
+shot 05-city-overlay
+click button Return to map
+wait 1500
+state city-closed
+# End turn from the button
+click tip nothing else waits
+wait 6000
+dismiss
+wait 1000
+# the client opens the science report when the research changes
+click tip Map
+wait 1000
+state turn2
+shot 06-turn2-research
+click tip Nothing is being researched
+wait 1500
+state research-clicked
+research Pottery
+wait 2000
+click tip Map
+wait 1000
+state research-set
+shot 07-turn2-units
+# buy the city's first build, so it is done at the next turn change
+opencity Testburg
+wait 2000
+click button Buy
+wait 1500
+accept
+wait 1500
+city Testburg
+click button Return to map
+wait 1500
+click action Done
+wait 800
+click action Done
+wait 800
+click action Done
+wait 800
+click action Done
+wait 800
+click action Done
+wait 800
+state turn2-done
+click tip nothing else waits
+wait 6000
+dismiss
+wait 1000
+click tip Map
+wait 1000
+state turn3
+shot 08-turn3-research-first
+# Pottery is done too: research again, then the units, then the city
+research Alphabet
+wait 2000
+click tip Map
+wait 1000
+click action Done
+wait 800
+click action Done
+wait 800
+click action Done
+wait 800
+click action Done
+wait 800
+click action Done
+wait 800
+click action Done
+wait 800
+state turn3-units-done
+shot 09-city-finished-build
+click tip nothing queued
+wait 2000
+state turn3-city-opened
+click button Return to map
+wait 1500
+state turn3-city-seen
+shot 10-end-turn-again
+# Shift+Return still ends the turn
+key shift+enter
+wait 6000
+dismiss
+wait 1000
+state turn4
+option gui_qt_freeciv45_edges off
+wait 1000
+state edges-off
+option gui_qt_freeciv45_edges on
+wait 1000
+state edges-on
+quit
