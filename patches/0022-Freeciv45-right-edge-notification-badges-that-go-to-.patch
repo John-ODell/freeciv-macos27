@@ -1,0 +1,631 @@
+From 3d264b2019f10323b4561a6af22348312ec897fa Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 22:55:08 -0500
+Subject: [PATCH] Freeciv45 right edge: notification badges that go to the city
+ or tile and clear on click
+
+Under the right-edge column's buttons, each unvisited message that has a
+place to go gets a round 36 px badge, newest at the top: as many as fit
+below the buttons, at most eight, then a "+N" badge for the rest. The
+badge's icon and border colour say the message's kind (city, diplomacy,
+military, research or other, from the event's section of the message
+options), its tooltip is the message text.
+
+A click goes there and marks the message visited, which removes the badge
+and puts the message in italics in the messages log: an own city's event
+opens the city overlay (meswin_popup_city), any other centres the map on
+the tile (meswin_goto) and closes an open overlay first. "+N" closes the
+overlay, returns to the map and scrolls the messages log to the oldest
+message that has no badge.
+
+The badges follow the message list: real_meswin_dialog_update refreshes
+them, and so does a click on a message in the log. The column refills them
+when its height changes. common/events.h now exports the event sections
+(enum event_section_n) and get_event_section(), which were private to
+events.c. Themed in the NightStalker and System resource.qss.
+
+panels.md section 8.2, issue 143.
+---
+ client/gui-qt/edgebar.cpp                    | 248 ++++++++++++++++++-
+ client/gui-qt/edgebar.h                      |  29 ++-
+ client/gui-qt/messagewin.cpp                 |  27 ++
+ client/gui-qt/messagewin.h                   |   1 +
+ common/events.c                              |  35 +--
+ common/events.h                              |  18 ++
+ data/themes/gui-qt/NightStalker/resource.qss |  23 ++
+ data/themes/gui-qt/System/resource.qss       |  23 ++
+ 8 files changed, 379 insertions(+), 25 deletions(-)
+
+diff --git a/client/gui-qt/edgebar.cpp b/client/gui-qt/edgebar.cpp
+index 18d7d4b..1a5ac56 100644
+--- a/client/gui-qt/edgebar.cpp
++++ b/client/gui-qt/edgebar.cpp
+@@ -29,6 +29,7 @@
+ #include "calendar.h"
+ #include "city.h"
+ #include "culture.h"
++#include "events.h"
+ #include "game.h"
+ #include "player.h"
+ #include "research.h"
+@@ -36,13 +37,16 @@
+ // client
+ #include "client_main.h"
+ #include "climisc.h"
++#include "messagewin_common.h"
+ #include "options.h"
+ #include "text.h"
+ 
+ // gui-qt
++#include "cityoverlay.h"
+ #include "cityrep.h"
+ #include "edgebar.h"
+ #include "fc_client.h"
++#include "messagewin.h"
+ #include "plrdlg.h"
+ #include "repodlgs.h"
+ #include "sidebar.h"
+@@ -54,6 +58,11 @@ static const int STRIP_ICON = 18;
+ static const int COLUMN_WIDTH = 64;
+ static const int BUTTON_SIZE = 44;
+ static const int BUTTON_ICON = 38;
++static const int BADGE_SIZE = 36;
++static const int BADGE_ICON = 30;
++static const int BADGE_GAP = 18;
++static const int BADGE_SPACING = 8;
++static const int MAX_BADGES = 8;
+ 
+ /************************************************************************//**
+   A number with its sign, for per-turn changes
+@@ -286,13 +295,163 @@ edge_button::edge_button(const QString &icon, const QString &tip,
+   setCursor(Qt::PointingHandCursor);
+ }
+ 
++/************************************************************************//**
++  The kind of a message, for its badge's icon and the theme: city,
++  diplomacy, military, research or other
++****************************************************************************/
++static const char *badge_kind(enum event_type event)
++{
++  switch (get_event_section(event)) {
++  case E_S_ADVANCE:
++    return "research";
++  case E_S_BUILD:
++  case E_S_CITY:
++  case E_S_WONDER:
++    return "city";
++  case E_S_D_ME:
++  case E_S_D_THEM:
++  case E_S_TREATY:
++    return "diplomacy";
++  case E_S_UNIT:
++    return "military";
++  default:
++    return "other";
++  }
++}
++
++/************************************************************************//**
++  The theme icon for a kind of message
++****************************************************************************/
++static QString badge_icon(const QString &kind)
++{
++  if (kind == "research") {
++    return "research";
++  } else if (kind == "city") {
++    return "cities";
++  } else if (kind == "diplomacy") {
++    return "nations";
++  } else if (kind == "military") {
++    return "units";
++  }
++
++  return "flag";
++}
++
++/************************************************************************//**
++  A round badge; resource.qss draws the circle. Hidden until it has a
++  message.
++****************************************************************************/
++edge_badge::edge_badge(QWidget *parent) : QToolButton(parent)
++{
++  msg = nullptr;
++  setIconSize(QSize(BADGE_ICON, BADGE_ICON));
++  setFixedSize(BADGE_SIZE, BADGE_SIZE);
++  setFocusPolicy(Qt::NoFocus);
++  setCursor(Qt::PointingHandCursor);
++  connect(this, &QToolButton::clicked, this, &edge_badge::visit);
++  hide();
++}
++
++/************************************************************************//**
++  Show one message: its kind's icon, its text as the tooltip
++****************************************************************************/
++void edge_badge::set_message(const struct message *pmsg)
++{
++  QString kind = badge_kind(pmsg->event);
++
++  msg = pmsg;
++  setText(QString());
++  setToolButtonStyle(Qt::ToolButtonIconOnly);
++  setIcon(fc_icons::instance()->get_icon(badge_icon(kind)));
++  setToolTip(QString(pmsg->descr).trimmed());
++  if (property("kind").toString() != kind) {
++    setProperty("kind", kind);
++    style()->unpolish(this);
++    style()->polish(this);
++  }
++  show();
++}
++
++/************************************************************************//**
++  Show "+N" for the messages that have no badge of their own
++****************************************************************************/
++void edge_badge::set_more(int count)
++{
++  msg = nullptr;
++  setIcon(QIcon());
++  setToolButtonStyle(Qt::ToolButtonTextOnly);
++  setText(QString("+%1").arg(count));
++  // TRANS: tooltip of the Freeciv45 "+N" badge on the right edge
++  setToolTip(QString(PL_("%1 more message; opens the messages log",
++                         "%1 more messages; opens the messages log",
++                         count)).arg(count));
++  if (property("kind").toString() != "more") {
++    setProperty("kind", "more");
++    style()->unpolish(this);
++    style()->polish(this);
++  }
++  show();
++}
++
++/************************************************************************//**
++  A click: go to the message's city or tile and mark it visited, which
++  removes the badge; "+N" opens the messages log at the oldest message
++  without a badge
++****************************************************************************/
++void edge_badge::visit()
++{
++  const struct message *target = msg;
++  int num = meswin_get_num_messages();
++  int i;
++
++  if (target == nullptr) {
++    if (city_overlay_is_open()) {
++      gui()->cityoverlay_wdg->close_overlay();
++    }
++    side_show_map(true);
++    if (gui()->infotab != nullptr) {
++      gui()->infotab->show();
++      if (gui()->infotab->chat_maximized) {
++        gui()->infotab->restore_chat();
++      }
++      gui()->infotab->msgwdg->show_unvisited();
++    }
++    return;
++  }
++
++  // The list may have changed since the badge was set
++  for (i = 0; i < num; i++) {
++    if (meswin_get_message(i) == target) {
++      break;
++    }
++  }
++  if (i < num) {
++    struct city *pcity = (target->city_ok ? tile_city(target->tile)
++                                          : nullptr);
++
++    side_show_map(true);
++    if (pcity != nullptr && city_owner(pcity) == client_player()
++        && QString(badge_kind(target->event)) == "city") {
++      // Opens the city overlay
++      meswin_popup_city(i);
++    } else {
++      if (city_overlay_is_open()) {
++        gui()->cityoverlay_wdg->close_overlay();
++      }
++      meswin_goto(i);
++    }
++    meswin_set_visited_state(i, true);
++  }
++  // Redraws the messages log in italics and the badges without this one
++  real_meswin_dialog_update(nullptr);
++}
++
+ /************************************************************************//**
+   The column: Map, the five overviews, and More for the rest
+ ****************************************************************************/
+ edge_column::edge_column(QWidget *parent) : QFrame(parent)
+ {
+   QVBoxLayout *col = new QVBoxLayout(this);
+-  edge_button *more;
+   QMenu *menu;
+ 
+   setObjectName("edge_column");
+@@ -309,9 +468,9 @@ edge_column::edge_column(QWidget *parent) : QFrame(parent)
+   add_button("economy", QString(_("Economy")), economy_report_dialog_popup);
+ 
+   // TRANS: the Freeciv45 right-edge button for the other overviews
+-  more = new edge_button("list-add", QString(_("More overviews")),
+-                         this);
+-  menu = new QMenu(more);
++  more_btn = new edge_button("list-add", QString(_("More overviews")),
++                             this);
++  menu = new QMenu(more_btn);
+   menu->addAction(QString(_("Demographics")), [=]() {
+     send_report_request(REPORT_DEMOGRAPHIC);
+   });
+@@ -329,9 +488,81 @@ edge_column::edge_column(QWidget *parent) : QFrame(parent)
+       popup_spaceship_dialog(client_player());
+     }
+   });
+-  more->setMenu(menu);
+-  more->setPopupMode(QToolButton::InstantPopup);
+-  col->addWidget(more, 0, Qt::AlignHCenter);
++  more_btn->setMenu(menu);
++  more_btn->setPopupMode(QToolButton::InstantPopup);
++  col->addWidget(more_btn, 0, Qt::AlignHCenter);
++
++  // The notification badges, newest at the top
++  col->addSpacing(BADGE_GAP);
++  badge_box = new QVBoxLayout();
++  badge_box->setContentsMargins(0, 0, 0, 0);
++  badge_box->setSpacing(BADGE_SPACING);
++  col->addLayout(badge_box);
++  for (int i = 0; i < MAX_BADGES; i++) {
++    edge_badge *b = new edge_badge(this);
++
++    badges.append(b);
++    badge_box->addWidget(b, 0, Qt::AlignHCenter);
++  }
++  more_badge = new edge_badge(this);
++  badge_box->addWidget(more_badge, 0, Qt::AlignHCenter);
++}
++
++/************************************************************************//**
++  Fill the badges from the message list: one per unvisited message with a
++  place to go, newest first, as many as fit below the buttons up to eight,
++  then "+N" for the rest
++****************************************************************************/
++void edge_column::update_badges()
++{
++  QList<const struct message *> waiting;
++  int num = meswin_get_num_messages();
++  int room, shown, i;
++
++  for (i = num - 1; i >= 0; i--) {
++    const struct message *pmsg = meswin_get_message(i);
++
++    if (pmsg != nullptr && !pmsg->visited && pmsg->location_ok) {
++      waiting.append(pmsg);
++    }
++  }
++
++  // The room under the buttons, in badges, counting the "+N" one
++  room = MAX_BADGES + 1;
++  if (more_btn->geometry().isValid() && height() > 0) {
++    int top = more_btn->geometry().bottom() + 1 + BADGE_GAP
++              + layout()->spacing();
++
++    room = qBound(0, (height() - top + BADGE_SPACING)
++                      / (BADGE_SIZE + BADGE_SPACING), MAX_BADGES + 1);
++  }
++  if (waiting.size() <= qMin(room, MAX_BADGES)) {
++    shown = waiting.size();
++  } else {
++    shown = qMax(0, qMin(room - 1, MAX_BADGES));
++  }
++
++  for (i = 0; i < MAX_BADGES; i++) {
++    if (i < shown) {
++      badges[i]->set_message(waiting[i]);
++    } else {
++      badges[i]->hide();
++    }
++  }
++  if (shown < waiting.size() && room > 0) {
++    more_badge->set_more(waiting.size() - shown);
++  } else {
++    more_badge->hide();
++  }
++}
++
++/************************************************************************//**
++  As many badges as fit: the window's height decides
++****************************************************************************/
++void edge_column::resizeEvent(QResizeEvent *event)
++{
++  QFrame::resizeEvent(event);
++  update_badges();
+ }
+ 
+ /************************************************************************//**
+@@ -372,4 +603,7 @@ void apply_freeciv45_edges(void)
+       gui()->topstrip_wdg->refresh();
+     }
+   }
++  if (on && gui()->edgecolumn_wdg != nullptr) {
++    gui()->edgecolumn_wdg->update_badges();
++  }
+ }
+diff --git a/client/gui-qt/edgebar.h b/client/gui-qt/edgebar.h
+index 12f992d..157c009 100644
+--- a/client/gui-qt/edgebar.h
++++ b/client/gui-qt/edgebar.h
+@@ -20,10 +20,13 @@
+ 
+ // Qt
+ #include <QFrame>
++#include <QList>
+ #include <QToolButton>
+ 
+ class QLabel;
+ class QPushButton;
++class QVBoxLayout;
++struct message;
+ 
+ /****************************************************************************
+   The top strip: the empire's numbers, each a button that opens its report,
+@@ -58,16 +61,40 @@ public:
+ };
+ 
+ /****************************************************************************
+-  The right-edge column: round buttons for the overviews (panels.md 8.2)
++  One notification badge under the column's buttons: an unvisited message
++  that has a place to go, or "+N" for the rest
++****************************************************************************/
++class edge_badge : public QToolButton
++{
++  Q_OBJECT
++public:
++  edge_badge(QWidget *parent);
++  void set_message(const struct message *pmsg);
++  void set_more(int count);
++private:
++  void visit();
++  const struct message *msg;
++};
++
++/****************************************************************************
++  The right-edge column: round buttons for the overviews, then the
++  notification badges (panels.md 8.2)
+ ****************************************************************************/
+ class edge_column : public QFrame
+ {
+   Q_OBJECT
+ public:
+   edge_column(QWidget *parent);
++  void update_badges();
++protected:
++  void resizeEvent(QResizeEvent *event) override;
+ private:
+   edge_button *add_button(const QString &icon, const QString &tip,
+                           void (*click)(bool));
++  edge_button *more_btn;
++  QVBoxLayout *badge_box;
++  QList<edge_badge *> badges;
++  edge_badge *more_badge;
+ };
+ 
+ void apply_freeciv45_edges(void);
+diff --git a/client/gui-qt/messagewin.cpp b/client/gui-qt/messagewin.cpp
+index 0b227a9..9eab3ab 100644
+--- a/client/gui-qt/messagewin.cpp
++++ b/client/gui-qt/messagewin.cpp
+@@ -24,6 +24,7 @@
+ #include <QStyleFactory>
+ 
+ // gui-qt
++#include "edgebar.h"
+ #include "fc_client.h"
+ #include "gui_main.h"
+ #include "messagewin.h"
+@@ -269,6 +270,9 @@ void messagewdg::item_selected(const QItemSelection &sl,
+       f = item->font();
+       f.setItalic(true);
+       item->setFont(f);
++      if (gui()->edgecolumn_wdg != nullptr) {
++        gui()->edgecolumn_wdg->update_badges();
++      }
+     }
+     if (QApplication::mouseButtons() == Qt::LeftButton && pmsg->location_ok) {
+       meswin_goto(i);
+@@ -373,6 +377,26 @@ void messagewdg::msg_update()
+   update();
+ }
+ 
++/***********************************************************************//**
++  Scroll to the oldest message that is not visited yet
++***************************************************************************/
++void messagewdg::show_unvisited()
++{
++  int i, num = meswin_get_num_messages();
++
++  for (i = 0; i < num; i++) {
++    const struct message *pmsg = meswin_get_message(i);
++
++    if (pmsg != nullptr && !pmsg->visited && pmsg->location_ok
++        && mesg_table->item(i, 0) != nullptr) {
++      mesg_table->scrollToItem(mesg_table->item(i, 0),
++                               QAbstractItemView::PositionAtTop);
++      return;
++    }
++  }
++  mesg_table->scrollToBottom();
++}
++
+ /***********************************************************************//**
+   Resize event for messagewdg
+ ***************************************************************************/
+@@ -406,6 +430,9 @@ void real_meswin_dialog_update(void *unused)
+   int i, num;
+   const struct message *pmsg;
+ 
++  if (gui()->edgecolumn_wdg != nullptr) {
++    gui()->edgecolumn_wdg->update_badges();
++  }
+   if (gui()->infotab == NULL) {
+     return;
+   }
+diff --git a/client/gui-qt/messagewin.h b/client/gui-qt/messagewin.h
+index 450e9e0..66ef69b 100644
+--- a/client/gui-qt/messagewin.h
++++ b/client/gui-qt/messagewin.h
+@@ -47,6 +47,7 @@ public:
+   void msg_update();
+   void clr();
+   void msg(const struct message *pmsg);
++  void show_unvisited();
+ private:
+   QTableWidget *mesg_table;
+   QGridLayout *layout;
+diff --git a/common/events.c b/common/events.c
+index 7f9e87a..bc4b2b0 100644
+--- a/common/events.c
++++ b/common/events.c
+@@ -27,24 +27,9 @@
+ 
+ #include "events.h"
+ 
+-enum event_section_n {
+-  E_S_ADVANCE,
+-  E_S_BUILD,
+-  E_S_CITY,
+-  E_S_D_ME,
+-  E_S_D_THEM,
+-  E_S_GLOBAL,
+-  E_S_HUT,
+-  E_S_NATION,
+-  E_S_TREATY,
+-  E_S_UNIT,
+-  E_S_VOTE,
+-  E_S_WONDER,
+-  E_S_XYZZY
+-};
+-
+ /*
+- * Information about all event sections, matching the enum above.
++ * Information about all event sections, matching enum event_section_n
++ * in events.h.
+  */
+ static const char *event_sections[] = {
+   /* TRANS: This and following strings are prefixes for event names, which
+@@ -285,6 +270,22 @@ const char *get_event_tag(enum event_type event)
+   return NULL;
+ }
+ 
++/**********************************************************************//**
++  The section of the event list the event belongs to, as the message
++  options group them
++**************************************************************************/
++enum event_section_n get_event_section(enum event_type event)
++{
++  fc_assert_ret_val(event_type_is_valid(event), E_S_XYZZY);
++
++  if (events[event_to_index[event]].event == event) {
++    return events[event_to_index[event]].esn;
++  }
++  log_error("unknown event %d", event);
++
++  return E_S_XYZZY;
++}
++
+ /**********************************************************************//**
+   Does the event affect a city if there's one at the event location.
+ **************************************************************************/
+diff --git a/common/events.h b/common/events.h
+index ddb0ea7..5d56d96 100644
+--- a/common/events.h
++++ b/common/events.h
+@@ -190,8 +190,26 @@ extern "C" {
+ extern enum event_type sorted_events[]; /* [E_COUNT], sorted by the
+                                            translated message text */
+ 
++/* The sections of the event list, as the message options group them */
++enum event_section_n {
++  E_S_ADVANCE,
++  E_S_BUILD,
++  E_S_CITY,
++  E_S_D_ME,
++  E_S_D_THEM,
++  E_S_GLOBAL,
++  E_S_HUT,
++  E_S_NATION,
++  E_S_TREATY,
++  E_S_UNIT,
++  E_S_VOTE,
++  E_S_WONDER,
++  E_S_XYZZY
++};
++
+ const char *get_event_message_text(enum event_type event);
+ const char *get_event_tag(enum event_type event);
++enum event_section_n get_event_section(enum event_type event);
+ 
+ bool is_city_event(enum event_type event);
+ 
+diff --git a/data/themes/gui-qt/NightStalker/resource.qss b/data/themes/gui-qt/NightStalker/resource.qss
+index 9d87d03..714229f 100644
+--- a/data/themes/gui-qt/NightStalker/resource.qss
++++ b/data/themes/gui-qt/NightStalker/resource.qss
+@@ -983,3 +983,26 @@ edge_button:pressed {
+ edge_button::menu-indicator {
+   image: none;
+ }
++edge_badge {
++  color: #e6e9ef;
++  background-color: #323843;
++  border: 2px solid #f2c14e;
++  border-radius: 18px;
++  padding: 0px;
++  font-weight: bold;
++}
++edge_badge:hover {
++  background-color: #3d4552;
++}
++edge_badge[kind="military"] {
++  border-color: #d0605a;
++}
++edge_badge[kind="diplomacy"] {
++  border-color: #6fa8dc;
++}
++edge_badge[kind="research"] {
++  border-color: #7fc98f;
++}
++edge_badge[kind="other"], edge_badge[kind="more"] {
++  border-color: #7b8494;
++}
+diff --git a/data/themes/gui-qt/System/resource.qss b/data/themes/gui-qt/System/resource.qss
+index 65e84d0..224f550 100644
+--- a/data/themes/gui-qt/System/resource.qss
++++ b/data/themes/gui-qt/System/resource.qss
+@@ -203,3 +203,26 @@ edge_button:pressed {
+ edge_button::menu-indicator {
+   image: none;
+ }
++edge_badge {
++  color: #1d1f23;
++  background-color: #dfe3e9;
++  border: 2px solid #c98a00;
++  border-radius: 18px;
++  padding: 0px;
++  font-weight: bold;
++}
++edge_badge:hover {
++  background-color: #d2d8e1;
++}
++edge_badge[kind="military"] {
++  border-color: #c0392b;
++}
++edge_badge[kind="diplomacy"] {
++  border-color: #3d7bd9;
++}
++edge_badge[kind="research"] {
++  border-color: #3f8f50;
++}
++edge_badge[kind="other"], edge_badge[kind="more"] {
++  border-color: #8a9099;
++}
+-- 
+2.56.0
+

@@ -1,0 +1,52 @@
+# Freeciv45 notification badges: messages with a place become badges, a click goes there and clears one, +N opens the log
+pace 1200
+wait 4000
+dismiss
+wait 1000
+state start
+chat /lua cmd notify.event(find.unit(nil, $UNIT).owner, find.tile($X+3, $Y), E.UNIT_WIN_DEF, "Your Warriors survived the attack of a Barbarian Archer.")
+wait 800
+chat /lua cmd notify.event(find.unit(nil, $UNIT).owner, find.tile($X-3, $Y+1), E.MY_DIPLOMAT_EMBASSY, "Your Explorer met the envoys of the Babylonians.")
+wait 800
+chat /lua cmd notify.event(find.unit(nil, $UNIT).owner, find.tile($X, $Y+3), E.HUT_GOLD, "You found 25 gold in a hut.")
+wait 800
+chat /lua cmd notify.event(find.unit(nil, $UNIT).owner, find.tile($X+1, $Y-2), E.TECH_GAIN, "Learned Bronze Working from the ruins.")
+wait 800
+chat /lua cmd edit.create_city(find.unit(nil, $UNIT).owner, find.tile($X, $Y), "Testburg")
+wait 2500
+dismiss
+wait 500
+click button Return to map
+wait 1000
+chat /lua cmd notify.event(find.unit(nil, $UNIT).owner, find.tile($X, $Y), E.CITY_GROWTH, "Testburg grows to size 2.")
+wait 1500
+state five-messages
+shot short-01
+wait 1500
+click tip Barbarian Archer
+wait 1500
+state after-military
+click tip Testburg
+wait 2000
+state after-city
+click button Return to map
+wait 1500
+state overlay-closed
+chat /lua cmd for i = 1, 10 do notify.event(find.unit(nil, $UNIT).owner, find.tile($X+(i%5), $Y+2), E.UNIT_LOST_MISC, "Test message %d: a unit was lost.", i) end
+wait 2500
+state many
+shot short-05
+wait 1500
+click tip more messages
+wait 1500
+state plus-clicked
+shot short-07
+wait 1000
+state edges-off
+wait 1000
+state edges-on
+wait 6000
+dismiss
+wait 1000
+state turn2
+quit
