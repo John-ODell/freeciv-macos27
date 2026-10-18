@@ -149,6 +149,7 @@ files =
   "misc/citybar.spec",
   "freeciv45test/tiles.spec",
   "freeciv45test/terrain45.spec",
+  "freeciv45test/blend.spec",
   "freeciv45test/earth.spec",
   "misc/small.spec",
   "misc/events.spec",
@@ -256,7 +257,7 @@ layer2_match_type = "arctic"
 
 [tile_desert]
 tag = "desert"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "desert"
 layer0_match_with = "desert"
@@ -265,7 +266,7 @@ layer2_match_type = "water"
 
 [tile_forest]
 tag = "forest"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "forest"
 layer1_match_type = "land"
@@ -273,7 +274,7 @@ layer2_match_type = "water"
 
 [tile_grassland]
 tag = "grassland"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "grassland"
 layer1_match_type = "land"
@@ -281,7 +282,7 @@ layer2_match_type = "water"
 
 [tile_hills]
 tag = "hills"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "hills"
 layer0_match_with = "hills"
@@ -290,7 +291,7 @@ layer2_match_type = "water"
 
 [tile_jungle]
 tag = "jungle"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "jungle"
 layer1_match_type = "land"
@@ -298,7 +299,7 @@ layer2_match_type = "water"
 
 [tile_mountains]
 tag = "mountains"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "mountains"
 layer0_match_with = "mountains"
@@ -307,7 +308,7 @@ layer2_match_type = "water"
 
 [tile_plains]
 tag = "plains"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "plains"
 layer1_match_type = "land"
@@ -315,7 +316,7 @@ layer2_match_type = "water"
 
 [tile_swamp]
 tag = "swamp"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "swamp"
 layer0_match_with = "swamp"
@@ -324,7 +325,7 @@ layer2_match_type = "water"
 
 [tile_tundra]
 tag = "tundra"
-blend_layer = 0
+blend_layer = 1
 num_layers = 3
 layer0_match_type = "tundra"
 layer0_match_with = "tundra"
