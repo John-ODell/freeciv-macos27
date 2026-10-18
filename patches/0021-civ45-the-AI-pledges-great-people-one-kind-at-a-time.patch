@@ -1,0 +1,64 @@
+From 9d0ba453590ae1e0e60d861c79f9815480f2fb3c Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 22:47:38 -0500
+Subject: [PATCH] civ45: the AI pledges great people one kind at a time, so
+ later golden ages start
+
+Since golden ages need great people of different kinds, one more than the
+last, the AI rule pledged only when it held enough kinds at once. It spends
+every great person within a turn or two, so it never did, and no AI reached
+a second age. It now pledges each great person of a kind not yet pledged
+while no age runs, and the pledges wait for the next kinds.
+---
+ data/civ45/README.civ45 |  4 +++-
+ data/civ45/script.lua   | 12 +++++++-----
+ 2 files changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 3fa22ab..4a17751 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -111,7 +111,9 @@ Differences from sandbox
+   working tiles, double points and no anarchy, for one pledge, then two
+   of different kinds, then three. A captured city keeps its Residents. The first to Philosophy, Theology, Economics or
+   Electricity gets one free. script.lua runs it, and spends the AI's
+-  great people for it each turn through the same actions.
++  great people for it each turn through the same actions: while no age
++  runs, the AI pledges every great person of a kind not yet pledged, so
++  the pledges add up across the turns until the age starts.
+ - Strategic resources: Swordsmen, Macebearers, Crossbowmen, Knights,
+   Cannon, Ship of the Line and Ironclad need Iron (Ironclad Coal too),
+   War Elephants Ivory, and armour, aircraft and modern warships Oil,
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index 1be5fa7..9ca9e9f 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -952,9 +952,11 @@ function fc45_gp_tech(tech, player, reason)
+ end
+ signal.connect("tech_researched", "fc45_gp_tech")
+ 
+--- The AI's rule (design note section 6): pledge when enough great people are at hand and no age runs;
+--- Sage, Virtuoso and Magnate do their deed where they stand (the pledge takes one great person of each kind
+--- not yet pledged); Oracle and Commander settle where no Resident
++-- The AI's rule (design note section 6): while no age runs, every great person of a kind not yet pledged
++-- pledges, one per kind, and the markers wait for the next kinds, so an age that needs great people of
++-- different kinds starts once enough kinds have been born, however far apart (issue 121: the AI spends each
++-- great person within a turn or two, so it never held two kinds at once). The rest: Sage, Virtuoso and
++-- Magnate do their deed where they stand; Oracle and Commander settle where no Resident
+ -- of their kind is, else deed; the Builder is left to the native AI (Help Wonder) for 10 turns and the
+ -- Spymaster (diplomat actions) for 20, then they settle. A deed an enabler refuses falls through to settling.
+ function fc45_gp_ai(p, turn)
+@@ -975,8 +977,8 @@ function fc45_gp_ai(p, turn)
+       picks[#picks + 1] = u
+     end
+   end
+-  if not running and #picks >= need then
+-    for i = 1, need do
++  if not running and #picks > 0 then
++    for i = 1, math.min(#picks, need) do
+       local u = picks[i]
+       local uid, uname = u.id, u.utype:rule_name()
+       if edit.perform_action(u, pledge) then
+-- 
+2.56.0
+

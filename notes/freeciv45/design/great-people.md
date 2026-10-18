@@ -191,12 +191,24 @@ enablers and handlers as a human:
 
 | Order | Condition | Action |
 |---|---|---|
-| 1 | No golden age running and live great people ≥ pledges still needed | Pledge with each of them ("User Action 4") |
+| 1 | No golden age running | Pledge with every great person of a kind not yet pledged, one per kind, up to the pledges still needed ("User Action 4"); the markers wait for the next kinds (issue 121, below) |
 | 2 | Sage, Virtuoso | Deed in the birth city ("User Action 3") |
 | 3 | Magnate | Deed where it stands (Lua has `edit.unit_move` at `tolua_server.pkg:210` but no pathing, so it never walks to a bigger or foreign city) |
 | 4 | Oracle, Commander | Settle where it stands ("Join City") when no Resident of that kind is there, else deed |
 | 5 | Builder | Leave it to the native AI for 10 turns (`fc45_gp_born_turn_<unit id>`), then settle |
 | 6 | Spymaster | Leave it to `dai_manage_diplomat`; settle after 20 turns |
+
+Row 1 changed on 2026-10-17 (issue 121). Since golden ages need great people of different kinds, one more than
+the last (plan decision 12), the first rule pledged only when it held enough distinct kinds at the same moment.
+The AI spends each great person within a turn or two of its birth, so after the first age (which takes any one
+great person) it never did: in a 400-turn autogame eight AIs began a first age and none a second. The rule now
+pledges each great person of a kind that has not pledged while no age runs, and the "Pledge of the <Kind>"
+markers keep those pledges until enough kinds have come, however many turns apart. The cost is that an AI's
+great people of new kinds go to the next age instead of to their deeds until it starts; great people of a kind
+already pledged, and all of them while an age runs, still do rows 2 to 6. The rules test calls the rule for the
+Tester with the Sage's pledge waiting and a new Great Magnate, and sees the second age start. The other option,
+keeping great people back until enough kinds are alive together, was not taken: it leaves units idle for many
+turns and the AI's native code may walk or disband them meanwhile.
 
 `perform_action` returns false when an enabler blocks the action, and the rule falls through to settling. The
 rule costs the AI nothing to understand: every outcome is a building, gold, a tech or culture, which the default
