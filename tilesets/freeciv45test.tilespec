@@ -13,7 +13,7 @@ priority = 4
 ;version = ""
 
 ; Summary and full description of the tileset.
-summary = _("Freeciv45 test tileset: 96 px overhead squares, painted grassland, plains, forest and jungle, scaled trident placeholders.")
+summary = _("Freeciv45 test tileset: 96 px overhead squares, painted grassland, plains, forest, jungle, hills and mountains, scaled trident placeholders.")
 ;description = ""
 
 ; TODO: add more overall information fields on tiles,
@@ -285,7 +285,6 @@ tag = "hills"
 blend_layer = 1
 num_layers = 3
 layer0_match_type = "hills"
-layer0_match_with = "hills"
 layer1_match_type = "land"
 layer2_match_type = "water"
 
@@ -302,7 +301,6 @@ tag = "mountains"
 blend_layer = 1
 num_layers = 3
 layer0_match_type = "mountains"
-layer0_match_with = "mountains"
 layer1_match_type = "land"
 layer2_match_type = "water"
 

@@ -1,0 +1,12 @@
+# a 13-tile mountain range (two rows) with hill foothills above and below it, forest on the west and grassland on
+# the east, so hills and mountains meet both; a lone mountain in the grassland, a lone hill in the forest and a 2 x 2
+# hills block in the grassland
+pace 1000
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd local function pick(dx, dy) if dx == 4 and dy == -3 then return "Mountains" end; if dx == -4 and dy == -3 then return "Hills" end; if dx >= 2 and dx <= 3 and dy >= 4 and dy <= 5 then return "Hills" end; if dx >= -6 and dx <= 6 and (dy == 1 or dy == 2) then return "Mountains" end; if dx >= -6 and dx <= 6 and dy == 0 then return "Hills" end; if dx >= -4 and dx <= 4 and dy == 3 then return "Hills" end; if dx < 0 then return "Forest" end; return "Grassland" end; for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do local x0, y0 = u.tile.nat_x, u.tile.nat_y; for dy = -6, 7 do for dx = -10, 10 do local t = find.tile(x0 + dx, y0 + dy); if t then edit.change_terrain(t, find.terrain(pick(dx, dy))) end end end; break end end end
+wait 15000
+dismiss
+shot range
+quit
