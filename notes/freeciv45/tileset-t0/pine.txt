@@ -1,0 +1,11 @@
+# issue 127: forest all round, with a 4 x 3 tundra patch to the north-east, a 3 x 2 glacier patch to the south-west
+# and a lone tundra tile to the north-west, so cool pine should ring each of them and broadleaf fill the rest
+pace 1000
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd local function pick(dx, dy) if dx >= 3 and dx <= 6 and dy >= -3 and dy <= -1 then return "Tundra" end; if dx >= -6 and dx <= -4 and dy >= 2 and dy <= 3 then return "Glacier" end; if dx == -5 and dy == -3 then return "Tundra" end; return "Forest" end; for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do local x0, y0 = u.tile.nat_x, u.tile.nat_y; for dy = -6, 7 do for dx = -10, 10 do local t = find.tile(x0 + dx, y0 + dy); if t then edit.change_terrain(t, find.terrain(pick(dx, dy))) end end end; break end end end
+wait 15000
+dismiss
+shot pine
+quit

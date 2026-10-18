@@ -196,7 +196,7 @@ tiles = { "row", "column", "tag"
   34, 2, "t.l0.inaccessible3"   ; run11 r4c3
   34, 3, "t.l0.inaccessible4"   ; run11 r4c4
   34, 4, "t.l0.inaccessible5"   ; run11 r4c5
-  35, 0, "t.l0.pine1"   ; run9 r5c1
-  35, 1, "t.l0.pine2"   ; run9 r5c2
-  35, 2, "t.l0.pine3"   ; run9 r5c3
+  35, 0, "t.l0.forest_tundra1"   ; run9 r5c1
+  35, 1, "t.l0.forest_tundra2"   ; run9 r5c2
+  35, 2, "t.l0.forest_tundra3"   ; run9 r5c3
 }

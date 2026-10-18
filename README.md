@@ -106,6 +106,8 @@ one terrain fade into each other at the tile edge, when the tileset gives the ma
 `notes/freeciv45/tileset-t0.md`, "Wandering edges and variant fades").
 In the Qt client a moving unit slides between tiles instead of freezing the client and jumping (patch 0029,
 `notes/freeciv45/ui/slide/slide.md`).
+Forest next to tundra or glacier is drawn as cool pine, from a second variant set the tileset gives for a terrain next
+to another (patch 0030, `notes/freeciv45/tileset-t0.md`, "Cool pine next to tundra and glacier").
 
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It

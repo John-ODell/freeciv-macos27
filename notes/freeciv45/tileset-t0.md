@@ -156,13 +156,14 @@ pixels:
 
 Run 9's pine row is two colour families: cool blue-green c1-c3 and warm olive c4-c5.
 
-- **Cool pine is left out.** It belongs on forest next to tundra or glacier, and Freeciv 3.2's tilespec cannot pick
-  a whole-tile cell set by neighbour terrain: a whole-tile layer either picks a numbered variant by tile index or
-  one of 16 sprites by whether each neighbour has the *same* match type, and whole-tile `MATCH_PAIR`/`MATCH_FULL`
-  are "Not yet defined" (`fc_assert(FALSE)` in `client/tilespec.c`, loader and drawing). Corner cells with
-  `MATCH_PAIR` do see neighbours, but only as quarter-tile overlays, and glacier is a `water` match on layer 1.
-  The hooks that would work (a client patch for neighbour-chosen variant sets, a Boreal Forest terrain in the
-  ruleset, or a latitude rule) are written up in issue 127.
+- **Cool pine is left out** (drawn since issue 127, "Cool pine next to tundra and glacier" below). It belongs on
+  forest next to tundra or glacier, and Freeciv 3.2's tilespec cannot pick a whole-tile cell set by neighbour
+  terrain: a whole-tile layer either picks a numbered variant by tile index or one of 16 sprites by whether each
+  neighbour has the *same* match type, and whole-tile `MATCH_PAIR`/`MATCH_FULL` are "Not yet defined"
+  (`fc_assert(FALSE)` in `client/tilespec.c`, loader and drawing). Corner cells with `MATCH_PAIR` do see neighbours,
+  but only as quarter-tile overlays, and glacier is a `water` match on layer 1. The hooks that would work (a client
+  patch for neighbour-chosen variant sets, a Boreal Forest terrain in the ruleset, or a latitude rule) are written
+  up in issue 127.
 - **Olive pine does not join the temperate forest.** Added as `forest11` and `forest12` (`--olive-pine`), the two
   cells show as dark squares with black gaps between star-shaped crowns among the broadleaf tiles
   (`olive-pine-1to1.jpg`; luminance 62 and 58 against 68-103): a patchwork. The committed build leaves them out.
@@ -513,3 +514,45 @@ views are identical except the blinking focus-unit box (60 x 60 px on trident, 1
 
 **Not checked:** other clients (patch 0028 is in `client/tilespec.c`, which every client uses, but only the Qt client
 was run), a long game, and scroll speed with the extra pieces.
+
+## Cool pine next to tundra and glacier (issue 127, 2026-10-18)
+
+Hook 1 of the issue, built: a fork patch and a tileset change. Run 9's cool pine (r5c1-r5c3 only) is now the forest
+drawn on a tile with a tundra or glacier tile among its eight neighbours. Ordinary forest keeps its ten broadleaf
+variants. The warm olive pine (c4-c5) stays out.
+
+- **Fork, patch 0030** (`client/tilespec.c`): a whole-tile layer whose `layer<n>_match_with` names one other match
+  type (`MATCH_PAIR`, which asserted before) loads two variant sets, `t.l<n>.<tag>1` and up and
+  `t.l<n>.<tag>_<type>1` and up. A tile draws from the second set when one of its eight neighbours has that match
+  type on the layer, and from the first otherwise, picked by tile index as before. In overhead view the terrain
+  fades into its neighbours from the set it is drawn with, and the variant fades of patch 0028 run between the two
+  sets like between any two variants.
+- **Tileset:** the pine cells are cut as `t.l0.forest_tundra1`-`3`, and `[tile_forest]` gets
+  `layer0_match_with = "tundra"` (builder: `PAIRED`). Glacier's layer 0 match type is `tundra` too, so one pair
+  covers both. The issue suggested a new `cold` match type; it is not needed while tundra and glacier share one.
+
+### How it was checked (observed)
+
+`tileset-t0/pine.txt`, an offscreen client at `QT_SCALE_FACTOR=2`: forest all round, with a 4 x 3 tundra patch and a
+3 x 2 glacier patch (the script's lone tundra tile falls off the map's north edge on this start). Before: the fork
+at patch 0029 with the committed tileset. After: patch 0030 with this build.
+
+- `pine-window-after.jpg`: a ring of pine one tile wide round the tundra and round the glacier, broadleaf
+  everywhere else. `pine-window-before.jpg`: broadleaf right up to both.
+- Away from the two patches the after shot is pixel-identical to the before shot (two areas measured: no pixel
+  differs by more than 8), so ordinary forest keeps its variant spread.
+- `pine-after-1to1.png` against `pine-before-1to1.png`: the pine meets the broadleaf through the variant fade,
+  with no hard tile edge, and fades into the tundra with its own crowns. The first build faded every forest from
+  its first broadleaf cell, which left a light broadleaf fringe on the tundra beside dark pine; patch 0030 cuts the
+  fade pieces from the pine set as well (`blend_pair`).
+- The client logged no sprite error.
+
+### Still visible
+
+- The ring is exactly one tile wide, so on a long tundra coast it reads as a band. A second ring would need a
+  distance rule rather than a neighbour rule.
+- Pine is darker than the broadleaf (lightness 56-63 against 68-103 in the tone table), so the band is a clear dark
+  edge. That is the look the art gives it; a lighter pine needs new art.
+
+![Before, 1:1](tileset-t0/pine-before-1to1.png)
+![After, 1:1](tileset-t0/pine-after-1to1.png)
