@@ -1,0 +1,125 @@
+From 49ba3738ce34de3d5ce6d1bcf06d381a7ab053a9 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 17 Oct 2026 20:03:43 -0500
+Subject: [PATCH] Freeciv45 unit bar: lay out at full width after a focus
+ change, retire chips safely, tooltips and actions as designed
+
+The bar adds its new chips and buttons while it is already on screen, and
+children added to a visible widget stay hidden until the next event loop
+pass, so adjustSize() measured the bar without them: after any focus change
+the bar shrank to about half its width and the chips and buttons piled on
+top of each other. Each new chip and button is now shown before the bar is
+measured.
+
+A refresh can run inside a chip's own mouse press (unit_focus_set) or a
+button's clicked signal (key_unit_*, which advance the focus), so the old
+widgets are hidden and deleted later instead of deleted on the spot.
+
+The portrait's tooltip is unit_description(), the chip tooltip ends with the
+unit's activity, and with several units in focus fortify and sentry are only
+offered when all of them can do it.
+---
+ client/gui-qt/unitbar.cpp | 29 +++++++++++++++++++++++++----
+ 1 file changed, 25 insertions(+), 4 deletions(-)
+
+diff --git a/client/gui-qt/unitbar.cpp b/client/gui-qt/unitbar.cpp
+index 6b692fa..119c3fa 100644
+--- a/client/gui-qt/unitbar.cpp
++++ b/client/gui-qt/unitbar.cpp
+@@ -41,6 +41,7 @@
+ #include "control.h"
+ #include "mapview_common.h"
+ #include "options.h"
++#include "text.h"
+ #include "tilespec.h"
+ 
+ // client/include
+@@ -122,6 +123,7 @@ void unit_portrait::set_unit(struct unit *punit)
+   pix = unit_pixmap(punit, PORTRAIT_IMAGE, devicePixelRatioF());
+   hp = punit->hp;
+   hp_max = MAX(1, unit_type_get(punit)->hp);
++  setToolTip(QString(unit_description(punit)).trimmed());
+   update();
+ }
+ 
+@@ -185,7 +187,8 @@ unit_chip::unit_chip(struct unit *punit, bool focus,
+   setToolTip(QString(unit_name_translation(punit))
+              + QString(" ") + QString(_("HP:%1/%2"))
+              .arg(QString::number(punit->hp),
+-                  QString::number(unit_type_get(punit)->hp)));
++                  QString::number(unit_type_get(punit)->hp))
++             + QString(" ") + QString(get_activity_text(punit->activity)));
+ }
+ 
+ /************************************************************************//**
+@@ -391,6 +394,8 @@ unit_bar::~unit_bar()
+ 
+ /************************************************************************//**
+   Remove the chips or action buttons from a row (its stretch stays).
++  A refresh can run inside a chip's or a button's own click handler, so
++  they are deleted later, not here.
+ ****************************************************************************/
+ void unit_bar::clear_row(QHBoxLayout *row)
+ {
+@@ -398,7 +403,8 @@ void unit_bar::clear_row(QHBoxLayout *row)
+ 
+   foreach (QWidget *w, list) {
+     row->removeWidget(w);
+-    delete w;
++    w->hide();
++    w->deleteLater();
+   }
+   list.clear();
+ }
+@@ -467,6 +473,7 @@ void unit_bar::refresh(struct unit_list *punits)
+       unit_chip *chip = new unit_chip(other, focused, this);
+ 
+       chips_row->insertWidget(chips_row->count() - 1, chip);
++      chip->show();
+       chips.append(chip);
+       shown++;
+     }
+@@ -475,24 +482,38 @@ void unit_bar::refresh(struct unit_list *punits)
+     unit_chip *chip = new unit_chip(own - shown, unit_tile(punit), this);
+ 
+     chips_row->insertWidget(chips_row->count() - 1, chip);
++    chip->show();
+     chips.append(chip);
+   }
+ 
+   clear_row(actions_row);
+   {
+     QList<unit_action_button *> row;
++    bool all_fortify = true;
++    bool all_sentry = true;
++
++    // With several units in focus, offer only what all of them can do
++    unit_list_iterate(get_units_in_focus(), pfocus) {
++      all_fortify = all_fortify
++                    && can_unit_do_activity_client(pfocus,
++                                                   ACTIVITY_FORTIFYING);
++      all_sentry = all_sentry
++                   && can_unit_do_activity_client(pfocus, ACTIVITY_SENTRY);
++    } unit_list_iterate_end;
+ 
+     row.append(new unit_action_button(SC_GOTO, "goto", this));
+-    if (can_unit_do_activity_client(punit, ACTIVITY_FORTIFYING)) {
++    if (all_fortify) {
+       row.append(new unit_action_button(SC_FORTIFY, "fortify", this));
+     }
+-    if (can_unit_do_activity_client(punit, ACTIVITY_SENTRY)) {
++    if (all_sentry) {
+       row.append(new unit_action_button(SC_SENTRY, "sentry", this));
+     }
+     row.append(new unit_action_button(SC_WAIT, "wait", this));
+     row.append(new unit_action_button(SC_DONE_MOVING, "done", this));
+     foreach (unit_action_button *b, row) {
+       actions_row->insertWidget(actions_row->count() - 1, b);
++      // Shown now, so adjustSize() below counts it while the bar is up
++      b->show();
+       actions.append(b);
+     }
+   }
+-- 
+2.56.0
+

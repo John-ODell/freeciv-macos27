@@ -136,3 +136,63 @@ Not exercised: clicks on chips, buttons and the portrait, the hover colour, and 
 Accessibility grant for scripted input, and that setting is John's); the "+N" chip; a wounded unit; the option
 switched off; the Classic and Necrophos themes. The client log repeats `qt.svg: Invalid path data; path
 truncated.` from an icon the bar does not draw (unverified which).
+
+## Exercised in a running game (2026-10-17, issue 125, patch 0016)
+
+Every control of the bar was clicked and hovered in a local civ45 game, and the option was switched off and on while
+the game ran. Scripted input from outside the process is refused on this Mac (#87), so the clicks come from inside
+it: `bar-test/uidrive.diff` adds a small driver to a copy of the fork (never to the fork itself) that reads a
+script, sends input through QTest to the main window, the path a real mouse takes (Qt hit-tests, sends enter and
+leave, starts the tooltip timer), logs the focus, the stack and the bar after each step and grabs the window with
+every open top-level painted on. `scripts/ui-drive.sh` starts the server and the driver client; `bar-test/bar.txt`
+is the script; how to build the driver copy is in the script's header.
+
+The game: civ45, three AIs, seeds 42, map size 2, `revealmap START`, `dispersion 0`, `startunits cwxdd` (two
+Warriors, an Explorer, Workers and Settlers on one tile), trident, NightStalker, Qt 6.12, turn 1. Damage and the
+ninth to thirteenth unit came from `/lua cmd` lines (`edit.unit_add_hitpoints`, `edit.create_unit`).
+
+| Check | Result | Shot (`bar-test/`) |
+|---|---|---|
+| Bar for the start stack | Warriors in focus and ringed, five chips, all five actions | `01-start` |
+| Tooltips: action buttons | "Go to Tile (G)", "Fortify Unit (F)"; the hovered button lights up | `02-hover-goto`, `03-hover-fortify` |
+| Tooltips: chips, portrait, "+N" | "Explorer HP:10/10 Idle", `unit_description()` on the portrait, "4 more units on this tile" | `04-hover-chip`, `06b-hover-portrait`, `18-hover-plus` |
+| Click a chip | Focus moves to that unit alone (#107 to #106), the bar follows | `05-chip-select` |
+| Shift+click a chip | Both in focus, "(Selected 2 units)", fortify left out since the Explorer cannot fortify | `06-chip-shift-add` |
+| W on the keyboard | Focus moves on (#107 to #106) and the bar follows | log only |
+| Fortify | The Warriors are Fortifying, focus moves to the next unit | `07-fortify`, `12b-hover-fortified-chip` |
+| Sentry | The second Warriors are Sentry, focus moves on | `08-sentry` |
+| Skip (wait) | Focus moves to the Workers; the Explorer stays idle and comes back after the others | `09-skip` |
+| Done | Focus moves to the Settlers; after the go-to, focus passes over the Workers to the Explorer, so they are done for the turn | `10-done` |
+| Go to | The button enters goto mode (`hover_state` 1); a tile picked two south, one west sends the Settlers off: one step taken, orders left, focus moves on | `11-goto-mode`, `12-goto-moved` |
+| Portrait click | The map, scrolled 400 by 300 px away, centres on the unit again | log only |
+| Wounded unit | Health bar yellow at 5/10, red at 2/10; the hp in the stats line and the chip tooltip follow | `13-wounded-yellow`, `14-wounded-red` |
+| Option off, then on, in game | Off: the bar hides and today's `hud_units` is back. On: the bar is back, `hud_units` hidden | `15-option-off`, `16-option-on` |
+| Twelve own units on the tile | Eight chips and "+4"; the "+4" chip opens today's stack chooser with all twelve | `17-plus-chip`, `19-plus-chooser` |
+
+What broke, all fixed in patch 0016 (`client/gui-qt/unitbar.cpp` only):
+
+- **#129** After any focus change while the bar was up it shrank from 465 to 249 px and the chips, buttons and
+  stats line piled up: children added to a visible widget stay hidden until the next event loop pass, so
+  `adjustSize()` measured the bar without them. Each new chip and button is shown before the bar is measured.
+- **#130** `clear_row` deleted every chip and button with `delete`, including the one whose press or click handler
+  was still running (a chip's `unit_focus_set`, a button's `key_unit_*` both refresh the bar). They are now hidden
+  and deleted later. The driver itself crashed on this once, by sending the release to the freed chip.
+- **#131** No portrait tooltip, and no activity on the chips; both now as `panels.md` section 2 says.
+- **#132** With several units in focus, fortify and sentry were offered when only the head unit could do them.
+
+Noticed, not filed:
+
+- At game start two modal boxes block the main window until closed: the ruleset's "Welcome to this game" message
+  and, when the client is not on trident yet, the tileset suggestion. A player closes them; the driver's `dismiss`
+  closes the welcome box. Declining the suggestion leaves the square map drawn by amplio2, as `client-look.md` found.
+- The stack chooser opens at the real pointer (`QCursor::pos()`), which the driver does not move, so its place in
+  `19-plus-chooser` is wherever the mouse happened to be.
+- The bar's width follows its contents (465 px for a Warriors stack, 426 px with four actions), so it shifts a little
+  as the focus moves; a fixed width per stack size could come with the second action row.
+- The client keeps its options path in a 256-byte buffer (`client/options.c`); a throwaway HOME under the long
+  session scratch path truncated it, so the runner points `FREECIV_OPT` at a short relative path.
+
+Not exercised: the Classic and Necrophos themes, a non-Retina screen, more than one turn, and real hardware input
+(the driver's events go through Qt's own window path, not through macOS). One run was disturbed by a click into the
+client window while it was on screen (a sentry hit the wrong unit and the client was closed); the reruns are clean
+and give the same log line for line.

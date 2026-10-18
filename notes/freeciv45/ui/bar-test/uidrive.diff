@@ -1,0 +1,550 @@
+diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
+index 8b57da8..b7ef893 100644
+--- a/client/gui-qt/fc_client.cpp
++++ b/client/gui-qt/fc_client.cpp
+@@ -53,6 +53,7 @@
+ #include "optiondlg.h"
+ #include "sidebar.h"
+ #include "sprite.h"
++#include "uidrive.h"
+ #include "unitbar.h"
+ 
+ fc_icons* fc_icons::m_instance = 0;
+@@ -272,6 +273,7 @@ void fc_client::fc_main(QApplication *qapp)
+ 
+   startTimer(TIMER_INTERVAL);
+   connect(qapp, &QCoreApplication::aboutToQuit, this, &fc_client::closing);
++  ui_drive_start();
+   qapp->exec();
+ 
+   free_mapcanvas_and_overview();
+diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
+new file mode 100644
+index 0000000..c41f82c
+--- /dev/null
++++ b/client/gui-qt/uidrive.cpp
+@@ -0,0 +1,477 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++/*
++  A test driver for the Qt client, for screenshots and click checks on a
++  Mac where scripted input from outside the process is not allowed.
++
++  FREECIV_UI_DRIVE=<script> starts it; FREECIV_UI_DRIVE_OUT=<dir> is where
++  shots and drive.log go (default: the current directory). It waits for a
++  running game with a focus unit, then runs one line of the script every
++  "pace" milliseconds. Input goes through QTest, so Qt's own enter, leave,
++  hover and tooltip handling runs as for a real mouse.
++
++    pace MS                 delay between lines (default 900)
++    wait MS                 extra delay
++    hover portrait|chip N|action TEXT
++    click portrait|chip N|action TEXT [shift]
++    key K                   g f s w space escape enter, or one letter
++    scroll DX DY            move the map origin by DX, DY canvas pixels
++    clicktile DX DY         left click the tile DX, DY from the focus unit
++                            (through action_button_pressed, which the map's
++                            mouse release calls, since that reads QCursor)
++    option on|off           gui_qt_freeciv45_panels, through its callback
++    chat TEXT               send a chat line or a /command to the server
++    dismiss                 close the modal boxes (welcome message...)
++    unit ID                 where unit ID is, its activity and orders
++    state LABEL             append the state to drive.log
++    shot NAME               state, then NAME.png of the window (+ tooltip)
++    quit
++*/
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++// Qt
++#include <QApplication>
++#include <QDialog>
++#include <QDir>
++#include <QFile>
++#include <QLabel>
++#include <QMessageBox>
++#include <QPainter>
++#include <QPointer>
++#include <QWindow>
++#include <QTest>
++#include <QTextStream>
++#include <QTimer>
++#include <QToolTip>
++#include <algorithm>
++
++// common
++#include "game.h"
++#include "terrain.h"
++#include "map.h"
++#include "unit.h"
++#include "unitlist.h"
++#include "unittype.h"
++
++// client
++#include "chatline_common.h"
++#include "client_main.h"
++#include "control.h"
++#include "mapctrl_common.h"
++#include "mapview_common.h"
++#include "options.h"
++#include "tilespec.h"
++#include "zoom.h"
++
++// gui-qt
++#include "fc_client.h"
++#include "hudwidget.h"
++#include "mapview.h"
++#include "unitbar.h"
++#include "uidrive.h"
++
++static QStringList lines;
++static int next_line = 0;
++static int pace = 900;
++static QString out_dir;
++static QTimer *drive_timer = nullptr;
++static bool started = false;
++
++/************************************************************************//**
++  Append to drive.log
++****************************************************************************/
++static void drive_log(const QString &s)
++{
++  QFile f(out_dir + "/drive.log");
++
++  if (f.open(QIODevice::Append | QIODevice::Text)) {
++    QTextStream ts(&f);
++
++    ts << s << "\n";
++  }
++}
++
++/************************************************************************//**
++  The bar's visible children of one class, left to right, top to bottom
++****************************************************************************/
++template <class T> static QList<T *> visible_in_bar()
++{
++  QList<T *> out;
++  unit_bar *bar = gui()->unitbar_wdg;
++
++  if (bar == nullptr) {
++    return out;
++  }
++  foreach (T *w, bar->findChildren<T *>()) {
++    if (w->isVisible()) {
++      out.append(w);
++    }
++  }
++  std::sort(out.begin(), out.end(), [bar](T *a, T *b) {
++    QPoint pa = a->mapTo(bar, QPoint(0, 0));
++    QPoint pb = b->mapTo(bar, QPoint(0, 0));
++
++    return pa.y() != pb.y() ? pa.y() < pb.y() : pa.x() < pb.x();
++  });
++
++  return out;
++}
++
++/************************************************************************//**
++  Find a target widget: portrait, chip N (0-based), action TEXT
++****************************************************************************/
++static QWidget *find_target(const QStringList &w)
++{
++  if (w.size() >= 2 && w[1] == "portrait") {
++    QList<unit_portrait *> l = visible_in_bar<unit_portrait>();
++
++    return l.isEmpty() ? nullptr : l[0];
++  }
++  if (w.size() >= 3 && w[1] == "chip") {
++    QList<unit_chip *> l = visible_in_bar<unit_chip>();
++    int i = w[2].toInt();
++
++    return (i >= 0 && i < l.size()) ? l[i] : nullptr;
++  }
++  if (w.size() >= 3 && w[1] == "action") {
++    foreach (unit_action_button *b, visible_in_bar<unit_action_button>()) {
++      if (b->toolTip().contains(w[2], Qt::CaseInsensitive)) {
++        return b;
++      }
++    }
++  }
++
++  return nullptr;
++}
++
++/************************************************************************//**
++  One line describing the client's unit focus and the bar
++****************************************************************************/
++static void log_state(const QString &label)
++{
++  QString s = QString("== %1  turn %2").arg(label).arg(game.info.turn);
++  unit_bar *bar = gui()->unitbar_wdg;
++  QStringList chips, acts, texts;
++
++  s += QString("  hover_state %1").arg((int) hover_state);
++  unit_list_iterate(get_units_in_focus(), punit) {
++    int x, y;
++
++    index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
++    s += QString("\n   focus #%1 %2 at (%3,%4) activity %5 moves %6 hp %7"
++                 " orders %8 done %9 ssa %10")
++         .arg(punit->id).arg(unit_rule_name(punit)).arg(x).arg(y)
++         .arg(get_activity_text(punit->activity))
++         .arg(punit->moves_left).arg(punit->hp)
++         .arg(punit->has_orders ? "yes" : "no")
++         .arg(punit->done_moving ? "yes" : "no")
++         .arg((int) punit->ssa_controller);
++  } unit_list_iterate_end;
++  if (unit_list_size(get_units_in_focus()) == 0) {
++    s += "\n   focus: none";
++  } else {
++    s += "\n   stack";
++    unit_list_iterate(unit_tile(head_of_units_in_focus())->units, punit) {
++      if (unit_owner(punit) == client_player()) {
++        s += QString(" #%1:%2%3").arg(punit->id)
++             .arg(get_activity_text(punit->activity))
++             .arg(punit->done_moving ? "(done)" : "");
++      }
++    } unit_list_iterate_end;
++  }
++  s += QString("\n   window active %1")
++       .arg(gui()->isActiveWindow() ? "yes" : "no");
++  if (bar != nullptr) {
++    foreach (QLabel *l, visible_in_bar<QLabel>()) {
++      texts << l->text();
++    }
++    foreach (unit_chip *c, visible_in_bar<unit_chip>()) {
++      chips << c->toolTip();
++    }
++    foreach (unit_action_button *b, visible_in_bar<unit_action_button>()) {
++      acts << b->toolTip();
++    }
++    s += QString("\n   bar visible %1 at %2,%3 %4x%5")
++         .arg(bar->isVisible() ? "yes" : "no")
++         .arg(bar->x()).arg(bar->y()).arg(bar->width()).arg(bar->height());
++    if (bar->isVisible()) {
++      s += QString("\n   labels [%1]\n   chips [%2]\n   actions [%3]")
++           .arg(texts.join(" | "), chips.join(" | "), acts.join(" | "));
++    }
++  }
++  s += QString("\n   hud_units visible %1")
++       .arg(gui()->unitinfo_wdg->isVisible() ? "yes" : "no");
++  s += QString("\n   map origin %1,%2").arg(mapview.gui_x0).arg(mapview.gui_y0);
++  {
++    QStringList tops;
++
++    foreach (QWidget *w, QApplication::topLevelWidgets()) {
++      if (w->isVisible() && w != gui() && !w->inherits("QTipLabel")) {
++        QMessageBox *mb = qobject_cast<QMessageBox *>(w);
++
++        tops << QString(w->metaObject()->className())
++                + (w->isModal() ? " (modal)" : "")
++                + (mb != nullptr ? " \"" + mb->text().left(80) + "\"" : "");
++      }
++    }
++    s += QString("\n   other windows [%1]").arg(tops.join(", "));
++    if (QApplication::activeModalWidget() != nullptr) {
++      s += QString("\n   active modal %1").arg(
++           QApplication::activeModalWidget()->metaObject()->className());
++    }
++  }
++  s += QString("\n   tooltip %1")
++       .arg(QToolTip::isVisible() ? "\"" + QToolTip::text() + "\"" : "none");
++  drive_log(s);
++}
++
++/************************************************************************//**
++  Grab the main window, with the tooltip window painted on top
++****************************************************************************/
++static void shot(const QString &name)
++{
++  QPixmap pm = gui()->grab();
++  QPainter p(&pm);
++
++  foreach (QWidget *w, QApplication::topLevelWidgets()) {
++    if (w->isVisible() && w != gui()) {
++      p.drawPixmap(gui()->mapFromGlobal(w->mapToGlobal(QPoint(0, 0))),
++                   w->grab());
++    }
++  }
++  p.end();
++  pm.save(out_dir + "/" + name + ".png");
++  log_state("shot " + name);
++}
++
++/************************************************************************//**
++  Run one script line
++****************************************************************************/
++static void run_line(const QString &raw)
++{
++  QString line = raw;
++  struct unit *head = head_of_units_in_focus();
++  QStringList w;
++
++  if (head != nullptr) {
++    int x, y;
++
++    index_to_map_pos(&x, &y, tile_index(unit_tile(head)));
++    line.replace("$UNIT", QString::number(head->id));
++    line.replace("$HPMAX", QString::number(unit_type_get(head)->hp));
++    line.replace("$HP", QString::number(head->hp));
++    line.replace("$X", QString::number(x));
++    line.replace("$Y", QString::number(y));
++  }
++  w = line.split(' ', Qt::SkipEmptyParts);
++  QString cmd = w.isEmpty() ? QString() : w[0];
++
++  drive_log("> " + line);
++  if (cmd == "pace" && w.size() > 1) {
++    pace = w[1].toInt();
++  } else if (cmd == "wait" && w.size() > 1) {
++    drive_timer->setInterval(pace + w[1].toInt());
++    return;
++  } else if (cmd == "hover" || cmd == "click") {
++    QStringList tw = w;
++    bool shift = tw.last() == "shift";
++    QWidget *t;
++
++    if (shift) {
++      tw.removeLast();
++    }
++    if (cmd == "click" && tw.size() > 2 && tw[1] == "action") {
++      // action text may have spaces
++      tw = QStringList({ tw[0], tw[1], QStringList(tw.mid(2)).join(' ') });
++    }
++    if (cmd == "hover" && tw.size() > 2 && tw[1] == "action") {
++      tw = QStringList({ tw[0], tw[1], QStringList(tw.mid(2)).join(' ') });
++    }
++    t = find_target(tw);
++    if (t == nullptr) {
++      drive_log("   !! no such target");
++    } else {
++      // Through the window, as the platform delivers a real mouse: Qt
++      // hit-tests, sends enter and leave, and starts the tooltip timer.
++      QWindow *win = gui()->windowHandle();
++      QPoint c = t->mapTo(gui(), t->rect().center());
++
++      // Started from a shell, the app is not frontmost and macOS takes
++      // the active state back; tooltips only show in an active window.
++      QApplication::setActiveWindow(gui());
++
++      {
++        QWidget *under = gui()->childAt(c);
++
++        drive_log(QString("   at %1,%2 target %3, under %4 \"%5\"")
++                  .arg(c.x()).arg(c.y()).arg(t->metaObject()->className())
++                  .arg(under != nullptr ? under->metaObject()->className()
++                                        : "nothing")
++                  .arg(under != nullptr ? under->toolTip() : QString()));
++      }
++      QTest::mouseMove(win, c);
++      if (cmd == "click") {
++        QTest::mouseClick(win, Qt::LeftButton,
++                          shift ? Qt::ShiftModifier : Qt::NoModifier, c);
++      }
++    }
++  } else if (cmd == "key" && w.size() > 1) {
++    QString k = w[1].toLower();
++    Qt::Key key = Qt::Key_unknown;
++
++    if (k == "space") {
++      key = Qt::Key_Space;
++    } else if (k == "escape") {
++      key = Qt::Key_Escape;
++    } else if (k == "enter") {
++      key = Qt::Key_Return;
++    } else if (k.size() == 1) {
++      key = (Qt::Key) k.toUpper()[0].unicode();
++    }
++    // Through the window, so menu shortcuts (W, F, S...) fire too
++    QTest::keyClick(gui()->windowHandle(), key);
++  } else if (cmd == "clicktile" && w.size() > 2) {
++    struct unit *punit = head_of_units_in_focus();
++
++    if (punit == nullptr) {
++      drive_log("   !! no focus unit");
++    } else {
++      int x, y;
++      float cx, cy;
++      struct tile *ptile;
++
++      index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
++      ptile = map_pos_to_tile(&(wld.map), x + w[1].toInt(),
++                              y + w[2].toInt());
++      if (ptile == nullptr
++          || !tile_to_canvas_pos(&cx, &cy, map_zoom, ptile)) {
++        drive_log("   !! tile not on the canvas");
++      } else {
++        cx += tileset_tile_width(tileset) * map_zoom / 2;
++        cy += tileset_tile_height(tileset) * map_zoom / 2;
++        drive_log(QString("   tile (%1,%2) %3").arg(x + w[1].toInt())
++                  .arg(y + w[2].toInt())
++                  .arg(terrain_rule_name(tile_terrain(ptile))));
++        action_button_pressed(cx, cy, SELECT_POPUP);
++      }
++    }
++  } else if (cmd == "scroll" && w.size() > 2) {
++    set_mapview_origin(mapview.gui_x0 + w[1].toInt(),
++                       mapview.gui_y0 + w[2].toInt(), map_zoom);
++  } else if (cmd == "option" && w.size() > 1) {
++    option_bool_set(optset_option_by_name(client_optset,
++                                          "gui_qt_freeciv45_panels"),
++                    w[1] == "on");
++  } else if (cmd == "chat" && w.size() > 1) {
++    send_chat(QStringList(w.mid(1)).join(' ').toUtf8().constData());
++  } else if (cmd == "dismiss") {
++    // Close modal boxes as a player's OK or close button would
++    for (int i = 0; i < 10 && QApplication::activeModalWidget() != nullptr;
++         i++) {
++      QWidget *m = QApplication::activeModalWidget();
++      QDialog *d = qobject_cast<QDialog *>(m);
++
++      drive_log(QString("   closing %1").arg(m->metaObject()->className()));
++      if (d != nullptr) {
++        d->reject();
++      } else {
++        m->close();
++      }
++      QApplication::processEvents();
++    }
++  } else if (cmd == "unit" && w.size() > 1) {
++    struct unit *punit = game_unit_by_number(w[1].toInt());
++
++    if (punit == nullptr) {
++      drive_log("   unit #" + w[1] + " not known");
++    } else {
++      int x, y;
++
++      index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
++      drive_log(QString("   unit #%1 %2 at (%3,%4) activity %5 moves %6"
++                        " orders %7")
++                .arg(punit->id).arg(unit_rule_name(punit)).arg(x).arg(y)
++                .arg(get_activity_text(punit->activity))
++                .arg(punit->moves_left)
++                .arg(punit->has_orders ? "yes" : "no"));
++    }
++  } else if (cmd == "state") {
++    log_state(w.size() > 1 ? w[1] : QString());
++  } else if (cmd == "shot" && w.size() > 1) {
++    shot(w[1]);
++  } else if (cmd == "quit") {
++    // The runner kills the client once it sees this line: quitting
++    // in game opens a confirmation box.
++    drive_log("== quit");
++  }
++  drive_timer->setInterval(pace);
++}
++
++/************************************************************************//**
++  Timer tick: wait for a game with a focus unit, then run the lines
++****************************************************************************/
++static void tick()
++{
++  if (!started) {
++    if (client_state() == C_S_RUNNING && can_client_change_view()
++        && head_of_units_in_focus() != nullptr
++        && gui()->unitbar_wdg != nullptr) {
++      started = true;
++      gui()->raise();
++      gui()->activateWindow();
++      QApplication::setActiveWindow(gui());
++      drive_log(QString("== game running, starting the script"
++                        " (window active: %1)")
++                .arg(gui()->isActiveWindow() ? "yes" : "no"));
++      drive_timer->setInterval(3000);
++    }
++    return;
++  }
++  while (next_line < lines.size()) {
++    QString l = lines[next_line++].trimmed();
++
++    if (!l.isEmpty() && !l.startsWith('#')) {
++      run_line(l);
++      return;
++    }
++  }
++  drive_timer->stop();
++}
++
++/************************************************************************//**
++  Start the driver when FREECIV_UI_DRIVE names a script
++****************************************************************************/
++void ui_drive_start()
++{
++  const char *script = getenv("FREECIV_UI_DRIVE");
++  const char *out = getenv("FREECIV_UI_DRIVE_OUT");
++  QFile f;
++
++  if (script == nullptr || drive_timer != nullptr) {
++    return;
++  }
++  f.setFileName(script);
++  if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
++    return;
++  }
++  lines = QString::fromUtf8(f.readAll()).split('\n');
++  out_dir = out != nullptr ? QString(out) : QDir::currentPath();
++  QDir().mkpath(out_dir);
++  drive_timer = new QTimer(gui());
++  QObject::connect(drive_timer, &QTimer::timeout, tick);
++  drive_timer->start(500);
++}
+diff --git a/client/gui-qt/uidrive.h b/client/gui-qt/uidrive.h
+new file mode 100644
+index 0000000..2a70d55
+--- /dev/null
++++ b/client/gui-qt/uidrive.h
+@@ -0,0 +1,20 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifndef FC__UIDRIVE_H
++#define FC__UIDRIVE_H
++
++// Test driver: runs the script FREECIV_UI_DRIVE names, if any
++void ui_drive_start();
++
++#endif // FC__UIDRIVE_H
+diff --git a/meson.build b/meson.build
+index e9258f7..37e3415 100644
+--- a/meson.build
++++ b/meson.build
+@@ -939,7 +939,7 @@ endif
+ if get_option('qtver') == 'qt6'
+   qt_mod = import('qt6')
+ 
+-  qt_dep = dependency('Qt6', modules: ['Core', 'Gui', 'Widgets'], required: false)
++  qt_dep = dependency('Qt6', modules: ['Core', 'Gui', 'Widgets', 'Test'], required: false)
+ else
+   qt_mod = import('qt5')
+ 
+@@ -3568,6 +3568,7 @@ executable('freeciv-qt',
+   'client/gui-qt/spaceshipdlg.cpp',
+   'client/gui-qt/sprite.cpp',
+   'client/gui-qt/themes.cpp',
++  'client/gui-qt/uidrive.cpp',
+   'client/gui-qt/unitbar.cpp',
+   'client/gui-qt/voteinfo_bar.cpp',
+   'client/gui-qt/wldlg.cpp',
