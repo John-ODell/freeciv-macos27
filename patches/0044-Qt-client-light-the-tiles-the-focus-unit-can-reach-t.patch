@@ -1,0 +1,540 @@
+From ed123b7c072be30df6b91e466794f2beef3dbc56 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 20:37:38 -0500
+Subject: [PATCH] Qt client: light the tiles the focus unit can reach this turn
+
+With the Freeciv45 panels on, the tiles the head focus unit reaches with
+the moves it has left are drawn on the map: a faint fill, so terrain and
+resources show through, and a line along the range's outer edge. The
+tiles come from the client goto's own path finding (terrain, zones of
+control, borders, the tiles the player knows), through a new exported
+fill_move_range_parameter(). A tile reached on the last move point
+counts to path finding as next turn with full moves, so the moves spent
+decide, not the turn. Unknown tiles stay black.
+
+The range is worked out again when the unit, its tile, its moves or the
+turn change, and every two seconds for other players' moves, from the
+map's 200 ms timer. It clears with no focus unit, once the turn is done,
+for another player's unit and while the city overlay is open.
+
+A left click on the focus unit's own tile while an order is being given
+(goto and the other hover modes) cancels it, goto line and all, and the
+unit stays selected with no order. With no order, the click hides or
+shows the range in place of the stack's selection popup; the unit bar's
+chips select tile mates. A click there on an own city still opens it.
+
+Issue 232.
+---
+ client/goto.c               |  10 ++
+ client/goto.h               |   3 +
+ client/gui-qt/mapctrl.cpp   |  61 +++++++++
+ client/gui-qt/mapview.cpp   |   5 +
+ client/gui-qt/mapview.h     |   3 +
+ client/gui-qt/moverange.cpp | 254 ++++++++++++++++++++++++++++++++++++
+ client/gui-qt/moverange.h   |  31 +++++
+ meson.build                 |   1 +
+ 8 files changed, 368 insertions(+)
+ create mode 100644 client/gui-qt/moverange.cpp
+ create mode 100644 client/gui-qt/moverange.h
+
+diff --git a/client/goto.c b/client/goto.c
+index a423a4d..273b4ad 100644
+--- a/client/goto.c
++++ b/client/goto.c
+@@ -907,6 +907,16 @@ static void goto_fill_parameter_base(struct pf_parameter *parameter,
+   }
+ }
+ 
++/************************************************************************//**
++  The client goto's PF parameter for the unit, for drawing the tiles it
++  reaches this turn (Freeciv45, issue 232)
++****************************************************************************/
++void fill_move_range_parameter(struct pf_parameter *parameter,
++                               const struct unit *punit)
++{
++  goto_fill_parameter_base(parameter, punit);
++}
++
+ /************************************************************************//**
+   Fill the PF parameter with the correct client-goto values.
+   The storage behind "connect_speed" must remain valid for the lifetime
+diff --git a/client/goto.h b/client/goto.h
+index 23ec7fc..ca473cf 100644
+--- a/client/goto.h
++++ b/client/goto.h
+@@ -17,6 +17,7 @@
+ extern "C" {
+ #endif /* __cplusplus */
+ 
++struct pf_parameter;
+ struct pf_path;
+ struct tile;
+ struct unit;
+@@ -47,6 +48,8 @@ bool goto_pop_waypoint(void);
+ 
+ bool is_valid_goto_destination(const struct tile *ptile);
+ bool is_valid_goto_draw_line(struct tile *dest_tile);
++void fill_move_range_parameter(struct pf_parameter *parameter,
++                               const struct unit *punit);
+ 
+ void request_orders_cleared(struct unit *punit);
+ void send_goto_path(struct unit *punit, struct pf_path *path,
+diff --git a/client/gui-qt/mapctrl.cpp b/client/gui-qt/mapctrl.cpp
+index 74d3834..43beb15 100644
+--- a/client/gui-qt/mapctrl.cpp
++++ b/client/gui-qt/mapctrl.cpp
+@@ -23,8 +23,10 @@
+ #include <QWheelEvent>
+ 
+ // common
++#include "city.h"
+ #include "control.h"
+ #include "goto.h"
++#include "player.h"
+ 
+ // client
+ #include "client_main.h"
+@@ -42,6 +44,7 @@
+ #include "citydlg.h"
+ #include "cityoverlay.h"
+ #include "fc_client.h"
++#include "moverange.h"
+ #include "qtg_cxxside.h"
+ #include "shortcuts.h"
+ 
+@@ -535,7 +538,45 @@ void map_view::mousePressEvent(QMouseEvent *event)
+ 
+   pan_armed = false;
+   panning = false;
++  range_press_tile = nullptr;
++  range_cancel = false;
+   pan_autocenter = gui_options.auto_center_on_unit;
++
++  /* Freeciv45: a left click on the focus unit's own tile cancels the order
++   * being given, goto line and all, and the unit stays selected; with no
++   * order it shows or hides the unit's range on release, in place of the
++   * stack's selection popup (the unit bar's chips select tile mates). */
++  if (event->button() == Qt::LeftButton
++      && event->modifiers() == Qt::NoModifier
++      && gui_options.gui_qt_freeciv45_panels
++      && !gui()->menu_bar->delayed_order
++      && !gui()->menu_bar->quick_airlifting
++      && !gui()->rallies.hover_city && !gui()->rallies.hover_tile
++      && !gui()->trade_gen.hover_city) {
++    QPoint pos = map_canvas_pos(event->pos());
++    struct tile *ptile = canvas_pos_to_tile(pos.x(), pos.y(), map_zoom);
++    bool on_focus = false;
++
++    unit_list_iterate(get_units_in_focus(), punit) {
++      if (ptile != nullptr && unit_tile(punit) == ptile) {
++        on_focus = true;
++      }
++    } unit_list_iterate_end;
++    if (on_focus && order_pending) {
++      clear_hover_state();
++      exit_goto_state();
++      move_range_toggle(true);
++      range_cancel = true;
++      return;
++    }
++    // A click on an own city still opens it
++    if (on_focus && (tile_city(ptile) == nullptr
++                     || !can_player_see_city_internals(client_player(),
++                                                       tile_city(ptile)))) {
++      range_press_tile = ptile;
++    }
++  }
++
+   shortcut_pressed(0);
+ 
+   /* Keyboardless goto arms on a left press anywhere while a unit is in
+@@ -600,6 +641,26 @@ void map_view::mouseReleaseEvent(QMouseEvent *event)
+     return;
+   }
+   pan_armed = false;
++  if (event->button() == Qt::LeftButton && range_cancel) {
++    // The press cancelled an order: nothing more to do
++    range_cancel = false;
++    return;
++  }
++  if (event->button() == Qt::LeftButton && range_press_tile != nullptr
++      && !keyboardless_goto_active) {
++    QPoint pos = map_canvas_pos(event->pos());
++    struct tile *ptile = canvas_pos_to_tile(pos.x(), pos.y(), map_zoom);
++
++    if (ptile == range_press_tile) {
++      // A click on the focus unit: its range, and no popup or order
++      range_press_tile = nullptr;
++      gui_options.auto_center_on_unit = stored_autocenter;
++      release_goto_button(pos.x(), pos.y());
++      move_range_toggle(false);
++      return;
++    }
++  }
++  range_press_tile = nullptr;
+   shortcut_released(event->button());
+ }
+ 
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index 141e3b5..be0d8d0 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -52,6 +52,7 @@
+ #include "unitbar.h"
+ #include "gui_main.h"
+ #include "mapview.h"
++#include "moverange.h"
+ #include "qtg_cxxside.h"
+ #include "sidebar.h"
+ 
+@@ -257,6 +258,8 @@ map_view::map_view() : QWidget()
+   pan_autocenter = false;
+   pan_x0 = 0;
+   pan_y0 = 0;
++  range_press_tile = nullptr;
++  range_cancel = false;
+   QTimer *timer = new QTimer(this);
+   setAttribute(Qt::WA_OpaquePaintEvent, true);
+   connect(timer, &QTimer::timeout, this, &map_view::timer_event);
+@@ -290,6 +293,7 @@ void map_view::update_cursor(enum cursor_type ct)
+ **************************************************************************/
+ void map_view::timer_event()
+ {
++  move_range_check();
+   if (gui()->infotab->underMouse()
+       || gui()->minimapview_wdg->underMouse()
+       || gui()->sidebar_wdg->underMouse()) {
+@@ -365,6 +369,7 @@ void map_view::paint(QPainter *painter, QPaintEvent *event)
+   }
+   painter->save();
+   painter->scale(1.0 / d, 1.0 / d);
++  move_range_paint(painter);
+   draw_calculated_trade_routes(painter);
+   painter->restore();
+ }
+diff --git a/client/gui-qt/mapview.h b/client/gui-qt/mapview.h
+index 96e60e8..b046533 100644
+--- a/client/gui-qt/mapview.h
++++ b/client/gui-qt/mapview.h
+@@ -126,6 +126,9 @@ private:
+   QPoint pan_press;
+   float pan_x0;
+   float pan_y0;
++  // A left click on the focus unit cancels an order or shows its range
++  struct tile *range_press_tile;
++  bool range_cancel;
+   int cursor_frame;
+   int cursor;
+ 
+diff --git a/client/gui-qt/moverange.cpp b/client/gui-qt/moverange.cpp
+new file mode 100644
+index 0000000..1ce7f73
+--- /dev/null
++++ b/client/gui-qt/moverange.cpp
+@@ -0,0 +1,254 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++// Qt
++#include <QElapsedTimer>
++#include <QPainter>
++#include <QPolygonF>
++#include <QSet>
++
++// common
++#include "game.h"
++#include "map.h"
++#include "player.h"
++#include "tile.h"
++#include "unit.h"
++#include "unitlist.h"
++
++// common/aicore
++#include "path_finding.h"
++
++// client
++#include "client_main.h"
++#include "control.h"
++#include "goto.h"
++#include "mapview_common.h"
++#include "options.h"
++#include "tilespec.h"
++#include "zoom.h"
++
++// gui-qt
++#include "cityoverlay.h"
++#include "fc_client.h"
++#include "moverange.h"
++
++// Recompute this often even when nothing in the key changed, for zones of
++// control and borders that other players' moves change
++static const int RECHECK_MS = 2000;
++
++static struct {
++  int unit_id;
++  int tile_index;
++  int moves_left;
++  int turn;
++  bool shown;
++  bool hidden;
++  QSet<int> reach;
++  QElapsedTimer since;
++} range = { -1, -1, -1, -1, false, false, QSet<int>(), QElapsedTimer() };
++
++/************************************************************************//**
++  The unit whose range is shown: the head focus unit, own, while orders
++  can be given this turn and the panels are on
++****************************************************************************/
++static struct unit *range_unit(void)
++{
++  struct unit *punit = head_of_units_in_focus();
++
++  if (punit == nullptr || !gui_options.gui_qt_freeciv45_panels
++      || !can_client_issue_orders()
++      || unit_owner(punit) != client_player()
++      || client_player()->phase_done
++      || city_overlay_is_open()) {
++    return nullptr;
++  }
++
++  return punit;
++}
++
++/************************************************************************//**
++  The tiles the unit reaches this turn, by the client goto's own path
++  finding: its moves left, terrain, zones of control, borders and the
++  tiles it knows
++****************************************************************************/
++static QSet<int> reachable(const struct unit *punit)
++{
++  QSet<int> out;
++  struct pf_parameter parameter;
++  struct pf_map *pfm;
++
++  if (punit->moves_left <= 0) {
++    return out;
++  }
++  fill_move_range_parameter(&parameter, punit);
++  pfm = pf_map_new(&parameter);
++  pf_map_positions_iterate(pfm, pos, TRUE) {
++    /* Positions come roughly in order of cost; well past this turn's moves
++     * there are no more to find. A tile reached on the last move point
++     * counts to path finding as turn 1 with full moves, so test the moves
++     * spent instead of the turn. */
++    if (pos.turn > 2) {
++      break;
++    }
++    // Unknown tiles stay black
++    if (pos.total_MC <= (unsigned) punit->moves_left
++        && tile_get_known(pos.tile, client_player()) != TILE_UNKNOWN) {
++      out.insert(tile_index(pos.tile));
++    }
++  } pf_map_positions_iterate_end;
++  pf_map_destroy(pfm);
++
++  return out;
++}
++
++/************************************************************************//**
++  Work the range out again when the focus unit, its tile, its moves or the
++  turn changed, or now and then for other players' moves; repaint the map
++  when the tiles changed. Called from the map's timer and after a click.
++****************************************************************************/
++void move_range_check(void)
++{
++  struct unit *punit = range_unit();
++  int id = (punit != nullptr ? punit->id : -1);
++  int tile = (punit != nullptr ? tile_index(unit_tile(punit)) : -1);
++  int moves = (punit != nullptr ? punit->moves_left : -1);
++  bool changed = (id != range.unit_id || tile != range.tile_index
++                  || moves != range.moves_left
++                  || game.info.turn != range.turn);
++  QSet<int> reach;
++
++  if (id != range.unit_id || game.info.turn != range.turn) {
++    // A new unit or a new turn shows the range again after a cancel
++    range.hidden = false;
++  }
++  if (!changed && range.since.isValid()
++      && range.since.elapsed() < RECHECK_MS) {
++    return;
++  }
++  range.unit_id = id;
++  range.tile_index = tile;
++  range.moves_left = moves;
++  range.turn = game.info.turn;
++  range.since.start();
++  if (punit != nullptr && !range.hidden) {
++    reach = reachable(punit);
++  }
++  if (reach != range.reach) {
++    range.reach = reach;
++    if (gui() != nullptr && gui()->mapview_wdg != nullptr) {
++      gui()->mapview_wdg->update();
++    }
++  }
++}
++
++/************************************************************************//**
++  A click on the focus unit with no order being given shows or hides its
++  range; a click that cancels an order hides it
++****************************************************************************/
++void move_range_toggle(bool hide_only)
++{
++  range.hidden = hide_only || !range.hidden;
++  range.since.invalidate();
++  move_range_check();
++}
++
++/************************************************************************//**
++  How many tiles are lit, and whether a click hid the range
++****************************************************************************/
++int move_range_size(void)
++{
++  return range.reach.size();
++}
++
++bool move_range_hidden(void)
++{
++  return range.hidden;
++}
++
++/************************************************************************//**
++  Light the tiles on the map: a faint fill, so terrain and resources show
++  through, and a line along the range's outer edge. The painter is in map
++  canvas pixels.
++****************************************************************************/
++void move_range_paint(QPainter *painter)
++{
++  float w, h;
++  bool iso;
++  QPen edge;
++  static const enum direction8 sides[4] = {
++    DIR8_NORTH, DIR8_EAST, DIR8_SOUTH, DIR8_WEST
++  };
++
++  if (range.reach.isEmpty() || tileset == nullptr) {
++    return;
++  }
++  w = tileset_tile_width(tileset) * map_zoom;
++  h = tileset_tile_height(tileset) * map_zoom;
++  iso = tileset_is_isometric(tileset);
++  edge = QPen(QColor(255, 236, 160, 230), qMax(2.0f, w / 64.0f));
++  edge.setCapStyle(Qt::RoundCap);
++
++  painter->save();
++  painter->setRenderHint(QPainter::Antialiasing);
++  foreach (int idx, range.reach) {
++    struct tile *ptile = index_to_tile(&(wld.map), idx);
++    float cx, cy;
++    QPolygonF shape;
++    QPointF centre;
++
++    if (ptile == nullptr || !tile_to_canvas_pos(&cx, &cy, map_zoom, ptile)) {
++      continue;
++    }
++    if (iso) {
++      shape << QPointF(cx + w / 2, cy) << QPointF(cx + w, cy + h / 2)
++            << QPointF(cx + w / 2, cy + h) << QPointF(cx, cy + h / 2);
++    } else {
++      shape << QPointF(cx, cy) << QPointF(cx + w, cy)
++            << QPointF(cx + w, cy + h) << QPointF(cx, cy + h);
++    }
++    centre = QPointF(cx + w / 2, cy + h / 2);
++    painter->setPen(Qt::NoPen);
++    painter->setBrush(QColor(255, 248, 220, 46));
++    painter->drawPolygon(shape);
++
++    // The side of the tile that faces a neighbour out of range
++    painter->setPen(edge);
++    for (enum direction8 dir : sides) {
++      struct tile *next = mapstep(&(wld.map), ptile, dir);
++      float gx, gy;
++      int best = 0;
++      qreal best_dot = -1e9;
++
++      if (next != nullptr && range.reach.contains(tile_index(next))) {
++        continue;
++      }
++      map_to_gui_vector(tileset, map_zoom, &gx, &gy,
++                        DIR_DX[dir], DIR_DY[dir]);
++      for (int i = 0; i < 4; i++) {
++        QPointF mid = (shape[i] + shape[(i + 1) % 4]) / 2 - centre;
++        qreal dot = mid.x() * gx + mid.y() * gy;
++
++        if (dot > best_dot) {
++          best_dot = dot;
++          best = i;
++        }
++      }
++      painter->drawLine(shape[best], shape[(best + 1) % 4]);
++    }
++  }
++  painter->restore();
++}
+diff --git a/client/gui-qt/moverange.h b/client/gui-qt/moverange.h
+new file mode 100644
+index 0000000..0577c08
+--- /dev/null
++++ b/client/gui-qt/moverange.h
+@@ -0,0 +1,31 @@
++/***********************************************************************
++ Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 2, or (at your option)
++   any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++***********************************************************************/
++
++#ifndef FC__MOVERANGE_H
++#define FC__MOVERANGE_H
++
++#ifdef HAVE_CONFIG_H
++#include <fc_config.h>
++#endif
++
++class QPainter;
++
++/* Freeciv45: the tiles the focus unit can reach this turn, drawn on the
++ * map (issue 232) */
++void move_range_check(void);
++void move_range_paint(QPainter *painter);
++void move_range_toggle(bool hide_only);
++int move_range_size(void);
++bool move_range_hidden(void);
++
++#endif // FC__MOVERANGE_H
+diff --git a/meson.build b/meson.build
+index ca99a71..fdfb6a4 100644
+--- a/meson.build
++++ b/meson.build
+@@ -3561,6 +3561,7 @@ executable('freeciv-qt',
+   'client/gui-qt/menu.cpp',
+   'client/gui-qt/messagedlg.cpp',
+   'client/gui-qt/messagewin.cpp',
++  'client/gui-qt/moverange.cpp',
+   'client/gui-qt/optiondlg.cpp',
+   'client/gui-qt/pages.cpp',
+   'client/gui-qt/plrdlg.cpp',
+-- 
+2.56.0
+

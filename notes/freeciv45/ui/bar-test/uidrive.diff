@@ -20,10 +20,10 @@ index 5e6de95..a5ca1a9 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..0d82aa8
+index 0000000..fba3359
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,838 @@
+@@ -0,0 +1,841 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -139,6 +139,7 @@ index 0000000..0d82aa8
 +#include "fc_client.h"
 +#include "hudwidget.h"
 +#include "mapview.h"
++#include "moverange.h"
 +#include "qtg_cxxside.h"
 +#include "sidebar.h"
 +#include "unitbar.h"
@@ -411,6 +412,8 @@ index 0000000..0d82aa8
 +  s += QString("\n   hud_units visible %1")
 +       .arg(gui()->unitinfo_wdg->isVisible() ? "yes" : "no");
 +  s += QString("\n   map origin %1,%2").arg(mapview.gui_x0).arg(mapview.gui_y0);
++  s += QString("\n   move range %1 tiles%2").arg(move_range_size())
++         .arg(move_range_hidden() ? " (hidden)" : "");
 +  {
 +    QStringList tops;
 +
@@ -889,7 +892,7 @@ index 0000000..2a70d55
 +
 +#endif // FC__UIDRIVE_H
 diff --git a/meson.build b/meson.build
-index ca99a71..b0db987 100644
+index fdfb6a4..6a6856e 100644
 --- a/meson.build
 +++ b/meson.build
 @@ -939,7 +939,7 @@ endif
@@ -901,7 +904,7 @@ index ca99a71..b0db987 100644
  else
    qt_mod = import('qt5')
  
-@@ -3572,6 +3572,7 @@ executable('freeciv-qt',
+@@ -3573,6 +3573,7 @@ executable('freeciv-qt',
    'client/gui-qt/spaceshipdlg.cpp',
    'client/gui-qt/sprite.cpp',
    'client/gui-qt/themes.cpp',
