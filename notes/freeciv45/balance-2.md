@@ -4,11 +4,11 @@ Long headless autogames of the Freeciv45 ruleset (civ45) after the fixes for bal
 read with the same summary scripts. Issue 222. Every number below comes from the game's server log (the FC45
 lines) or its saves; the logs are in `port/night-repo/logs/test-qt-20261018-<game>/` (git-ignored, not committed).
 
-The fixes, one PR each, in the order they land:
+The fixes, one PR each, in the order they land (patch number order; main took 0034 for the tilespec patch of #230,
+so the culture patch moved to the end):
 
 | PR | Issue | Patch | Change |
 |---|---|---|---|
-| #212 | #165 | 0034 | culture victory needs 30000 points and a 25 % lead (was 8000 and 50 %) |
 | #213 | #164 | 0035 | space parts need a Factory and cost 50/100/200; the AI launches an unfinished ship before `endturn` |
 | #216 | #166 | 0036 | great-person threshold step 200 (was 75) |
 | #217 | #167 | 0037 | era cost_pct 100, 150, 175, 200, 200, 200, 200 (was up to 275) |
@@ -16,15 +16,18 @@ The fixes, one PR each, in the order they land:
 | #219 | #159, #49 | 0039 | AIs play at Normal, not the server's Easy |
 | #220 | #157 | 0040 | the `City_Unrest` effect: draft and whip unrest reaches base content citizens |
 | #221 | #158 | 0041 | a Levy needs a city of size 3, Militia and Conscripts size 4 |
+| #212 | #165 | 0042 | culture victory needs 30000 points and a 25 % lead (was 8000 and 50 %) |
 
-The fork commits are stacked on `macos27-port` (563ce2a) as branch `fix-158-draft-size` in `port/night-rules` and
-are not on `macos27-port` yet.
+`patches/0001` to `0042` apply in number order on upstream S3_2 (44e6898) with `git am`. The fork commits are not on
+`macos27-port` yet.
 
 ## 1. The games
 
 All ran with `scripts/test.sh <prefix> --ruleset civ45 --no-client --turns 475` and the same Lua loggers as
 report 1, two games at a time at most, under `nice`. Ten AIs, seeds are both `gameseed` and `mapseed`, and
-barbarians and animals are left out of every count. All games ran on patch 0032's isometric map.
+barbarians and animals are left out of every count. All games in this table ran on the square overhead map
+(`topology ""`): the data they loaded predates patch 0032's ISO setting. Section 8 has the later games, the first on
+ISO. The map was `tilesperplayer` 100; from issue 211 civ45 uses 110, so the next games run at 110.
 
 | Game | Level | Rules beyond `macos27-port` | Victories | How it ended |
 |---|---|---|---|---|
@@ -165,9 +168,38 @@ Pairs are of 45 (55 once an eleventh civ appears).
   autosave" and the rerun passed with nothing changed.
 - **README.civ45 is out of date** in two places: it says the tech tree has 92 advances (techs.ruleset has 95) and
   that the victory thresholds are "first values, untuned".
-- **The isometric map** (patch 0032) was used in every game here, but no game compared it with the square map.
+- **The isometric map** (patch 0032, civ45's default since #189) was not used by the games in section 1. The one
+  ISO game (section 8) ended in an allied victory at T173, but it also lacked the Great Library gift, so the two are
+  not separated.
 
-## 8. What is left
+## 8. The Great Library gift (found after the first draft)
+
+civ45's Great Library (inherited from sandbox) is `Tech_Parasite_Pct_Max` 30 at **World** range with `survives`
+(`effects.ruleset`, `[effect_great_library]`). Once anyone has built it, **every** player, barbarians included, gets
+one free tech a turn that 30 % of all players ever in the game know (`server/techtools.c`,
+`do_tech_parasite_effects`). The tech logger reports these techs as "stolen", the same word as a diplomat's theft.
+The lead came from `notes/freeciv45/fcw/rules.md` (ideas only, nothing copied).
+
+| Game (seed 42, Normal) | Map | Techs "stolen" | Diplomat thefts | Leader's techs T300 / T400 | Era V / VI first | Techs per civ at the end |
+|---|---|---|---|---|---|---|
+| 160612, all balance-2 rules | square | **429 of 721** | not logged | 48 / 57 | T241 / T345 | 57 to 65 |
+| 164815, the same without the gift (test.sh's 900 s limit stopped it at T437) | square | 34 of 420 | 18 actions logged | 41 / 47 | T296 / none | 20 to 49 |
+| 164540, the same without the gift | ISO | 1 of 414 | - | - | - | allied victory at T173 |
+
+- About **half of all techs** in 160612 came from the gift, and they went to all 13 players (1 to 60 each), most to
+  the laggards. It is the main reason the field researches as a pack.
+- Without it the leader is about 10 techs behind by T400 and never reaches era VI on seed 42, and the field spreads
+  out.
+- `techleak` (100, the server default, with `tech_leakage "Embassies"`) is the other catch-up rule. It is not
+  measured yet.
+
+**Recommended fix:** make the gift the owner's, as in Freeciv's classic ruleset: `Tech_Parasite` 2 at **Player**
+range without `survives`, so only the Great Library's owner gets techs that two other civs know, and only while it
+stands. That keeps a reason to build the wonder and ends the world-wide catch-up. Expect a slower tree: the no-gift
+game is the lower bound, so #217's curve would need another autogame (at `tilesperplayer` 110) after the change.
+John decides; nothing is changed here.
+
+## 9. What is left
 
 1. **Space at Normal** (#215). The rules allow a ship, and an Easy AI builds and launches one, but a Normal AI
    reaches Space Flight late or never and does not build parts. It needs AI work, not a cost change.
@@ -176,11 +208,12 @@ Pairs are of 45 (55 once an eleventh civ appears).
 3. **Siege** (#202, then #83). The AI does not build siege units, so the bombard behaviour cannot be tested.
 4. **Pace on war maps.** Seed 42 reaches only era VI. Lowering costs further would undo most of the steep curve.
 
-## 9. Decisions for John
+## 10. Decisions for John
 
 - **Plan decision 8** said to keep the culture numbers until the culture slice. #212 re-tunes them now, from the
   autogames.
 - **Plan decision 10** chose the steep curve to 275 %. #217 flattens it at 200 % after era IV.
 - **Plan row 14** (#220): `City_Unrest` is an engine change, small enough to offer upstream.
 - **Draft sizes** (#221): Levy size 3, Militia and Conscripts size 4, no cap on whipping.
-- **AEGIS Cruiser** (#214) and **space at Normal** (#215), from section 8.
+- **AEGIS Cruiser** (#214) and **space at Normal** (#215), from section 9.
+- **The Great Library gift** (section 8): owner only, as recommended, or keep the world-wide gift.
