@@ -1,7 +1,7 @@
-From d8b3d1e7c51d6483bc640f5601539c576f6a902c Mon Sep 17 00:00:00 2001
+From cc46e1afd97042ebda4dff5f481b3a08f17e9778 Mon Sep 17 00:00:00 2001
 From: John O'Dell <johncodell14@gmail.com>
 Date: Sun, 18 Oct 2026 13:03:07 -0500
-Subject: [PATCH 35/41] civ45: space parts need a Factory and cost a third; the
+Subject: [PATCH 35/42] civ45: space parts need a Factory and cost a third; the
  AI launches a ship in time
 
 Issue 164: no AI ever launched a spaceship. The three parts needed a
@@ -71,13 +71,13 @@ index fda77d1..d06f527 100644
    }
  }
 diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
-index 48c655d..dad53fb 100644
+index fbcf7b1..647240d 100644
 --- a/data/civ45/README.civ45
 +++ b/data/civ45/README.civ45
 @@ -50,11 +50,13 @@ Differences from sandbox
    world's citizens for three turns running, checked from turn 100 by the
-   ruleset's script. Culture: 30000 culture points and a quarter more
-   than the runner-up (sandbox asks 20000 and double). Space: a spaceship
+   ruleset's script. Culture: 8000 culture points and half again as much
+   as the runner-up (sandbox asks 20000 and double). Space: a spaceship
 -  that arrives (endspaceship enabled). Alliance: the last alliance
 -  standing wins together. Score: the game ends after turn 475 (the year
 -  2050) and at the start of that turn the living player with the highest
