@@ -4,8 +4,8 @@ Long headless autogames of the Freeciv45 ruleset (civ45) after the fixes for bal
 read with the same summary scripts. Issue 222. Every number below comes from the game's server log (the FC45
 lines) or its saves; the logs are in `port/night-repo/logs/test-qt-20261018-<game>/` (git-ignored, not committed).
 
-The fixes, one PR each, in the order they land (patch number order; main took 0034 for the tilespec patch of #230,
-so the culture patch moved to the end):
+The fixes, one PR each, merged in patch number order (main took 0034 for the tilespec patch of #230 and 0042 for
+drag-to-pan, #235, so the culture patch moved to the end as 0043, #237):
 
 | PR | Issue | Patch | Change |
 |---|---|---|---|
@@ -16,10 +16,10 @@ so the culture patch moved to the end):
 | #219 | #159, #49 | 0039 | AIs play at Normal, not the server's Easy |
 | #220 | #157 | 0040 | the `City_Unrest` effect: draft and whip unrest reaches base content citizens |
 | #221 | #158 | 0041 | a Levy needs a city of size 3, Militia and Conscripts size 4 |
-| #212 | #165 | 0042 | culture victory needs 30000 points and a 25 % lead (was 8000 and 50 %) |
+| #212, #237 | #165 | 0043 | culture victory needs 30000 points and a 25 % lead (was 8000 and 50 %) |
 
-`patches/0001` to `0042` apply in number order on upstream S3_2 (44e6898) with `git am`. The fork commits are not on
-`macos27-port` yet.
+`patches/0001` to `0043` on main apply in number order on upstream S3_2 (44e6898) with `git am` (checked
+2026-10-18). The fork commits are not on `macos27-port` yet.
 
 ## 1. The games
 
