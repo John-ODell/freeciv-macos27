@@ -97,6 +97,11 @@ else echo "FC45TEST FAIL Horses: $NH units need it (want 7), or terrain.ruleset 
 # The AIs play at Normal (issue 159): game.ruleset sets ailevel, and the server gives it to the AIs made before.
 if grep -qF '"ailevel", "Normal", FALSE' "$RS"; then echo "FC45TEST PASS game.ruleset sets ailevel Normal"
 else echo "FC45TEST FAIL game.ruleset does not set ailevel Normal"; RC=1; fi
+# The description players read gives the culture victory as the [culture] section sets it (issue 243).
+CP=$(sed -n '/^\[culture\]/,/^\[/p' "$RS" | sed -n 's/^victory_min_points *= *\([0-9]*\).*/\1/p' | head -1)
+if [ -n "$CP" ] && grep -q "culture ($CP points" "$RS" && ! grep -q "culture (8000 points" "$RS"; then
+  echo "FC45TEST PASS game.ruleset: the description gives the culture victory as $CP points"
+else echo "FC45TEST FAIL game.ruleset: the description does not match victory_min_points ($CP)"; RC=1; fi
 NW=$(grep -c '^\[effect_city_walls_\(melee\|archer\|mounted\|siege\)\]' "$DATA/civ45/effects.ruleset")
 if [ "$NW" = 4 ] && ! grep -q '^\[effect_city_walls_0\]' "$DATA/civ45/effects.ruleset"; then
   echo "FC45TEST PASS effects.ruleset: City Walls are keyed on the attacker's class flag"
