@@ -89,6 +89,9 @@ NH=$(grep -c '"Extra", "Horses", "City"' "$UR")
 if [ "$NH" = 7 ] && grep -q '^\[extra_horses\]' "$DATA/civ45/terrain.ruleset" && grep -q '^\[resource_horses\]' "$DATA/civ45/terrain.ruleset"; then
   echo "FC45TEST PASS Horses is a resource and seven mounted units need it in the city's radius"
 else echo "FC45TEST FAIL Horses: $NH units need it (want 7), or terrain.ruleset lacks the extra or resource"; RC=1; fi
+# The AIs play at Normal (issue 159): game.ruleset sets ailevel, and the server gives it to the AIs made before.
+if grep -qF '"ailevel", "Normal", FALSE' "$RS"; then echo "FC45TEST PASS game.ruleset sets ailevel Normal"
+else echo "FC45TEST FAIL game.ruleset does not set ailevel Normal"; RC=1; fi
 NW=$(grep -c '^\[effect_city_walls_\(melee\|archer\|mounted\|siege\)\]' "$DATA/civ45/effects.ruleset")
 if [ "$NW" = 4 ] && ! grep -q '^\[effect_city_walls_0\]' "$DATA/civ45/effects.ruleset"; then
   echo "FC45TEST PASS effects.ruleset: City Walls are keyed on the attacker's class flag"

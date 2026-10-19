@@ -1,0 +1,78 @@
+From 5781b12ccfac47a049d01720c4827d121bf9c0c8 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 13:08:01 -0500
+Subject: [PATCH 39/41] civ45: AIs play at Normal, also those made before the
+ ruleset loaded
+
+Issue 159: at the server's default level, Easy, the AIs allied into one
+bloc that never fought. Easy adds handicaps that Normal lacks, among them
+H_CEASEFIRE (a cease-fire offer at first contact), H_DIPLOMACY and
+H_DEFENSIVE; which of them builds the bloc was not isolated. civ45's
+game.ruleset sets ailevel to Normal. That setting only reaches AIs created
+after it, and the server's first aifill AIs exist before a ruleset loads
+(one test game had 6 Easy and 5 Normal), so when a ruleset sets ailevel
+in pregame the server now gives that level to the AIs already in the game
+as well.
+---
+ data/civ45/game.ruleset |  5 ++++-
+ server/settings.c       | 18 ++++++++++++++++++
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index a604dd9..749228f 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -923,10 +923,13 @@ colorlist =
+ ; freeciv game settings for civ45 (Freeciv45): square tiles seen at an angle (isometric view,
+ ; topology ISO) wrapping east to west,
+ ; only the defender dies when a stack loses, cultural victory enabled, the game ends when a
+-; spaceship arrives, and it ends after turn 475 (the year 2050) on score (script.lua names the winner)
++; spaceship arrives, and it ends after turn 475 (the year 2050) on score (script.lua names the winner).
++; AIs play at Normal, not the server's Easy, at which they allied into one bloc that never fought (issue 159);
++; the fork's server also gives this level to the AIs that aifill made before the ruleset loaded.
+ ;
+ set =
+     { "name", "value", "lock"
++      "ailevel", "Normal", FALSE
+       "aifill", 12, FALSE
+       "generator", "FRACTAL", FALSE
+       "topology", "ISO", FALSE
+diff --git a/server/settings.c b/server/settings.c
+index 1927fb7..e502b46 100644
+--- a/server/settings.c
++++ b/server/settings.c
+@@ -30,6 +30,7 @@
+ 
+ /* server */
+ #include "aiiface.h"
++#include "difficulty.h"
+ #include "gamehand.h"
+ #include "maphand.h"
+ #include "meta.h"
+@@ -4433,6 +4434,23 @@ bool settings_ruleset(struct section_file *file, const char *section,
+     } settings_iterate_end;
+   }
+ 
++  /* Freeciv45: a ruleset that sets ailevel sets it for the AIs that
++   * aifill already made in pregame as well, since they were created before
++   * the ruleset loaded. */
++  if (act && server_state() == S_S_INITIAL) {
++    struct setting *plevel = setting_by_name("ailevel");
++
++    if (plevel != NULL && plevel->setdef == SETDEF_RULESET) {
++      players_iterate(pplayer) {
++        if (is_ai(pplayer) && !is_barbarian(pplayer)
++            && pplayer->ai_common.skill_level != game.info.skill_level) {
++          set_ai_level_directer(pplayer, game.info.skill_level);
++          send_player_info_c(pplayer, NULL);
++        }
++      } players_iterate_end;
++    }
++  }
++
+   autolock_settings();
+ 
+   /* send game settings */
+-- 
+2.56.0
+
