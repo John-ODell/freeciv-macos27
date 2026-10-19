@@ -396,6 +396,8 @@ Pictures at 2x and 1x:
 - The five city sizes draw in turn. Join City stops at size 8 without an Aqueduct, so the test ruleset (see the
   scene's header) moves the City_Image thresholds to 3, 5, 7 and 8; the sprites are the same index 0 to 4.
 - Walled cities draw as whole walled cities; open ones show the houses only.
+- The city bar's flag is a small chip beside the name, not a large flag over the city (issue 252, patch 0049,
+  `citybar-flag.md`).
 
 ## Not done, and findings
 
