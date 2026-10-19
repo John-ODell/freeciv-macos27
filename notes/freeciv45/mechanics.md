@@ -963,6 +963,12 @@ turn, as the reference behaviour in the "Production, whipping and drafting" para
 unhappy face for 10 turns per whip, three per draft, 1 to 5 drafts a turn by map size). Lines are the fork's at
 the patch.
 
+Changed 2026-10-18 (issue 157): the three unrest buildings now carry `City_Unrest` 1, 2 and 4, a Freeciv45 engine
+effect (fork `common/city.c`, `citizen_base_mood`) that turns that many of the city's base content citizens
+unhappy before buildings count, instead of `Make_Content` -1, -2 and -4. The old form could only cancel content
+from temples and the like, so a city with no content buildings felt nothing. The rules test founds a size-1 city
+with no buildings and sees it fall into disorder with one face and calm again without it.
+
 ### What the ruleset says now
 
 | Rule | Built | Where |

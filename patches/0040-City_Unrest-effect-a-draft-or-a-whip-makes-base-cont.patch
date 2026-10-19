@@ -1,0 +1,158 @@
+From 090f95498e7043355985c56874de0472203c876f Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 13:05:21 -0500
+Subject: [PATCH 40/41] City_Unrest effect: a draft or a whip makes base
+ content citizens unhappy
+
+---
+ ai/default/daieffects.c    |  3 +++
+ common/city.c              |  5 +++++
+ common/effects.h           |  3 +++
+ data/civ45/README.civ45    |  4 +++-
+ data/civ45/effects.ruleset | 18 +++++++++---------
+ data/civ45/script.lua      |  6 +++---
+ doc/README.effects         |  6 ++++++
+ 7 files changed, 32 insertions(+), 13 deletions(-)
+
+diff --git a/ai/default/daieffects.c b/ai/default/daieffects.c
+index 7b00df5..f6ef8e0 100644
+--- a/ai/default/daieffects.c
++++ b/ai/default/daieffects.c
+@@ -746,6 +746,9 @@ adv_want dai_effect_value(struct player *pplayer,
+   case EFT_USER_EFFECT_4:
+     /* The AI has no idea what this does. */
+     break;
++  case EFT_CITY_UNREST:
++    /* Set by the ruleset's script after a draft or a whip, never built for. */
++    break;
+   case EFT_COUNT:
+     log_error("Bad effect type.");
+     break;
+diff --git a/common/city.c b/common/city.c
+index 818b92c..0f6f66f 100644
+--- a/common/city.c
++++ b/common/city.c
+@@ -2532,9 +2532,14 @@ static void citizen_base_mood(struct city *pcity)
+   citizens base_content = player_content_citizens(pplayer);
+   /* Similarly, this is the potential number of angry citizens. */
+   citizens base_angry = player_angry_citizens(pplayer);
++  /* City_Unrest turns some of this city's base content citizens unhappy. */
++  int unrest = get_city_bonus(pcity, EFT_CITY_UNREST);
+ 
+   /* Create content citizens. Take specialists from their ranks. */
+   *content = MAX(0, MIN(size, base_content) - spes);
++  if (unrest > 0) {
++    *content = MAX(0, (int)*content - unrest);
++  }
+ 
+   /* Create angry citizens. Specialists never become angry. */
+   fc_assert_action(base_content == 0 || base_angry == 0, *content = 0);
+diff --git a/common/effects.h b/common/effects.h
+index 4ee2295..29f2487 100644
+--- a/common/effects.h
++++ b/common/effects.h
+@@ -351,6 +351,9 @@ struct multiplier;
+ #define SPECENUM_VALUE142NAME "User_Effect_3"
+ #define SPECENUM_VALUE143 EFT_USER_EFFECT_4
+ #define SPECENUM_VALUE143NAME "User_Effect_4"
++/* Freeciv45: base content citizens of one city that start out unhappy */
++#define SPECENUM_VALUE144 EFT_CITY_UNREST
++#define SPECENUM_VALUE144NAME "City_Unrest"
+ /* Keep this last */
+ #define SPECENUM_COUNT EFT_COUNT
+ #include "specenum_gen.h"
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 548fdab..171ec6f 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -74,7 +74,9 @@ Differences from sandbox
+   Despotism, Monarchy, Communism or Fundamentalism. They stand in for
+   the whip too: disbanded in a city ("Disband recovering production")
+   each puts 30 shields into the build, whatever it cost, so a citizen
+-  becomes 30 shields. No unhappiness follows a draft yet.
++  becomes 30 shields. A Levy makes one of the city's content citizens
++  unhappy for ten turns, Militia and Conscripts three, and a player
++  drafts at most one unit a turn per 400 land tiles (1 to 5).
+ - The roster: 78 unit types over seven eras (notes/freeciv45/design/
+   units-and-upgrades.md), with one strength number for attack and
+   defence (0 attack for scouts, transports, machine gunners, air
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index 1971563..6ce5137 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -6304,29 +6304,29 @@ reqs    =
+     }
+ 
+ ; Freeciv45 draft and whip unrest (issue 107): script.lua keeps up to three hidden buildings in a city that
+-; drafted or whipped in the last ten turns, worth 1, 2 and 4 faces. Make_Content sums with the city's temples and
+-; the like, and a sum at or below zero makes nobody content (common/city.c, citizen_content_buildings), so the
+-; unrest cancels content that buildings would give; it cannot make a base-content citizen unhappy.
++; drafted or whipped in the last ten turns, worth 1, 2 and 4 faces. City_Unrest (a Freeciv45 engine effect, issue
++; 157) makes that many of the city's base content citizens start out unhappy, before temples and the like, so the
++; unrest bites in a city with no content buildings too.
+ 
+ [effect_draft_unrest_1]
+-type    = "Make_Content"
+-value   = -1
++type    = "City_Unrest"
++value   = 1
+ reqs    =
+     { "type", "name", "range"
+       "Building", "Draft Unrest 1", "City"
+     }
+ 
+ [effect_draft_unrest_2]
+-type    = "Make_Content"
+-value   = -2
++type    = "City_Unrest"
++value   = 2
+ reqs    =
+     { "type", "name", "range"
+       "Building", "Draft Unrest 2", "City"
+     }
+ 
+ [effect_draft_unrest_4]
+-type    = "Make_Content"
+-value   = -4
++type    = "City_Unrest"
++value   = 4
+ reqs    =
+     { "type", "name", "range"
+       "Building", "Draft Unrest 4", "City"
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index a75ecbe..d7f0b5b 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -1020,9 +1020,9 @@ end
+ -- Freeciv45 draft and whip unrest (issue 107; notes/freeciv45/mechanics.md, "Production, whipping and drafting").
+ -- Building a draft unit spends a citizen at once, so the city resents it: FC45_UNREST_FACES[type] faces for
+ -- FC45_UNREST_TURNS turns, where the Levy (the whip of eras I to III) costs one and Militia and Conscripts (the
+--- draft) three, and several add up. The faces are three hidden buildings worth 1, 2 and 4 (Make_Content -1, -2,
+--- -4 in effects.ruleset), so a city holds 0 to 7. Make_Content cannot go below zero in a city, so the unrest
+--- cancels content from temples and the like and never touches the base content citizens. Each city's record is
++-- draft) three, and several add up. The faces are three hidden buildings worth 1, 2 and 4 (City_Unrest 1, 2 and
++-- 4 in effects.ruleset), so a city holds 0 to 7. City_Unrest makes that many base content citizens unhappy
++-- before temples and the like count (issue 157). Each city's record is
+ -- a scalar global "<expiry turn>:<faces>;..." so it survives a save; turn_begin drops what expired and sets the
+ -- buildings to match, and a sold or lost unrest building is put back at once.
+ -- The draft limit: one draft a turn per FC45_DRAFT_LAND_PER land tiles of the map, 1 to 5. The draft that
+diff --git a/doc/README.effects b/doc/README.effects
+index 11c1890..7002543 100644
+--- a/doc/README.effects
++++ b/doc/README.effects
+@@ -310,6 +310,12 @@ City_Unhappy_Size
+     in larger cities, new citizens above this limit start out unhappy. (Before
+     Empire_Size_Base/Step are applied.)
+ 
++City_Unrest
++    Make amount of the city's base content citizens (City_Unhappy_Size after
++    Empire_Size_Base/Step) start out unhappy instead. Unlike a negative
++    Make_Content it also works in a city with no content buildings. Freeciv45
++    sets it after a draft or a whip.
++
+ City_Vision_Radius_Sq
+     Increase city vision radius in squared distance by amount tiles.
+     There must be a base effect present in the ruleset;
+-- 
+2.56.0
+

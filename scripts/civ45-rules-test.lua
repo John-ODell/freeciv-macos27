@@ -487,19 +487,19 @@ function fc45_unrest_test_run(tester, city, spot, levy, militia)
   end
   local key = fc45_gp_key("fc45_unrest_", city.id)
   local u1, u2, u4 = find.building_type("Draft Unrest 1"), find.building_type("Draft Unrest 2"), find.building_type("Draft Unrest 4")
-  local mc0 = effects.city_bonus(city, "Make_Content")
+  local mc0 = effects.city_bonus(city, "City_Unrest")
   local lv = edit.create_unit(tester, spot, levy, 0, city, -1)
   fc45_draft_unit_built(lv, city)
-  local mc1, rec1 = effects.city_bonus(city, "Make_Content"), rawget(_G, key)
-  log.normal("FC45TEST unrest after a Levy: Make_Content %d to %d, record %s", mc0, mc1, tostring(rec1))
-  check("a Levy built in Testerburg costs one content face for ten turns (Draft Unrest 1)",
-        city:has_building(u1) and not city:has_building(u2) and mc1 == mc0 - 1
+  local mc1, rec1 = effects.city_bonus(city, "City_Unrest"), rawget(_G, key)
+  log.normal("FC45TEST unrest after a Levy: City_Unrest %d to %d, record %s", mc0, mc1, tostring(rec1))
+  check("a Levy built in Testerburg makes one content citizen unhappy for ten turns (Draft Unrest 1, City_Unrest 1)",
+        city:has_building(u1) and not city:has_building(u2) and mc0 == 0 and mc1 == 1
         and rec1 == string.format("%d:1;", game.turn() + 10))
   local ml = edit.create_unit(tester, spot, militia, 0, city, -1)
   fc45_draft_unit_built(ml, city)
-  local mc2 = effects.city_bonus(city, "Make_Content")
-  check("a Militia drafted there too adds three faces, four in all (Draft Unrest 4 alone)",
-        city:has_building(u4) and not city:has_building(u2) and not city:has_building(u1) and mc2 == mc0 - 4)
+  local mc2 = effects.city_bonus(city, "City_Unrest")
+  check("a Militia drafted there too adds three faces, four in all (Draft Unrest 4 alone, City_Unrest 4)",
+        city:has_building(u4) and not city:has_building(u2) and not city:has_building(u1) and mc2 == 4)
   edit.remove_building(city, u4)
   fc45_unrest_lost(city, u4, "sold", nil)
   check("an unrest building sold away comes straight back", city:has_building(u4))
@@ -515,6 +515,30 @@ function fc45_unrest_test_run(tester, city, spot, levy, militia)
   -- The Levy's face ends next turn and the Militia's three stay.
   fc45_gp_set(key, string.format("%d:1;%d:3;", game.turn() + 1, game.turn() + 10))
   fc45_test.unrest_city = city.id
+  -- City_Unrest reaches the base content citizens (issue 157): a new size-1 city with no buildings has one
+  -- content citizen; one face of unrest makes it unhappy, so the city falls into disorder.
+  local site = nil
+  for t in city.tile:square_iterate(8) do
+    if site == nil and t:sq_distance(city.tile) >= 49 and t:city() == nil and t:num_units() == 0
+       and (t.terrain:rule_name() == "Grassland" or t.terrain:rule_name() == "Plains") then site = t end
+  end
+  if site ~= nil and edit.create_city(tester, site, "Unrestia") then
+    local c3 = site:city()
+    local calm = not c3:is_unhappy()
+    edit.create_building(c3, u1)
+    local riot = c3:is_unhappy()
+    edit.remove_building(c3, u1)
+    -- edit.remove_building does not refresh the city; adding a building with no mood effect does.
+    edit.create_building(c3, find.building_type("Barracks"))
+    local calm_again = not c3:is_unhappy()
+    log.normal("FC45TEST City_Unrest in a new size %d city: calm %s, in disorder with one face %s, calm again %s",
+               c3.size, tostring(calm), tostring(riot), tostring(calm_again))
+    check("one face of unrest makes the only (base content) citizen of a city with no buildings unhappy",
+          calm and riot and calm_again)
+    edit.remove_city(c3)
+  else
+    log.normal("FC45TEST SKIP no site for Unrestia")
+  end
 end
 
 function fc45_unrest_test_later()
