@@ -1,0 +1,135 @@
+From 2128a33def82569c1a6ce0659906cc196fd879c6 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Mon, 19 Oct 2026 12:40:46 -0500
+Subject: [PATCH] Tileset: draw the city bar's nation flag as a small chip
+
+The city bar drew the nation flag at the flag sprite's own size, which
+for the large flags is 120 by 80 pixels at 192 pixel tiles, the biggest
+thing on a small city's tile and in front of its art. A tileset can now
+set citybar_flag_height (in tileset pixels, default 0 for the flag's own
+size); the city bar scales the flag to that height, keeping its shape,
+and the bar's row takes the height of its text instead of the flag's.
+The Qt client's scaled sprite draw smooths the scaling.
+
+Issue 252.
+---
+ client/gui-qt/canvas.cpp |  1 +
+ client/mapview_common.c  | 22 ++++++++++++++++++----
+ client/tilespec.c        | 15 +++++++++++++++
+ client/tilespec.h        |  1 +
+ 4 files changed, 35 insertions(+), 4 deletions(-)
+
+diff --git a/client/gui-qt/canvas.cpp b/client/gui-qt/canvas.cpp
+index 85bd9cb..cec77f4 100644
+--- a/client/gui-qt/canvas.cpp
++++ b/client/gui-qt/canvas.cpp
+@@ -197,6 +197,7 @@ void qtg_canvas_put_sprite_full_scaled(struct canvas *pcanvas,
+   get_sprite_dimensions(sprite, &width, &height);
+ 
+   p.begin(&pcanvas->map_pixmap);
++  p.setRenderHint(QPainter::SmoothPixmapTransform);
+   p.drawPixmap(canvas_x, canvas_y, canvas_w, canvas_h,
+                *sprite->pm, 0, 0, width, height);
+   p.end();
+diff --git a/client/mapview_common.c b/client/mapview_common.c
+index 376e062..d85f723 100644
+--- a/client/mapview_common.c
++++ b/client/mapview_common.c
+@@ -2000,6 +2000,12 @@ static void show_full_citybar(struct canvas *pcanvas,
+     }
+ 
+     get_flag_dimensions(flag, &flag_rect, tileset_svg_flag_height(tileset));
++    if (tileset_citybar_flag_height(tileset) > 0 && flag_rect.h > 0) {
++      /* A small chip beside the name, not a large flag over the city */
++      flag_rect.w = MAX(1, flag_rect.w * tileset_citybar_flag_height(tileset)
++                           / flag_rect.h);
++      flag_rect.h = tileset_citybar_flag_height(tileset);
++    }
+     flag_rect.w *= map_zoom; flag_rect.h *= map_zoom;
+     get_sprite_dimensions(occupy, &occupy_rect.w, &occupy_rect.h);
+     occupy_rect.w *= map_zoom; occupy_rect.h *= map_zoom;
+@@ -2119,10 +2125,18 @@ static void show_full_citybar(struct canvas *pcanvas,
+   owner_color = get_player_color(tileset, city_owner(pcity));
+ 
+   if (gui_options.draw_city_names) {
+-    canvas_put_flag_sprite(pcanvas,
+-                           flag_rect.x / map_zoom, flag_rect.y / map_zoom,
+-                           flag_rect.w / map_zoom, flag_rect.h / map_zoom,
+-                           flag);
++    if (tileset_citybar_flag_height(tileset) > 0) {
++      canvas_put_sprite_full_scaled(pcanvas,
++                                    flag_rect.x / map_zoom,
++                                    flag_rect.y / map_zoom,
++                                    flag_rect.w / map_zoom,
++                                    flag_rect.h / map_zoom, flag);
++    } else {
++      canvas_put_flag_sprite(pcanvas,
++                             flag_rect.x / map_zoom, flag_rect.y / map_zoom,
++                             flag_rect.w / map_zoom, flag_rect.h / map_zoom,
++                             flag);
++    }
+     /* XXX: canvas_put_line() doesn't currently take map_zoom into account.
+      * Should it?
+      * In the meantime, don't compensate with '/ map_zoom' here, unlike
+diff --git a/client/tilespec.c b/client/tilespec.c
+index eeac37a..80523c4 100644
+--- a/client/tilespec.c
++++ b/client/tilespec.c
+@@ -540,6 +540,7 @@ struct tileset {
+ 
+   int max_upkeep_height;
+   int svg_height;
++  int citybar_flag_height;
+ 
+   char *main_intro_filename;
+ 
+@@ -2302,6 +2303,10 @@ static struct tileset *tileset_read_toplevel(const char *tileset_name,
+   t->unit_upkeep_small_offset_y = secfile_lookup_int_default(file, t->unit_upkeep_offset_y,
+                                                              "tilespec.unit_upkeep_small_offset_y");
+   t->svg_height = secfile_lookup_int_default(file, 44, "tilespec.svg_height");
++  /* Freeciv45: the height to draw the nation flag on the city bar at, so a
++   * large flag does not cover the city; 0 keeps the flag's own size */
++  t->citybar_flag_height
++    = secfile_lookup_int_default(file, 0, "tilespec.citybar_flag_height");
+ 
+   t->city_size_offset_x = t->scale * t->city_size_offset_x;
+   t->city_size_offset_y = t->scale * t->city_size_offset_y;
+@@ -2324,6 +2329,7 @@ static struct tileset *tileset_read_toplevel(const char *tileset_name,
+   t->occupied_offset_x = t->scale * t->occupied_offset_x;
+   t->occupied_offset_y = t->scale * t->occupied_offset_y;
+   t->svg_height *= t->scale;
++  t->citybar_flag_height *= t->scale;
+ 
+   if (t->scale != 1.0f
+       && t->unit_upkeep_offset_y != tileset_tile_height(t)) {
+@@ -8186,6 +8192,15 @@ int tileset_svg_flag_height(struct tileset *t)
+   return t->svg_height;
+ }
+ 
++/************************************************************************//**
++  Return the height the city bar draws the nation flag at, or 0 for the
++  flag's own size.
++****************************************************************************/
++int tileset_citybar_flag_height(const struct tileset *t)
++{
++  return t->citybar_flag_height;
++}
++
+ /************************************************************************//**
+   Load sprite from popup image tag
+ ****************************************************************************/
+diff --git a/client/tilespec.h b/client/tilespec.h
+index 6797aa7..f3c294d 100644
+--- a/client/tilespec.h
++++ b/client/tilespec.h
+@@ -442,6 +442,7 @@ int tileset_unit_layout_small_offset_y(const struct tileset *t);
+ int tileset_small_sprite_width(const struct tileset *t);
+ int tileset_small_sprite_height(const struct tileset *t);
+ int tileset_citybar_offset_y(const struct tileset *t);
++int tileset_citybar_flag_height(const struct tileset *t);
+ int tileset_tilelabel_offset_y(const struct tileset *t);
+ float tileset_scale(const struct tileset *t);
+ float tileset_pixel_ratio(const struct tileset *t);
+-- 
+2.56.0
+

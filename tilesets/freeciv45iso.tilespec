@@ -82,6 +82,10 @@ city_size_offset_y = 0
 ; offset the city bar text by this amount (from the city tile origin)
 citybar_offset_y = 60
 
+; The city bar draws the nation flag as a chip this high (tileset pixels), so the flag does not
+; cover the city's own art; 0 draws it at its own size
+citybar_flag_height = 32
+
 ; offset the tile label text by this amount
 tilelabel_offset_y = 30
 
