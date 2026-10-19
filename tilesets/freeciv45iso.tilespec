@@ -4,7 +4,7 @@
 ; Freeciv45 iso tileset, built by tilesets/make-freeciv45iso.py from amplio2.tilespec; see RECORD.md.
 
 ; Format and options of this tilespec file:
-options = "+Freeciv-3.2-tilespec"
+options = "+Freeciv-3.2-tilespec duplicates_ok"
 
 ; A simple name for the tileset specified by this file:
 name = "Freeciv45 iso"
@@ -172,8 +172,10 @@ files =
   "freeciv45iso/animals.spec",
   "misc/buildings-large.spec",
   "misc/wonders-large.spec",
+  "freeciv45iso/building_icons.spec",
   "misc/space.spec",
   "misc/techs.spec",
+  "freeciv45iso/tech_icons.spec",
   "misc/treaty.spec",
   "freeciv45iso/nuke.spec",
   "freeciv45iso/explosions.spec",

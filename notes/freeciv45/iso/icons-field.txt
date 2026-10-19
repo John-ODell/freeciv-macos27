@@ -1,0 +1,28 @@
+# Tech icons and building pictures (issue 254): a civ45 game with the human player given a list of techs, a research goal, and a
+# city that has a dozen improvements and wonders built, so the research report, the city dialog's improvements and its build list show
+# the art pack's icons. Shots: the research report, the city dialog, and its production chooser. Run with QT_SCALE_FACTOR=2 on the
+# 3680 x 2284 screen (SCALE=1 and the 1728 x 1030 screen for the 1x shots); fog and diplomacy off, as units-cities-field.txt.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd local ok, e = pcall(function() local u0; for p in players_iterate() do if p:is_human() then H = p; for u in p:units_iterate() do u0 = u.tile; break end end end; for _, t in ipairs({"Alphabet", "Masonry", "Bronze Working", "Ceremonial Burial", "Pottery", "Currency", "Writing", "Mathematics", "Philosophy", "Monarchy", "Construction", "Iron Working", "Horseback Riding", "Warrior Code", "Map Making", "Mysticism", "Literacy", "Trade", "Seafaring", "The Republic", "Astronomy", "Banking", "Bridge Building", "Monotheism", "Feudalism", "University", "Medicine", "Invention", "Sanitation", "Engineering", "Gunpowder", "Navigation", "Physics"}) do pcall(function() edit.give_tech(H, find.tech_type(t), -1, false, "cheat") end) end; edit.create_city(H, u0, "Alpha") end); log.error("T " .. tostring(ok) .. tostring(e))
+wait 3000
+chat /lua cmd local ok, e = pcall(function() local c; for x in H:cities_iterate() do c = x end; for _, n in ipairs({"Temple", "Library", "Marketplace", "Granary", "City Walls", "Barracks", "Courthouse", "Aqueduct", "Harbor", "Amphitheater", "University", "Bank", "Pyramids", "Great Library", "Colossus", "Hanging Gardens", "Lighthouse", "Great Wall", "Copernicus' Observatory"}) do pcall(function() edit.create_building(c, find.building_type(n)) end) end end); log.error("B " .. tostring(ok) .. tostring(e))
+wait 2000
+research Chivalry
+wait 2500
+shot research
+key space
+wait 1500
+shot research-list
+dismiss
+click tip Map
+wait 1500
+opencity Alpha
+wait 3500
+shot city
+click button Change
+wait 2500
+shot city-build
+quit

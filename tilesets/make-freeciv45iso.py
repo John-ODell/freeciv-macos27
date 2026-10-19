@@ -35,6 +35,12 @@ right (UNIT_FLIP), scaled to a common figure size and set on a 160 x 128 cell (u
 one (cities.spec). amplio2's units.spec, extra_units.spec, cities.spec and veterancy.spec go; its sprites stay only
 where the art pack has none (see RECORD.md); --no-bk-units keeps amplio2's units, cities and marks.
 
+Tech icons and building pictures (issue 254): the art repo's freeciv45/06_tech_icons (runs 1 and 2) and
+07_building_icons (runs 1 to 4), cleaned like the units and fitted into the client's own icon cells (48 x 48 for a
+tech, 64 x 48 for a building, the sizes the Qt client draws at 1x and 2x alike). They go in tech_icons.spec and
+building_icons.spec, listed after misc/techs.spec and misc/wonders-large.spec under duplicates_ok, so they override the
+stock icons they cover and the rest stay as they were; --no-bk-icons leaves the stock icons alone.
+
 From amplio2 (Freeciv 3.2.6, GPL-2.0-or-later, the artists named in each spec's [info] section, copied verbatim):
 every spec file amplio2.tilespec lists under amplio2/ except the ocean cells the painted ground replaces
 (SKIPPED; the forest and jungle overlays too with --canopy painted), each sprite scaled 2x with nearest-neighbour sampling (recut). The tilespec is amplio2's with the sizes
@@ -505,7 +511,7 @@ def relief_sections(ours, canopy=False):
     assert all('layer2_match_with = "%s"' % t in out["tile_" + t] for t in trees)
     return out
 
-def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False, units=False):
+def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False, units=False, icons=False):
     """amplio2.tilespec with sizes and offsets doubled, pixel_ratio 2, the file list renamed, and freeciv45test's
     layer and terrain sections in place of amplio2's (amplio2's other terrains kept, matched as mountains)."""
     ours = square_sections(data, files)
@@ -534,6 +540,8 @@ def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=Fa
         if section == "tilespec":
             if key == "files":
                 out.append("files =\n" + ",\n".join('  "%s"' % f for f in files)); in_files = True; continue
+            if icons and key == "options":       # tech_icons.spec and building_icons.spec come after the stock misc/ ones
+                out.append(line.rstrip().rstrip('"') + ' duplicates_ok"'); continue
             if key == "name": out.append('name = "Freeciv45 iso"'); continue
             if key == "priority": out.append("priority = 4"); continue
             if key == "summary":
@@ -544,6 +552,9 @@ def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=Fa
             if num is not None and (key in ("normal_tile_width", "normal_tile_height", "svg_height")
                                     or key.endswith(("_offset_x", "_offset_y"))):
                 out.append("%s = %d" % (key, int(num) * AMPLIO_SCALE))
+                if key == "citybar_offset_y":       # patch 0049 (issue 252): the flag is a chip, not a banner over the city
+                    out.append("\n; The city bar draws the nation flag as a chip this high (tileset pixels), so the flag does not\n"
+                               "; cover the city's own art; 0 draws it at its own size\ncitybar_flag_height = 32")
                 if key == "normal_tile_height":
                     out.append("\n; Tileset pixels per screen point: the map shows a %dx%d tile as %dx%d points, so on a 2x\n"
                                "; (Retina) screen every pixel is drawn (Freeciv45 fork, Qt client).\npixel_ratio = %d"
@@ -750,6 +761,60 @@ def marks(art, out_dir, record):
                   % (NAME, MARK_RUN, ", ".join("`%s`" % n for n in sorted({n for _, n in ACTIVITIES + VET})), sheet.width, sheet.height))
     return {t for t, _ in ACTIVITIES + VET} | set(VET_UNUSED), sorted(badges)
 
+# Tech icons and building pictures (issue 254): the art pack's freeciv45/06_tech_icons and 07_building_icons, cut at 192 px (post/raw).
+# The client draws the research screen's icons at 48 x 48 and a building's picture at 64 x 48, whatever pixel_ratio is (only the
+# map follows it), so each picture is fitted into that cell. What ships: every tech of the first two panels but the two that read
+# wrongly (retaken: ICON_RETAKES), and every building and wonder picture but the four that copy a real monument or are being
+# retaken (BUILD_SKIP); the second take of the colossus (the first has a face) and the pyramids. The tags the runs do not
+# give keep the stock misc/ icons: ours are listed after the stock files and the tilespec says duplicates_ok, so ours win.
+TECH_RUNS = ("run1/panel1", "run2/panel2")
+TECH_SKIP = ("the_wheel", "the_republic")
+TECH_CELL, TECH_FILL = 48, 44
+BUILD_RUNS = ("run1/panel1", "run2/panel2", "run3/panel3", "run4/panel4")
+BUILD_PICK = {"colossus": "colossus_alt", "pyramids": "pyramids_alt"}
+BUILD_SKIP = ("georgia_guidestones", "united_nations", "statue_of_liberty", "shakespeares_theatre")
+BUILD_CELL, BUILD_FILL = (64, 48), (62, 46)
+
+def raw_names(base, runs):
+    """The names of the cuts in post/raw of each run, in run order."""
+    out = []
+    for r in runs:
+        d = os.path.join(base, r, "post", "raw")
+        out += [f[:-4] for f in sorted(os.listdir(d)) if f.endswith(".png")]
+    return out
+
+def icon_sheet(base, runs, names, cell, fill, out_dir, sheet_name, tag_prefix, comment):
+    """sheet_name.png and .spec: the named cuts, tidied and fitted into fill, centred in cells of `cell`, ten to a row."""
+    cw, ch = cell; cols = 10; rows = (len(names) + cols - 1) // cols
+    sheet = Image.new("RGBA", (cols * cw, rows * ch), (0, 0, 0, 0)); cells = []
+    for i, (tag, name) in enumerate(names):
+        im = tidy(find_cut(base, runs, name)); im = scaled(im, min(fill[0] / im.width, fill[1] / im.height))
+        x, y = (i % cols) * cw, (i // cols) * ch
+        sheet.alpha_composite(im, (x + (cw - im.width) // 2, y + (ch - im.height) // 2)); cells.append((i // cols, i % cols, [tag_prefix + tag]))
+    sheet.save(os.path.join(out_dir, sheet_name + ".png"), optimize=True)
+    write_spec(out_dir, sheet_name, comment, [("main", 0, cw, ch, cells)])
+    return sheet.size
+
+def icons(tech_art, build_art, out_dir, record):
+    """tech_icons.spec (a.<tech>) and building_icons.spec (b.<building>); returns the two tag lists."""
+    techs = [n for n in raw_names(tech_art, TECH_RUNS) if not n.endswith("_alt") and n not in TECH_SKIP]
+    size = icon_sheet(tech_art, TECH_RUNS, [(n, n) for n in techs], (TECH_CELL, TECH_CELL), (TECH_FILL, TECH_FILL), out_dir,
+                      "tech_icons", "a.", "Tech icons for the Freeciv45 iso tileset: the Freeciv45 art pack's freeciv45/06_tech_icons\n"
+                      "runs 1 and 2, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells." % (NAME, TECH_CELL, TECH_CELL))
+    record.append("| `%s/tech_icons.spec` | the art pack's tech icons (`freeciv45/06_tech_icons`, %s, `post/raw`), %d of civ45's techs: %s | cleaned "
+                  "(specks, fringe), fitted into %dx%d | %dx%d |" % (NAME, ", ".join("`%s`" % r for r in TECH_RUNS), len(techs),
+                  ", ".join("`%s`" % n for n in techs), TECH_FILL, TECH_FILL, *size))
+    names = [n for n in raw_names(build_art, BUILD_RUNS) if not n.endswith("_alt") and n not in BUILD_SKIP]
+    pick = [(n, BUILD_PICK.get(n, n)) for n in names]
+    size = icon_sheet(build_art, BUILD_RUNS, pick, BUILD_CELL, BUILD_FILL, out_dir, "building_icons", "b.",
+                      "Building and wonder pictures for the Freeciv45 iso tileset: the Freeciv45 art pack's\n"
+                      "freeciv45/07_building_icons runs 1 to 4, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells."
+                      % (NAME, *BUILD_CELL))
+    record.append("| `%s/building_icons.spec` | the art pack's building pictures (`freeciv45/07_building_icons`, %s, `post/raw`), %d of civ45's: %s "
+                  "| cleaned (specks, fringe), fitted into %dx%d | %dx%d |" % (NAME, ", ".join("`%s`" % r for r in BUILD_RUNS), len(pick),
+                  ", ".join("`%s`" % (b if b == n else "%s` (as `%s" % (b, n)) for n, b in pick), *BUILD_FILL, *size))
+    return techs, [n for n, _ in pick], [b for n, b in pick]
+
 RECORD_HEAD = """# %(name)s: where every sprite came from
 
 The isometric Freeciv45 tileset (issue 190): %(w)dx%(h)d diamonds at `pixel_ratio = 2`, amplio2's tile doubled, so the
@@ -803,6 +868,9 @@ def main():
     ap.add_argument("--no-resources", action="store_true", help="keep amplio2's resource sprites")
     ap.add_argument("--units-art", help="the art repo's freeciv45/04_units (default: next to --art)")
     ap.add_argument("--cities-art", help="the art repo's freeciv45/05_cities (default: next to --art)")
+    ap.add_argument("--tech-art", help="the art repo's freeciv45/06_tech_icons (default: next to --art)")
+    ap.add_argument("--building-art", help="the art repo's freeciv45/07_building_icons (default: next to --art)")
+    ap.add_argument("--no-bk-icons", action="store_true", help="keep the stock tech icons and building pictures")
     ap.add_argument("--no-bk-units", action="store_true", help="keep amplio2's units, cities and marks")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
@@ -839,6 +907,11 @@ def main():
         new, unit_props = units(a.units_art or os.path.join(base, "04_units"), a.data, out_dir, painted_record); own |= new
         new, city_props = cities(a.cities_art or os.path.join(base, "05_cities"), a.data, out_dir, painted_record); own |= new
         new, mark_props = marks(a.units_art or os.path.join(base, "04_units"), out_dir, painted_record); own |= new
+    tech_props = building_props = []
+    if not a.no_bk_icons:
+        base = os.path.dirname(os.path.abspath(a.art))
+        tech_props, building_props, _ = icons(a.tech_art or os.path.join(base, "06_tech_icons"),
+                                              a.building_art or os.path.join(base, "07_building_icons"), out_dir, painted_record)
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -877,8 +950,11 @@ def main():
             drop.prefixes = ()
             sq.recut(a.data, rel, out_dir, amplio_record, scale=sq.map_misc_scale(rel))
             files.append("%s/%s" % (NAME, os.path.basename(rel)))
-        else: files.append(rel)
-    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku)
+        else:
+            files.append(rel)
+            if not a.no_bk_icons and rel == "misc/techs.spec": files.append("%s/tech_icons.spec" % NAME)
+            if not a.no_bk_icons and rel == "misc/wonders-large.spec": files.append("%s/building_icons.spec" % NAME)
+    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku, icons=not a.no_bk_icons)
     with open(os.path.join(out_dir, "RECORD.md"), "w") as f:
         f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED if not (canopy and s in CANOPY)),
                              "canopy": " `terrain2.spec`, the forest and jungle overlays, moves the same way over painted "
@@ -919,6 +995,21 @@ def main():
                     "outpost bases.\n" % (len(unit_props), ", ".join("`%s`" % n for n in unit_props), len(city_props),
                                            ", ".join("`%s`" % n for n in city_props), len(mark_props),
                                            ", ".join("`%s`" % n for n in mark_props)))
+        if not a.no_bk_icons:
+            f.write("\n## Tech icons and building pictures\n\n`tech_icons.spec` and `building_icons.spec`: the Freeciv45 art pack's "
+                    "tech icons and building and wonder pictures (John O'Dell's sheet workflow with OpenAI image generation "
+                    "through Codex, art repo folders `freeciv45/06_tech_icons` and `freeciv45/07_building_icons`, issue 254). "
+                    "Each cell is cleaned (stray specks out, the colour fringe of the semi-transparent edge defringed, see "
+                    "`defringe`), scaled to fit and centred on the client's own icon cell: %dx%d for a tech, %dx%d for a "
+                    "building, the sizes the Qt client draws at 1x and 2x alike (only the map follows `pixel_ratio`). The "
+                    "tilespec sets `duplicates_ok` and lists the two specs after `misc/techs.spec` and "
+                    "`misc/wonders-large.spec`, so these tags override the stock icons and every other tag keeps its stock "
+                    "icon. Techs (%d, runs 1 and 2): %s. Kept from the stock set until Codex's retakes land: `the_wheel`, "
+                    "`the_republic` and the techs of runs 3 and 4. Buildings (%d, runs 1 to 4; `colossus` and `pyramids` are "
+                    "the `_alt` takes): %s. Kept stock: %s. GPL-2.0-or-later, like the rest of the folder.\n"
+                    % (TECH_CELL, TECH_CELL, *BUILD_CELL, len(tech_props), ", ".join("`%s`" % n for n in tech_props),
+                       len(building_props), ", ".join("`%s`" % n for n in building_props),
+                       ", ".join("`%s`" % n for n in BUILD_SKIP)))
     print("\n".join(amplio_record + painted_record))
 
 if __name__ == "__main__":
