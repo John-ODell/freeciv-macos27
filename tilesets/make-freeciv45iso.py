@@ -27,6 +27,14 @@ amplio2's relief overlays (RELIEF, on layer 2) over flat painted ground (RELIEF_
 199): the painted canopy read flat in a real game, so they draw amplio2's tree overlays the same way (CANOPY) over
 painted grassland (CANOPY_BASE), until our own tree props replace them; --canopy painted keeps the canopy.
 
+Units and cities (issue 245): the 85 civ45 unit sprites, the ten city styles in five sizes (open and walled; in iso the
+walled sprite is the whole city), the activity and veteran marks and extra.ruins come from the art repo's
+freeciv45/04_units and 05_cities runs (UNIT_RUNS, CITY_PICK, MARK_RUN). Each panel cell is cleaned (stray specks out, the
+colour fringe of the semi-transparent edge defringed, see defringe), turned to face left where the art drew it facing
+right (UNIT_FLIP), scaled to a common figure size and set on a 160 x 128 cell (units.spec, ten to a row) or a 192 x 144
+one (cities.spec). amplio2's units.spec, extra_units.spec, cities.spec and veterancy.spec go; its sprites stay only
+where the art pack has none (see RECORD.md); --no-bk-units keeps amplio2's units, cities and marks.
+
 From amplio2 (Freeciv 3.2.6, GPL-2.0-or-later, the artists named in each spec's [info] section, copied verbatim):
 every spec file amplio2.tilespec lists under amplio2/ except the ocean cells the painted ground replaces
 (SKIPPED; the forest and jungle overlays too with --canopy painted), each sprite scaled 2x with nearest-neighbour sampling (recut). The tilespec is amplio2's with the sizes
@@ -36,7 +44,7 @@ usage: make-freeciv45iso.py --data ~/freeciv-builds/qt/share/freeciv
                             --art ~/Desktop/asset_generator/freeciv45/01_terrain_ground [--cutter SEAMLESS.py]
                             [--out tilesets] [--olive-pine] [--no-tone-match] [--no-level] [--no-blend]
                             [--no-relief] [--relief-base flat|painted] [--canopy amplio2|painted]
-                            [--land-grade L,A,B]
+                            [--land-grade L,A,B] [--units-art 04_units] [--cities-art 05_cities] [--no-bk-units]
 Needs Pillow (python3.14 on this Mac has it).
 """
 import argparse, glob, importlib.util, math, os, random, re, tempfile
@@ -55,6 +63,9 @@ AMPLIO_SCALE = 2
 # overlays unless --canopy amplio2 (CANOPY, the default) takes them back. water.spec stays for the rivers; its lake and ice cells are dropped (DROP_PREFIX), and so
 # are terrain1.spec's t.blend.* textures, which the client would fade in instead of the painted variant 1.
 SKIPPED = ("amplio2/terrain2.spec", "amplio2/ocean.spec")
+# amplio2 spec files the art pack's units and cities replace (issue 245): the new spec that stands in for each, or None. The
+# extra units are other rulesets' (civ45 uses none of them).
+BK_REPLACED = {"amplio2/units.spec": "units.spec", "amplio2/extra_units.spec": None, "amplio2/cities.spec": "cities.spec"}
 DROP_PREFIX = {"amplio2/water.spec": ("t.l0.", "t.l1."), "amplio2/terrain1.spec": ("t.blend.",)}
 # Relief (issue 194). A painted square seen from above turned into a diamond reads as flat ground, so hills and
 # mountains get amplio2's relief: transparent overlays in 16 forms, each matched to the same-type neighbours on the
@@ -494,7 +505,7 @@ def relief_sections(ours, canopy=False):
     assert all('layer2_match_with = "%s"' % t in out["tile_" + t] for t in trees)
     return out
 
-def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False):
+def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False, units=False):
     """amplio2.tilespec with sizes and offsets doubled, pixel_ratio 2, the file list renamed, and freeciv45test's
     layer and terrain sections in place of amplio2's (amplio2's other terrains kept, matched as mountains)."""
     ours = square_sections(data, files)
@@ -528,6 +539,8 @@ def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=Fa
             if key == "summary":
                 out.append('summary = _("Freeciv45 iso tileset: %dx%d diamonds, painted ground for every terrain, '
                            'amplio2 for the rest.")' % (W, H)); continue
+            if units and key in ("unit_offset_x", "unit_offset_y"):      # UNIT_CELL's top left, from the full tile's
+                out.append("%s = %d" % (key, (W - UNIT_CELL[0]) // 2 if key.endswith("x") else 0)); continue
             if num is not None and (key in ("normal_tile_width", "normal_tile_height", "svg_height")
                                     or key.endswith(("_offset_x", "_offset_y"))):
                 out.append("%s = %d" % (key, int(num) * AMPLIO_SCALE))
@@ -543,6 +556,199 @@ def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=Fa
     text = text.replace("[tilespec]\n", "[tilespec]\n\n; Freeciv45 iso tileset, built by tilesets/make-%s.py from "
                         "amplio2.tilespec; see RECORD.md.\n" % NAME, 1)
     open(os.path.join(out_root, NAME + ".tilespec"), "w").write(text)
+
+# Units, cities, marks and ruins (issue 245): the Freeciv45 art pack's units (freeciv45/04_units runs 1 to 5, --units-art) and
+# cities (freeciv45/05_cities, --cities-art), cut at 192 px = one tile wide (post/raw, sizes as drawn), in place of
+# amplio2's. Which sprites: the ruleset's. Every `graphic` of civ45's units.ruleset gets its unit (the better take, UNIT_PICK;
+# flipped to face screen-left, UNIT_FLIP) and every `city.<style>` of its styles.ruleset gets city_0 to 4 and wall_0 to 4;
+# nothing else of the runs ships (the second takes, the unused ruins, the panels). Each sprite is tidied first: stray
+# pieces of the neighbouring cell dropped, the colour of the translucent edge pixels bled in from the opaque ones (the cut
+# has a red and yellow fringe), trimmed.
+UNIT_RUNS = ("run1/panel1", "run2/panel2", "run3/panel3", "run4/panel4")
+UNIT_PICK = {"musketeers": "musketeers_alt"}     # the first take faces right; the second faces left
+UNIT_FLIP = ("grenadiers",)                       # the one pick that faces right
+UNIT_CELL = (160, 128)    # a unit's cell: drawn at unit_offset (16, 0), so its middle is the tile's middle and its top is the full tile's
+UNIT_FOOT = 108           # the foot of a unit in its cell: 12 px below the diamond's centre (the full tile's top is 48 px above the tile)
+UNIT_SCALE = 0.7          # the cut's 192 px cell to the map's (a standing person comes out 80 px tall, amplio2's 90)
+UNIT_MAX = (150, UNIT_FOOT)
+CITY_PICK = ("city_0", "city_1", "city_2", "city_3", "city_4", "wall_0", "wall_1", "wall_2", "wall_3", "wall_4")
+RUINS_PICK = "ruins_1"                            # ruins_2 to 5 are takes for the other styles
+# The marks (04_units run 5): tag of the tileset, the cut's name. unit.irrigate and unit.cultivate are two marks here (the
+# axe and the water channel); amplio2 shared one.
+MARK_RUN = "run5/panel5"
+ACTIVITIES = [("unit.road", "road"), ("unit.rail", "rail"), ("unit.fortress", "fortress"), ("unit.airbase", "airbase"),
+              ("unit.fortified", "fortified"), ("unit.fortifying", "fortifying"), ("unit.sentry", "sentry"),
+              ("unit.patrol", "patrol"), ("unit.pillage", "pillage"), ("unit.cultivate", "cultivate"),
+              ("unit.irrigate", "irrigate"), ("unit.irrigation", "irrigate"), ("unit.plant", "plant"),
+              ("unit.transform", "transform"), ("unit.pollution", "pollution"), ("unit.goto", "goto"),
+              ("unit.convert", "convert"), ("unit.auto_explore", "auto_explore"),
+              ("unit.action_decision_want", "action_decision_want"), ("unit.farmland", "farmland"), ("unit.mine", "mine")]
+VET = [("unit.vet_1", "vet_1"), ("unit.vet_2", "vet_2"), ("unit.vet_3", "vet_3"), ("unit.tired", "tired"),
+       ("unit.lowfuel", "lowfuel")]
+VET_UNUSED = ["unit.vet_%d" % k for k in range(4, 10)]        # civ45 has four levels: green, veteran, hardened, elite
+MARK_CELL, VET_CELL = (56, 48), (128, 112)
+VET_SLOTS = {"unit.tired": 80, "unit.lowfuel": 112}           # the badges' centres across a vet cell; the vets are at 48
+
+def pieces(im, share=0.6, floor=8):
+    """The prop with only its pieces of alpha (8-connected, from alpha floor) at least `share` of the largest, each with
+    its soft rim 2 px out; the rest (fragments of the neighbouring cell) is cleared."""
+    a = im.getchannel("A"); w, h = a.size; px = a.load(); seen = bytearray(w * h); found = []
+    for y0 in range(h):
+        for x0 in range(w):
+            if px[x0, y0] < floor or seen[y0 * w + x0]: continue
+            todo, piece = [(x0, y0)], []; seen[y0 * w + x0] = 1
+            while todo:
+                x, y = todo.pop(); piece.append((x, y))
+                for nx in (x - 1, x, x + 1):
+                    for ny in (y - 1, y, y + 1):
+                        if 0 <= nx < w and 0 <= ny < h and not seen[ny * w + nx] and px[nx, ny] >= floor:
+                            seen[ny * w + nx] = 1; todo.append((nx, ny))
+            found.append(piece)
+    big = max(len(p) for p in found); keep = Image.new("L", (w, h), 0); kp = keep.load()
+    for piece in found:
+        if len(piece) >= share * big:
+            for x, y in piece: kp[x, y] = 255
+    keep = keep.filter(ImageFilter.MaxFilter(5))
+    out = im.copy(); out.putalpha(ImageChops.multiply(a, keep)); return out
+
+def defringe(im, floor=200, reach=4):
+    """The colour of every pixel below alpha `floor` replaced by the distance-weighted mean colour of the pixels at or
+    above it within `reach` px (alpha kept), so a translucent edge no longer carries the cut's red and yellow fringe."""
+    w, h = im.size; px = im.load(); out = im.copy(); op = out.load()
+    offs = [(dx, dy, 1.0 / (dx * dx + dy * dy)) for dy in range(-reach, reach + 1) for dx in range(-reach, reach + 1)
+            if dx or dy]
+    for y in range(h):
+        for x in range(w):
+            a = px[x, y][3]
+            if a == 0 or a >= floor: continue
+            sr = sg = sb = sw = 0.0
+            for dx, dy, wt in offs:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < w and 0 <= ny < h:
+                    r, g, b, na = px[nx, ny]
+                    if na >= floor: sr += r * wt; sg += g * wt; sb += b * wt; sw += wt
+            if sw: op[x, y] = (round(sr / sw), round(sg / sw), round(sb / sw), a)
+    return out
+
+def tidy(path, whole=False):
+    """A cut sprite as the tileset uses it: pieces (unless whole), defringed, trimmed."""
+    im = Image.open(path).convert("RGBA")
+    if not whole: im = pieces(im)
+    im = defringe(im)
+    return im.crop(im.getchannel("A").point(lambda v: 255 if v >= 16 else 0).getbbox())
+
+def write_spec(out_dir, base, comment, grids):
+    """base.spec for base.png: grids is [(name, y_top_left, dx, dy, [(row, column, [tags])])]."""
+    with open(os.path.join(out_dir, base + ".spec"), "w") as f:
+        f.write("; %s\n\n" % comment.replace("\n", "\n; ") +
+                '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    John O\'Dell (sheet workflow)\n"\n\n'
+                '[file]\ngfx = "%s/%s"\n\n' % (NAME, base))
+        for name, y, dx, dy, cells in grids:
+            f.write('[grid_%s]\n\nx_top_left = 0\ny_top_left = %d\ndx = %d\ndy = %d\n\ntiles = { "row", "column", "tag"\n%s\n}\n\n'
+                    % (name, y, dx, dy, "\n".join('  %d, %d, %s' % (r, c, ", ".join('"%s"' % t for t in tags))
+                                                 for r, c, tags in cells)))
+
+def ruleset_graphics(data, ruleset, prefix):
+    """The `graphic` tags of a civ45 ruleset file that start with prefix, in file order."""
+    text = open(os.path.join(data, "civ45", ruleset), errors="replace").read()
+    out = []
+    for g in re.findall(r'^graphic\s*=\s*"(%s[^"]*)"' % re.escape(prefix), text, re.M):
+        if g not in out: out.append(g)
+    return out
+
+def find_cut(base, runs, name):
+    paths = [os.path.join(base, r, "post", "raw", name + ".png") for r in runs]
+    found = [p for p in paths if os.path.exists(p)]
+    assert len(found) == 1, (name, found)
+    return found[0]
+
+def units(art, data, out_dir, record):
+    """units.png and units.spec: civ45's 85 unit sprites (`u.<name>_Idle`), ten to a row, each a UNIT_CELL."""
+    tags = [g[2:] for g in ruleset_graphics(data, "units.ruleset", "u.")]
+    cw, ch = UNIT_CELL; cols = 10; rows = (len(tags) + cols - 1) // cols
+    sheet = Image.new("RGBA", (cols * cw, rows * ch), (0, 0, 0, 0)); used = []
+    for i, name in enumerate(tags):
+        pick = UNIT_PICK.get(name, name); used.append(pick)
+        im = tidy(find_cut(art, UNIT_RUNS, pick))
+        if name in UNIT_FLIP: im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        s = min(UNIT_SCALE, UNIT_MAX[0] / im.width, UNIT_MAX[1] / im.height)
+        im = scaled(im, s); a = im.getchannel("A"); px = a.load(); tot = sx = 0
+        for y in range(0, im.height, 2):
+            for x in range(im.width): v = px[x, y]; tot += v; sx += v * x
+        mid = sx / tot if tot else im.width / 2                  # the body's middle, not the weapon's reach
+        x0 = min(max(round(cw / 2 - mid), 0), cw - im.width)
+        sheet.alpha_composite(im, ((i % cols) * cw + x0, (i // cols) * ch + UNIT_FOOT - im.height))
+    sheet.save(os.path.join(out_dir, "units.png"), optimize=True)
+    write_spec(out_dir, "units", "Units for the Freeciv45 iso tileset: the Freeciv45 art pack's units (freeciv45/04_units), one\n"
+               "per ruleset graphic, tidied and placed by tilesets/make-%s.py (see RECORD.md). A %dx%d cell, drawn at\n"
+               "unit_offset (16, 0), stands on the tile's middle." % (NAME, cw, ch),
+               [("main", 0, cw, ch, [(i // cols, i % cols, ["u.%s_Idle" % t]) for i, t in enumerate(tags)])])
+    record.append("| `%s/units.spec` | the art pack's units (`freeciv45/04_units`, `post/raw`): the %d sprites of civ45's `units.ruleset`; "
+                  "%s | cleaned (pieces, fringe), x%g (at most %dx%d), %s flipped | %dx%d |"
+                  % (NAME, len(tags), ", ".join("`%s`" % u for u in sorted(used)), UNIT_SCALE, UNIT_MAX[0], UNIT_MAX[1],
+                     ", ".join("`%s`" % u for u in UNIT_FLIP), cols * cw, rows * ch))
+    return {"u.%s_Idle" % t for t in tags}, sorted(used)
+
+def cities(art, data, out_dir, record):
+    """cities.png and cities.spec: for every style of civ45's styles.ruleset city_0 to 4 and wall_0 to 4, ten to a row, each
+    192x144 (a style scaled together, no bigger than the full tile), and the ruins as extra.ruins_mg."""
+    styles = [g[5:] for g in ruleset_graphics(data, "styles.ruleset", "city.")]
+    cw, ch = W, H * 3 // 2; cols = 10
+    def fit(im, s):
+        im = scaled(im, s); canvas = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+        canvas.alpha_composite(im, ((cw - im.width) // 2, min(ch, H + im.width // 4) - im.height)); return canvas
+    cells, used = [], []
+    for style in styles:
+        runs = ["run%d/panel%d" % (k, k) for k in range(1, 6)]
+        ims = []
+        for p in CITY_PICK:
+            name = "%s_%s" % (style, p); used.append(name); ims.append((p, tidy(find_cut(art, runs, name))))
+        s = min([1.0] + [min(cw / im.width, ch / im.height) for _, im in ims])
+        for p, im in ims: cells.append(("city.%s_%s" % (style, p), fit(im, s)))
+    ruin = tidy(find_cut(art, ["run%d/panel%d" % (k, k) for k in range(1, 6)], RUINS_PICK)); used.append(RUINS_PICK)
+    cells.append(("extra.ruins_mg", fit(ruin, min(1.0, cw / ruin.width, ch / ruin.height))))
+    rows = (len(cells) + cols - 1) // cols
+    sheet = Image.new("RGBA", (cols * cw, rows * ch), (0, 0, 0, 0))
+    for i, (_, c) in enumerate(cells): sheet.paste(c, ((i % cols) * cw, (i // cols) * ch))
+    sheet.save(os.path.join(out_dir, "cities.png"), optimize=True)
+    write_spec(out_dir, "cities", "Cities and ruins for the Freeciv45 iso tileset: the Freeciv45 art pack's cities (freeciv45/05_cities),\n"
+               "five sizes open and walled for each style of styles.ruleset, tidied and placed by tilesets/make-%s.py (see\n"
+               "RECORD.md). In the isometric view the walled sprite is the whole city (client/tilespec.c)." % NAME,
+               [("main", 0, cw, ch, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(cells)])])
+    record.append("| `%s/cities.spec` | the art pack's cities (`freeciv45/05_cities`, `post/raw`): %d styles, `city_0`-`city_4` and "
+                  "`wall_0`-`wall_4` of each, and `%s` as `extra.ruins_mg` | cleaned (pieces, fringe), each style scaled together to fit "
+                  "%dx%d (never up) | %dx%d |" % (NAME, len(styles), RUINS_PICK, cw, ch, cols * cw, rows * ch))
+    return {t for t, _ in cells}, sorted(used)
+
+def marks(art, out_dir, record):
+    """marks.png and marks.spec: ACTIVITIES (56x48 cells, drawn at the activity offset) and VET (vet_1 to 3, tired,
+    lowfuel: 128x112 cells drawn from the full tile's top left, the badges on the unit's left)."""
+    badges = {}
+    def badge(name):
+        if name not in badges: badges[name] = tidy(find_cut(art, [MARK_RUN], name), whole=True)
+        return badges[name]
+    cols = 10; arows = (len(ACTIVITIES) + cols - 1) // cols
+    width = max(10 * MARK_CELL[0], len(VET) * VET_CELL[0])
+    sheet = Image.new("RGBA", (width, arows * MARK_CELL[1] + VET_CELL[1]), (0, 0, 0, 0))
+    cells = []
+    for i, (tag, name) in enumerate(ACTIVITIES):
+        b = badge(name); b = scaled(b, min(52 / b.width, 44 / b.height))
+        x, y = (i % 10) * 56, (i // 10) * 48
+        sheet.alpha_composite(b, (x + (56 - b.width) // 2, y + (48 - b.height) // 2)); cells.append((i // 10, i % 10, [tag]))
+    vet_y = arows * MARK_CELL[1]
+    for i, (tag, name) in enumerate(VET):
+        b = badge(name); b = scaled(b, min(30 / b.width, 30 / b.height)); cx = VET_SLOTS.get(tag, 48)
+        sheet.alpha_composite(b, (i * VET_CELL[0] + cx - b.width // 2, vet_y + 84 - b.height // 2))
+    sheet.save(os.path.join(out_dir, "marks.png"), optimize=True)
+    write_spec(out_dir, "marks", "Marks on units for the Freeciv45 iso tileset: the Freeciv45 art pack's badges (freeciv45/04_units\n"
+               "run 5), scaled by tilesets/make-%s.py (see RECORD.md): the activities in %dx%d cells, veteran levels, tired\n"
+               "and low fuel in %dx%d cells." % (NAME, MARK_CELL[0], MARK_CELL[1], VET_CELL[0], VET_CELL[1]),
+               [("activities", 0, MARK_CELL[0], MARK_CELL[1], cells),
+                ("vet", vet_y, VET_CELL[0], VET_CELL[1], [(0, i, [t]) for i, (t, _) in enumerate(VET)])])
+    record.append("| `%s/marks.spec` | the art pack's marks (`freeciv45/04_units/%s`, `post/raw`): %s | cleaned (fringe), scaled to fit "
+                  "52x44 (activities) or 30x30 (veteran, tired, low fuel) | %dx%d |"
+                  % (NAME, MARK_RUN, ", ".join("`%s`" % n for n in sorted({n for _, n in ACTIVITIES + VET})), sheet.width, sheet.height))
+    return {t for t, _ in ACTIVITIES + VET} | set(VET_UNUSED), sorted(badges)
 
 RECORD_HEAD = """# %(name)s: where every sprite came from
 
@@ -595,11 +801,15 @@ def main():
     ap.add_argument("--features-art", help="the art repo's freeciv45/02_terrain_features (default: next to --art)")
     ap.add_argument("--resources", help="the art repo's freeciv45/03_resources (default: next to --art)")
     ap.add_argument("--no-resources", action="store_true", help="keep amplio2's resource sprites")
+    ap.add_argument("--units-art", help="the art repo's freeciv45/04_units (default: next to --art)")
+    ap.add_argument("--cities-art", help="the art repo's freeciv45/05_cities (default: next to --art)")
+    ap.add_argument("--no-bk-units", action="store_true", help="keep amplio2's units, cities and marks")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
     LAND_GRADE = tuple(int(v) for v in a.land_grade.split(","))
     bk = a.features == "bk"
+    bku = not a.no_bk_units
     canopy = a.canopy == "amplio2" and not bk
     if canopy and a.no_relief: ap.error("--canopy amplio2 needs the relief layer (no --no-relief)")
     sq.BLEND_DEPTH = round(BLEND_DEPTH * T)
@@ -623,6 +833,12 @@ def main():
     if not a.no_resources:
         own |= resources(a.resources or os.path.join(os.path.dirname(os.path.abspath(a.art)), "03_resources"),
                          out_dir, painted_record)
+    unit_props = city_props = mark_props = []
+    if bku:
+        base = os.path.dirname(os.path.abspath(a.art))
+        new, unit_props = units(a.units_art or os.path.join(base, "04_units"), a.data, out_dir, painted_record); own |= new
+        new, city_props = cities(a.cities_art or os.path.join(base, "05_cities"), a.data, out_dir, painted_record); own |= new
+        new, mark_props = marks(a.units_art or os.path.join(base, "04_units"), out_dir, painted_record); own |= new
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -636,8 +852,14 @@ def main():
     sq.OVERRIDDEN = drop
     for rel in listed:
         if (rel in SKIPPED and not (canopy and rel in CANOPY)) or (rel in RELIEF and not relief): continue
+        if bku and rel in BK_REPLACED:      # the art pack's units and cities take them over
+            if BK_REPLACED[rel]: files.append("%s/%s" % (NAME, BK_REPLACED[rel]))
+            continue
         if rel.startswith("amplio2/"):
             drop.prefixes = DROP_PREFIX.get(rel, ())
+            if bku and not any(t not in drop for g in sq.parse_spec(os.path.join(a.data, rel))[1]
+                               for _, _, tags in g["cells"] for t in tags): continue   # nothing of amplio2's left in it
+            if bku and rel == "amplio2/activities.spec": files.append("%s/marks.spec" % NAME)
             sq.recut(a.data, rel, out_dir, amplio_record, scale=AMPLIO_SCALE)
             files.append("%s/%s" % (NAME, os.path.basename(rel)))
             if rel in RELIEF:       # amplio2 draws its relief on layer 1; here it is layer 2
@@ -656,7 +878,7 @@ def main():
             sq.recut(a.data, rel, out_dir, amplio_record, scale=sq.map_misc_scale(rel))
             files.append("%s/%s" % (NAME, os.path.basename(rel)))
         else: files.append(rel)
-    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk)
+    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku)
     with open(os.path.join(out_dir, "RECORD.md"), "w") as f:
         f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED if not (canopy and s in CANOPY)),
                              "canopy": " `terrain2.spec`, the forest and jungle overlays, moves the same way over painted "
@@ -685,6 +907,18 @@ def main():
                     "patch 0034). Only these %d props are used, and only inside the baked "
                     "variants: %s. No panels, alternates or other files from the art repo. GPL-2.0-or-later, like the "
                     "rest of the folder.\n" % (W, FH, len(feature_props), ", ".join("`%s`" % n for n in feature_props)))
+        if bku:
+            f.write("\n## Units, cities, marks and ruins\n\n`units.spec`, `cities.spec` and `marks.spec`: the Freeciv45 art pack's "
+                    "units, cities and marks (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo "
+                    "folders `freeciv45/04_units` and `freeciv45/05_cities`, runs 1 to 5, issue 245), in place of amplio2's. "
+                    "Only the sprites the ruleset uses ship, one per tag (the better take of each unit; the unused takes, "
+                    "ruins, panels and art-repo records stay in the art repo). Units used (%d): %s. Cities and the ruins (%d): "
+                    "%s. Marks (%d): %s. GPL-2.0-or-later, like the rest of the folder. Left from amplio2 (`activities.spec`, "
+                    "`bases.spec`, `tiles.spec` and the rest of the scaled files): the maglev, oil mine, oil rig, airstrip, "
+                    "outpost, buoy and fallout marks, the occupied and disorder badges and the fortress, airbase, castle and "
+                    "outpost bases.\n" % (len(unit_props), ", ".join("`%s`" % n for n in unit_props), len(city_props),
+                                           ", ".join("`%s`" % n for n in city_props), len(mark_props),
+                                           ", ".join("`%s`" % n for n in mark_props)))
     print("\n".join(amplio_record + painted_record))
 
 if __name__ == "__main__":

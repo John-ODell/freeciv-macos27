@@ -352,6 +352,51 @@ shows no warning.
 
 ![the labelled field: today (set 1) and set 2; 1:1](set2-terrain-names-1to1.jpg)
 
+## Units, cities, marks and ruins (issue 245)
+
+The art pack's units and cities (Brothers-Keeper-Art `freeciv45/04_units` and `05_cities`, runs 1 to 5, with a verdict
+table per panel in UNITS.md and CITIES.md) replace amplio2's. `--units-art`, `--cities-art` and `--no-bk-units` on the
+builder.
+
+- **Units:** the 85 sprites of civ45's `units.ruleset`, one per tag, `u.<name>_Idle` as in amplio2. Each cell is
+  cleaned and set at a common size (`tidy`, `UNIT_SCALE` 0.7 and a 150 x 108 cap, so the elephants and the great
+  ships still fit), centred on its weight, feet on one line.
+  - **Cell 160 x 128, not the 128 x 96 the brief named:** a tall figure (elephants, the great people) or a wide
+    ship clipped in 128 x 96. `unit_offset_x` is (192 - 160) / 2 = 16, `unit_offset_y` 0, so a unit stands on the
+    tile as the diamond's centre. The flag, activity icon and stack number offsets are amplio2's, still right.
+  - **Second takes:** only `musketeers_alt` beat its first take (UNITS.md has the table for the other 14).
+  - **Facing:** the art faces left, as amplio2 does; `grenadiers` came out facing right and is flipped
+    (`UNIT_FLIP`). The sailing ships were checked on the sheet and face left.
+- **Cleaning:** every sprite and every city goes through two steps, because the Codex sheets leave a red or yellow
+  fringe in the semi-transparent edge pixels (worst on cities panel 3).
+  - `pieces` drops stray specks (a piece under 60 % of the largest, with a 5 px rim kept so shadows and flags stay).
+  - `defringe` bleeds the colour of the nearest solid pixel (alpha 200 and up, within 4 px) into every edge pixel
+    below that, and leaves the alpha alone, so the edge still blends but no longer carries a coloured halo.
+- **Cities:** `city.<style>_city_0..4` and `_wall_0..4` for the ten styles, 192 x 144 cells, `ruins_1` as
+  `extra.ruins_mg`. A style's ten sprites share one scale, so a size 1 hamlet stays smaller than its size 17
+  city and the walled sprite of a size matches the open one. In iso the walled sprite is the whole city
+  (client/tilespec.c), so it carries the buildings too. The index comes from civ45's City_Image effect: sizes 1,
+  5, 9, 13 and 17 give 0 to 4.
+- **Marks:** `marks.spec`: the 21 activity icons (56 x 48 cells), `unit.vet_1` to `vet_3`, `tired` and `lowfuel`. civ45
+  has four veteran levels, so the amplio2 `vet_4` to `vet_9` have no use and are not made. amplio2's
+  `veterancy.spec`, `extra_units.spec`, and the activity, unit and city tags are gone.
+- **Left on amplio2** (no art made): `unit.maglev`, `unit.outpost`, `unit.airstrip`, `unit.buoy`, `unit.fallout`,
+  `unit.oil_mine` and `unit.oil_rig` in `activities.spec`, which therefore still carries amplio2's credit.
+
+**Check (observed):** a civ45 game on the patched client, offscreen. `units-cities-field.txt` makes ten cities
+(open in the back row, walled in front), stacks of land and sea units, three veteran levels and units in cities.
+Pictures at 2x and 1x:
+
+![units and cities, 2x, 1:1](units-cities-2x-1to1.jpg)
+
+![the same field at 1x](units-cities-1x.jpg)
+
+- Units stand on the tile with their flag, activity icon, veteran chevron and stack number in the places the amplio2
+  ones had; nothing clips.
+- The five city sizes draw in turn. Join City stops at size 8 without an Aqueduct, so the test ruleset (see the
+  scene's header) moves the City_Image thresholds to 3, 5, 7 and 8; the sprites are the same index 0 to 4.
+- Walled cities draw as whole walled cities; open ones show the houses only.
+
 ## Not done, and findings
 
 - Hills and mountains had no relief in the first build (issue 194). They now draw our own props (issue 224).
@@ -360,3 +405,7 @@ shows no warning.
 - **Two variants of one terrain meet without a fade** in iso (see above).
 - **Not checked:** a real Cocoa window on John's screen, an unpatched client, the GTK and SDL clients (which ignore
   `pixel_ratio`), fog of war and borders on the painted ground in a long game, and drawing speed.
+- **Units and cities (issue 245), not checked:** all 85 units in one game (the test shows about twenty types), the
+  four unit panels' every second take, city sizes 9 to 17 in a real game (only through the shifted thresholds), the
+  rulesets other than civ45 (civ54's units and styles are the same names), and a hand-made `unit_offset` on a Retina
+  window.
