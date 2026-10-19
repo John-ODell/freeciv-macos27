@@ -55,8 +55,8 @@ occupied_offset_x = 0
 occupied_offset_y = 0
 
 ; offset the units by this amount
-unit_offset_x = 38
-unit_offset_y = 36
+unit_offset_x = 16
+unit_offset_y = 0
 
 ; offset of the normal activity icons
 activity_offset_x = 98
@@ -157,6 +157,7 @@ files =
   "freeciv45iso/volcano.spec",
   "freeciv45iso/tiles.spec",
   "freeciv45iso/upkeep.spec",
+  "freeciv45iso/marks.spec",
   "freeciv45iso/activities.spec",
   "freeciv45iso/fog.spec",
   "misc/small.spec",
@@ -164,9 +165,7 @@ files =
   "misc/governments.spec",
   "misc/specialists.spec",
   "freeciv45iso/units.spec",
-  "freeciv45iso/extra_units.spec",
   "freeciv45iso/animals.spec",
-  "freeciv45iso/veterancy.spec",
   "misc/buildings-large.spec",
   "misc/wonders-large.spec",
   "misc/space.spec",
