@@ -110,8 +110,8 @@ Notes, all derived unless marked:
   it, hence the map walk.
 - Population is the sum of city sizes, which is what the score calls citizens (`up/server/score.c:355`).
 - Three turns in a row stops a one-turn spike from a captured city deciding the game.
-- Cost: one pass over the map and all cities per turn. At `tilesperplayer` 100 and 12 players the map is about
-  2,500 tiles (`civ45/game.ruleset:919,926`); unverified, measure in the autogame (section 4).
+- Cost: one pass over the map and all cities per turn. At `tilesperplayer` 110 (issue 211) and 12 players the map is about
+  2,750 tiles (`civ45/game.ruleset:919,926`); unverified, measure in the autogame (section 4).
 - `player_victory` makes the server announce "Scenario victory to the X" (`up/server/srv_main.c:391`); the
   notify line above gives the player the real reason first.
 - Allies: with ALLIED on, an alliance that jointly passes the thresholds does not win here; the thresholds are
