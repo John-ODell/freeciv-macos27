@@ -74,6 +74,13 @@ exec 3>&-; rm -f "$OUT/fifo"
 END=$(grep -oE "Game ended as the turn limit was exceeded|Game ended in [a-z ]*victory for .*|(Scenario|Allied|Team) victory to .*" "$OUT/autogame.log" | head -1)
 # The final save is named for the turn after the last one played (endturn 20 writes freeciv-T0021-...-final).
 LAST=$(ls "$OUT" | sed -n 's/^.*-T0*\([0-9][0-9]*\)-.*final.*$/\1/p' | tail -1)
+# A spaceship's arrival is announced to the connections only, not in the log: read it from the final save.
+if [ -z "$END" ]; then
+  FIN=$(ls "$OUT" | grep 'final\.sav' | tail -1)
+  if [ -n "$FIN" ] && [ "$(gzip -dc "$OUT/$FIN" 2>/dev/null | grep -c '^spaceship\.state=3$')" -gt 0 ]; then
+    END="Spaceship arrived (spaceship.state 3 in $FIN)"
+  fi
+fi
 [ -z "$LAST" ] || LAST=$((LAST - 1))
 case "$END" in
   "Game ended as the turn limit was exceeded") HOW="reached the turn limit" ;;
