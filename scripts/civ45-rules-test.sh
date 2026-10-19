@@ -78,6 +78,10 @@ NU=$(grep -c '^\[unit_' "$UR")
 UNEVEN=$(awk '/^\[unit_/{n=$0} /^attack  *=/{a=$3} /^defense  *=/{d=$3} /^firepower  *=/{if ((a!=0 && d!=0 && a!=d) || $3!=1) print n}' "$UR" | tr '\n' ' ')
 if [ "$NU" = 85 ] && [ -z "$UNEVEN" ]; then echo "FC45TEST PASS units.ruleset: 85 unit types, one strength each, firepower 1"
 else echo "FC45TEST FAIL units.ruleset: $NU unit types, uneven or firepower not 1: $UNEVEN"; RC=1; fi
+# No BadCityDefender unit is a city defender for the AI (issue 187): none carries DefendGood or DefendOk.
+BAD=$(awk '/^\[unit_/{n=$0; f=0} /^flags/{f=($0 ~ /BadCityDefender/)} /^roles/{if (f && $0 ~ /Defend(Good|Ok)/) print n}' "$UR" | tr "\n" " ")
+if [ -z "$BAD" ]; then echo "FC45TEST PASS units.ruleset: no BadCityDefender unit has a defend role"
+else echo "FC45TEST FAIL units.ruleset: BadCityDefender units with a defend role: $BAD"; RC=1; fi
 # Transport cargo 4 and the Horses gate on the seven mounted units (decision 11, John 2026-10-17); Lua reads neither.
 if sed -n "/^\[unit_transport\]/,/^\[unit_/p" "$UR" | grep -q '^transport_cap = 4'; then echo "FC45TEST PASS units.ruleset: a Transport carries 4"
 else echo "FC45TEST FAIL units.ruleset: the Transport's transport_cap is not 4"; RC=1; fi
