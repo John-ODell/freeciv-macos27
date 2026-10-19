@@ -1,0 +1,235 @@
+From 41ded6493ba415dc61fea859e5b58646db206a7c Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 20:07:36 -0500
+Subject: [PATCH] Qt client: drag the map to pan it, and pan with two-finger
+ scrolling
+
+A left press and drag on the map that starts no goto now pans the view,
+grab-style: the ground under the pointer stays under it as it moves. The
+drag starts past the platform's drag distance, so a click is still a
+click, and its release clicks nothing; the cursor is a closed hand while
+it pans. The origin moves at once, without the centring slide.
+
+Keyboardless goto used to arm on a left press anywhere while a unit was
+in focus, so every drag was a goto. It now arms only on a press on a
+focus unit's tile: a drag from the unit still sets its goto, and a drag
+from anywhere else pans. A press while an order is being given (G, the
+unit bar's Go to) still takes the order and does not pan.
+
+Two-finger trackpad scrolling pans the map with the fingers, by the
+event's pixel delta; a mouse wheel notch moves it a sixth of the view.
+Control and Command with the wheel are left alone.
+
+Issue 231.
+---
+ client/gui-qt/mapctrl.cpp | 109 ++++++++++++++++++++++++++++++++++++++
+ client/gui-qt/mapview.cpp |   5 ++
+ client/gui-qt/mapview.h   |   9 ++++
+ 3 files changed, 123 insertions(+)
+
+diff --git a/client/gui-qt/mapctrl.cpp b/client/gui-qt/mapctrl.cpp
+index 332c280..74d3834 100644
+--- a/client/gui-qt/mapctrl.cpp
++++ b/client/gui-qt/mapctrl.cpp
+@@ -20,6 +20,7 @@
+ #include <QKeyEvent>
+ #include <QMouseEvent>
+ #include <QPushButton>
++#include <QWheelEvent>
+ 
+ // common
+ #include "control.h"
+@@ -30,9 +31,11 @@
+ #include "climap.h"
+ #include "control.h"
+ #include "mapctrl.h"
++#include "mapview_common.h"
+ #include "themes_common.h"
+ #include "tile.h"
+ #include "unit.h"
++#include "unitlist.h"
+ #include "zoom.h"
+ 
+ // gui-qt
+@@ -528,7 +531,55 @@ void map_view::shortcut_released(Qt::MouseButton bt)
+ **************************************************************************/
+ void map_view::mousePressEvent(QMouseEvent *event)
+ {
++  bool order_pending = (hover_state != HOVER_NONE);
++
++  pan_armed = false;
++  panning = false;
++  pan_autocenter = gui_options.auto_center_on_unit;
+   shortcut_pressed(0);
++
++  /* Keyboardless goto arms on a left press anywhere while a unit is in
++   * focus. Keep it to presses on a focus unit's tile, so that a drag from
++   * anywhere else pans the map instead. */
++  if (keyboardless_goto_button_down) {
++    QPoint pos = map_canvas_pos(event->pos());
++    struct tile *ptile = canvas_pos_to_tile(pos.x(), pos.y(), map_zoom);
++    bool on_focus = false;
++
++    unit_list_iterate(get_units_in_focus(), punit) {
++      if (unit_tile(punit) == ptile) {
++        on_focus = true;
++      }
++    } unit_list_iterate_end;
++    if (!on_focus) {
++      keyboardless_goto_button_down = false;
++      keyboardless_goto_start_tile = nullptr;
++    }
++  }
++
++  /* A plain left press that gives no order and starts no goto may turn
++   * into a drag that pans the map. */
++  if (event->button() == Qt::LeftButton
++      && event->modifiers() == Qt::NoModifier
++      && !order_pending && hover_state == HOVER_NONE
++      && !keyboardless_goto_button_down && can_client_change_view()) {
++    pan_armed = true;
++    pan_press = event->pos();
++    pan_x0 = mapview.gui_x0;
++    pan_y0 = mapview.gui_y0;
++  }
++}
++
++/**********************************************************************//**
++  Move the map's origin at once, without the centring slide
++**************************************************************************/
++void map_view::pan_to(float gui_x0, float gui_y0)
++{
++  bool slide = can_slide;
++
++  can_slide = false;
++  set_mapview_origin(gui_x0, gui_y0, map_zoom);
++  can_slide = slide;
+ }
+ 
+ /**********************************************************************//**
+@@ -536,6 +587,19 @@ void map_view::mousePressEvent(QMouseEvent *event)
+ **************************************************************************/
+ void map_view::mouseReleaseEvent(QMouseEvent *event)
+ {
++  if (panning && event->button() == Qt::LeftButton) {
++    QPoint pos = map_canvas_pos(event->pos());
++
++    // The drag was a pan: no click on the tile where it ended
++    panning = false;
++    pan_armed = false;
++    gui_options.auto_center_on_unit = pan_autocenter;
++    release_goto_button(pos.x(), pos.y());
++    setCursor(Qt::ArrowCursor);
++    control_mouse_cursor(canvas_pos_to_tile(pos.x(), pos.y(), map_zoom));
++    return;
++  }
++  pan_armed = false;
+   shortcut_released(event->button());
+ }
+ 
+@@ -546,6 +610,24 @@ void map_view::mouseMoveEvent(QMouseEvent *event)
+ {
+   QPoint pos = map_canvas_pos(event->pos());
+ 
++  if (pan_armed && (event->buttons() & Qt::LeftButton)) {
++    QPoint moved = event->pos() - pan_press;
++
++    if (!panning
++        && moved.manhattanLength() >= QApplication::startDragDistance()) {
++      panning = true;
++      cursor = -1;
++      setCursor(Qt::ClosedHandCursor);
++    }
++    if (panning) {
++      // Grab-style: the ground under the pointer stays under it
++      QPoint d = map_canvas_pos(moved);
++
++      pan_to(pan_x0 - d.x(), pan_y0 - d.y());
++      return;
++    }
++  }
++
+   update_line(pos.x(), pos.y());
+ 
+   if (keyboardless_goto_button_down && hover_state == HOVER_NONE) {
+@@ -554,6 +636,33 @@ void map_view::mouseMoveEvent(QMouseEvent *event)
+   control_mouse_cursor(canvas_pos_to_tile(pos.x(), pos.y(), map_zoom));
+ }
+ 
++/**********************************************************************//**
++  Two-finger trackpad scrolling pans the map with the fingers; a mouse
++  wheel notch moves it a sixth of the view
++**************************************************************************/
++void map_view::wheelEvent(QWheelEvent *event)
++{
++  QPoint d = event->pixelDelta();
++
++  if (event->modifiers() & (Qt::ControlModifier | Qt::MetaModifier)
++      || !can_client_change_view()) {
++    event->ignore();
++    return;
++  }
++  if (d.isNull()) {
++    QPoint notches = event->angleDelta();
++
++    d = QPoint(notches.x() * height() / 6 / 120,
++               notches.y() * height() / 6 / 120);
++  }
++  if (!d.isNull()) {
++    QPoint c = map_canvas_pos(d);
++
++    pan_to(mapview.gui_x0 - c.x(), mapview.gui_y0 - c.y());
++  }
++  event->accept();
++}
++
+ /**********************************************************************//**
+   Popups information label tile
+ **************************************************************************/
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index b5ddd1b..141e3b5 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -252,6 +252,11 @@ map_view::map_view() : QWidget()
+ {
+   menu_click = false;
+   cursor = -1;
++  pan_armed = false;
++  panning = false;
++  pan_autocenter = false;
++  pan_x0 = 0;
++  pan_y0 = 0;
+   QTimer *timer = new QTimer(this);
+   setAttribute(Qt::WA_OpaquePaintEvent, true);
+   connect(timer, &QTimer::timeout, this, &map_view::timer_event);
+diff --git a/client/gui-qt/mapview.h b/client/gui-qt/mapview.h
+index 236caa4..96e60e8 100644
+--- a/client/gui-qt/mapview.h
++++ b/client/gui-qt/mapview.h
+@@ -109,14 +109,23 @@ protected:
+   void mousePressEvent(QMouseEvent *event);
+   void mouseReleaseEvent(QMouseEvent *event);
+   void mouseMoveEvent(QMouseEvent *event);
++  void wheelEvent(QWheelEvent *event);
+   void focusOutEvent(QFocusEvent *event);
+   void leaveEvent(QEvent *event);
+ private slots:
+   void timer_event();
+ private:
+   void update_font(const QString &name, const QFont &font);
++  void pan_to(float gui_x0, float gui_y0);
+ 
+   bool stored_autocenter;
++  // A left drag that starts no goto pans the map
++  bool pan_armed;
++  bool panning;
++  bool pan_autocenter;
++  QPoint pan_press;
++  float pan_x0;
++  float pan_y0;
+   int cursor_frame;
+   int cursor;
+ 
+-- 
+2.56.0
+
