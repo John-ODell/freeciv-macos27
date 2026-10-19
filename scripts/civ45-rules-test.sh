@@ -53,7 +53,7 @@ grep "FC45TEST" "$OUT/server.log" | sed 's/^[0-9]*: //'
 RC=0
 # The victory keys Lua cannot read, checked in the ruleset file the server loaded.
 RS="$DATA/civ45/game.ruleset"
-for want in 'victory_min_points = 8000' 'victory_lead_pct   = 50' '"endturn", 475, FALSE' '"endspaceship", "ENABLED", FALSE' \
+for want in 'victory_min_points = 30000' 'victory_lead_pct   = 25' '"endturn", 475, FALSE' '"endspaceship", "ENABLED", FALSE' \
             'upgrade_veteran_loss     = 0' 'autoupgrade_veteran_loss = 0'; do
   if grep -qF "$want" "$RS"; then echo "FC45TEST PASS game.ruleset has $want"; else echo "FC45TEST FAIL game.ruleset lacks $want"; RC=1; fi
 done
