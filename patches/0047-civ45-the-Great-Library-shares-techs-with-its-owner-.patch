@@ -1,0 +1,74 @@
+From fc3c062672177b36d74b6ffb5d426c3e44ed8fd1 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 20:49:07 -0500
+Subject: [PATCH] civ45: the Great Library shares techs with its owner only
+
+Issue 239: a world-wide Tech_Parasite_Pct_Max 30 gave every player about
+half of its techs in an autogame, so the field researched as a pack. The
+effect is now Tech_Parasite 2 at Player range, without survives: the owner
+gets a tech that two other players know, while the wonder stands. The
+help text and README.civ45 say so.
+---
+ data/civ45/README.civ45      |  5 +++--
+ data/civ45/buildings.ruleset |  4 ++--
+ data/civ45/effects.ruleset   | 11 +++++++----
+ 3 files changed, 12 insertions(+), 8 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 286b1c1..87f1cc8 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -397,8 +397,9 @@ Opponents are aware of player's Small Wonders only if they have an embassy.
+ 
+ Great Library
+ Great Library does not give science boost to all players, but a tech
+-sharing a bit similar to classic ruleset. Techs known by 30% of
+-players are automatically shared to everyone.
++sharing like the classic ruleset: its owner gets techs that two other
++players know, while it stands (Tech_Parasite 2). It does not share with
++everyone; in an autogame the world-wide version gave half of all techs.
+ 
+ Shared Tiles clause
+ Diplomatic treaties can include Shared Tiles clause.
+diff --git a/data/civ45/buildings.ruleset b/data/civ45/buildings.ruleset
+index 2049732..344379f 100644
+--- a/data/civ45/buildings.ruleset
++++ b/data/civ45/buildings.ruleset
+@@ -1809,8 +1809,8 @@ and thereafter 4 extra research points every turn to its city.\
+ "),
+ ; /* xgettext:no-c-format */
+ _("\
+-Completion of this wonder starts permanent tech sharing so that once \
+-a tech is known by 30% of players, also all the others get it.\
++While you own it, you gain any tech that two other players know, one \
++at a time. Only its owner gets them, and only while it stands.\
+ ")
+ 
+ [building_great_wall]
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index 6ce5137..1f4e129 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -3511,12 +3511,15 @@ reqs	=
+       "Building", "Eiffel Tower", "City"
+     }
+ 
++; Owner only (issue 239): the player with the Great Library gets a tech that two
++; other players know, while the wonder stands. It was a world-wide 30 percent
++; share that gave every player about half its techs.
+ [effect_great_library]
+-type    = "Tech_Parasite_Pct_Max"
+-value   = 30
++type    = "Tech_Parasite"
++value   = 2
+ reqs    =
+-    { "type", "name", "range", "survives"
+-      "Building", "Great Library", "World", TRUE
++    { "type", "name", "range"
++      "Building", "Great Library", "Player"
+     }
+ 
+ [effect_great_library_1]
+-- 
+2.56.0
+

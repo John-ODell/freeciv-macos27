@@ -101,6 +101,11 @@ NW=$(grep -c '^\[effect_city_walls_\(melee\|archer\|mounted\|siege\)\]' "$DATA/c
 if [ "$NW" = 4 ] && ! grep -q '^\[effect_city_walls_0\]' "$DATA/civ45/effects.ruleset"; then
   echo "FC45TEST PASS effects.ruleset: City Walls are keyed on the attacker's class flag"
 else echo "FC45TEST FAIL effects.ruleset: City Walls are not keyed on the attacker's class flag"; RC=1; fi
+# The Great Library shares techs with its owner only (issue 239): Tech_Parasite 2 at Player range, not a world-wide share.
+GL=$(sed -n '/^\[effect_great_library\]/,/^\[effect_great_library_1\]/p' "$DATA/civ45/effects.ruleset")
+if echo "$GL" | grep -q '"Tech_Parasite"' && echo "$GL" | grep -q '"Building", "Great Library", "Player"' && ! echo "$GL" | grep -q 'World'; then
+  echo "FC45TEST PASS effects.ruleset: the Great Library gives techs to its owner only"
+else echo "FC45TEST FAIL effects.ruleset: the Great Library is not owner-only"; RC=1; fi
 # Space parts (issue 164): the tech, the Apollo Program and a Factory are all they need, at 50, 100 and 200 shields.
 BR="$DATA/civ45/buildings.ruleset"
 for p in structural:50 component:100 module:200; do
