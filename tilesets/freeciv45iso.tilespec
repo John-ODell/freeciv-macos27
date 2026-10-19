@@ -335,7 +335,7 @@ layer1_match_type = "land"
 layer1_match_with = "water"
 layer1_sprite_type = "corner"
 layer2_match_type = "mountains"
-layer2_match_with = "tundra"
+layer2_match_with = "tundra", "arctic"
 layer2_is_tall = TRUE
 
 [tile_plains]
