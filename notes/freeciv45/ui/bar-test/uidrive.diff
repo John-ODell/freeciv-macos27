@@ -20,10 +20,10 @@ index 5e6de95..a5ca1a9 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..691a6b0
+index 0000000..0d82aa8
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,780 @@
+@@ -0,0 +1,838 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -46,7 +46,6 @@ index 0000000..691a6b0
 +  running game with a focus unit, then runs one line of the script every
 +  "pace" milliseconds. Input goes through QTest, so Qt's own enter, leave,
 +  hover and tooltip handling runs as for a real mouse.
-+  drive.log gives each line with the milliseconds since the script started.
 +
 +    pace MS                 delay between lines (default 900)
 +    wait MS                 extra delay
@@ -69,10 +68,15 @@ index 0000000..691a6b0
 +    research NAME           research the advance NAME (its rule name)
 +    opencity NAME           open the own city NAME, as a click on it does
 +    scroll DX DY            move the map origin by DX, DY canvas pixels
++    drag X Y DX DY          left drag through the window from X, Y (window
++                            points) by DX, DY, in eight moves
++    drag unit DX DY         the same from the focus unit's tile
++    mapwheel DX DY [notch]  a two-finger trackpad scroll of DX, DY points
++                            on the map, or a mouse wheel angle with notch
 +    clicktile DX DY         left click the tile DX, DY from the focus unit
 +                            (through action_button_pressed, which the map's
 +                            mouse release calls, since that reads QCursor)
-+    option [NAME] on|off|N  a boolean or number client option through its callback
++    option [NAME] on|off    a boolean client option through its callback
 +                            (default gui_qt_freeciv45_panels)
 +    chat TEXT               send a chat line or a /command to the server
 +    dismiss                 close the modal boxes (welcome message...)
@@ -91,9 +95,9 @@ index 0000000..691a6b0
 +#include <QAbstractButton>
 +#include <QAbstractItemView>
 +#include <QApplication>
++#include <QCursor>
 +#include <QDialog>
 +#include <QDir>
-+#include <QElapsedTimer>
 +#include <QFile>
 +#include <QLabel>
 +#include <QMenu>
@@ -146,7 +150,6 @@ index 0000000..691a6b0
 +static QString out_dir;
 +static QTimer *drive_timer = nullptr;
 +static bool started = false;
-+static QElapsedTimer drive_clock;   // since the script started
 +
 +/************************************************************************//**
 +  Append to drive.log
@@ -487,7 +490,7 @@ index 0000000..691a6b0
 +  w = line.split(' ', Qt::SkipEmptyParts);
 +  QString cmd = w.isEmpty() ? QString() : w[0];
 +
-+  drive_log(QString("> %1   [%2 ms]").arg(line).arg(drive_clock.elapsed()));
++  drive_log("> " + line);
 +  if (cmd == "pace" && w.size() > 1) {
 +    pace = w[1].toInt();
 +  } else if (cmd == "wait" && w.size() > 1) {
@@ -545,6 +548,7 @@ index 0000000..691a6b0
 +                                        : "nothing")
 +                  .arg(under != nullptr ? under->toolTip() : QString()));
 +      }
++      QCursor::setPos(gui()->mapToGlobal(c));
 +      QTest::mouseMove(win, c);
 +      if (cmd == "rclick") {
 +        QTest::mouseClick(win, Qt::RightButton, Qt::NoModifier, c);
@@ -605,20 +609,75 @@ index 0000000..691a6b0
 +        action_button_pressed(cx, cy, SELECT_POPUP);
 +      }
 +    }
++  } else if (cmd == "drag" && w.size() > 3) {
++    QPoint from, by;
++    bool ok = true;
++
++    if (w[1] == "unit") {
++      struct unit *punit = head_of_units_in_focus();
++      float cx, cy;
++
++      if (punit == nullptr
++          || !tile_to_canvas_pos(&cx, &cy, map_zoom, unit_tile(punit))) {
++        drive_log("   !! no focus unit on the canvas");
++        ok = false;
++      } else {
++        float density = (float) mapview.width / map_widget_width();
++
++        cx += tileset_tile_width(tileset) * map_zoom / 2;
++        cy += tileset_tile_height(tileset) * map_zoom / 2;
++        from = gui()->mapview_wdg->mapTo(gui(),
++                                         QPoint(qRound(cx / density),
++                                                qRound(cy / density)));
++        by = QPoint(w[2].toInt(), w[3].toInt());
++      }
++    } else if (w.size() > 4) {
++      from = QPoint(w[1].toInt(), w[2].toInt());
++      by = QPoint(w[3].toInt(), w[4].toInt());
++    } else {
++      ok = false;
++    }
++    if (ok) {
++      // Press, eight moves and release through the window, as a real drag
++      QWindow *win = gui()->windowHandle();
++      QWidget *under = gui()->childAt(from);
++
++      drive_log(QString("   drag from %1,%2 by %3,%4, under %5")
++                .arg(from.x()).arg(from.y()).arg(by.x()).arg(by.y())
++                .arg(under != nullptr ? under->metaObject()->className()
++                                      : "nothing"));
++      QApplication::setActiveWindow(gui());
++      // The map reads QCursor::pos() on a press, as on a real screen
++      QCursor::setPos(gui()->mapToGlobal(from));
++      QTest::mouseMove(win, from);
++      QTest::mousePress(win, Qt::LeftButton, Qt::NoModifier, from);
++      for (int i = 1; i <= 8; i++) {
++        QCursor::setPos(gui()->mapToGlobal(from + by * i / 8));
++        QTest::mouseMove(win, from + by * i / 8);
++      }
++      QTest::mouseRelease(win, Qt::LeftButton, Qt::NoModifier, from + by);
++    }
++  } else if (cmd == "mapwheel" && w.size() > 2) {
++    // Two-finger trackpad scroll by DX, DY points, or a mouse wheel's
++    // angle with "notch"
++    QWidget *mv = gui()->mapview_wdg;
++    QPoint local = mv->rect().center();
++    QPoint d(w[1].toInt(), w[2].toInt());
++    bool notch = (w.size() > 3 && w[3] == "notch");
++    QWheelEvent we(QPointF(local), QPointF(mv->mapToGlobal(local)),
++                   notch ? QPoint() : d, d, Qt::NoButton, Qt::NoModifier,
++                   notch ? Qt::NoScrollPhase : Qt::ScrollUpdate, false);
++
++    QApplication::sendEvent(mv, &we);
 +  } else if (cmd == "scroll" && w.size() > 2) {
 +    set_mapview_origin(mapview.gui_x0 + w[1].toInt(),
 +                       mapview.gui_y0 + w[2].toInt(), map_zoom);
 +  } else if (cmd == "option" && w.size() > 1) {
 +    QString name = (w.size() > 2 ? w[1] : QString("gui_qt_freeciv45_panels"));
 +
-+    struct option *opt = optset_option_by_name(client_optset,
-+                                               name.toUtf8().constData());
-+
-+    if (opt != nullptr && option_type(opt) == OT_INTEGER) {
-+      option_int_set(opt, w.last().toInt());
-+    } else {
-+      option_bool_set(opt, w.last() == "on");
-+    }
++    option_bool_set(optset_option_by_name(client_optset,
++                                          name.toUtf8().constData()),
++                    w.last() == "on");
 +  } else if (cmd == "chat" && w.size() > 1) {
 +    send_chat(QStringList(w.mid(1)).join(' ').toUtf8().constData());
 +  } else if (cmd == "dismiss") {
@@ -759,7 +818,6 @@ index 0000000..691a6b0
 +        && head_of_units_in_focus() != nullptr
 +        && gui()->unitbar_wdg != nullptr) {
 +      started = true;
-+      drive_clock.start();
 +      gui()->raise();
 +      gui()->activateWindow();
 +      QApplication::setActiveWindow(gui());
