@@ -1,0 +1,428 @@
+From 1e8e921161a2d9d34744f44e83a8159d844a5782 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 20:55:23 -0500
+Subject: [PATCH] Qt client: size the Freeciv45 unit bar to its action boxes
+
+The bar was one row: portrait, a text column and a column of chips over
+actions, as wide as all of them side by side (467 to 495 points). It is
+now a column: the portrait with the unit's name, rank and city, moves and
+hit points, and strength on four short lines; the tile mates' chips under
+that; then the action boxes. The width is that of the action boxes, or of
+the unit's lines or the chip row when those are wider, up to six boxes. A
+seventh box wraps onto another row instead of widening the bar, and so do
+chips. Nothing is reserved for actions or chips that are not there: a
+unit alone on its tile shows no chip, since its portrait is the unit.
+Lines wider than the room are cut with an ellipsis and carry the whole
+text as a tooltip. The portrait is 56 points, not 80.
+
+With four actions the bar is 198 points wide and 152 high, from 467 by
+98; with five and a stack of five, 228 by 160, from 495 by 98.
+
+Issue 233.
+---
+ client/gui-qt/unitbar.cpp | 242 +++++++++++++++++++++++++-------------
+ client/gui-qt/unitbar.h   |  15 ++-
+ 2 files changed, 172 insertions(+), 85 deletions(-)
+
+diff --git a/client/gui-qt/unitbar.cpp b/client/gui-qt/unitbar.cpp
+index e45142c..795f2c5 100644
+--- a/client/gui-qt/unitbar.cpp
++++ b/client/gui-qt/unitbar.cpp
+@@ -16,6 +16,7 @@
+ #endif
+ 
+ // Qt
++#include <QGridLayout>
+ #include <QHBoxLayout>
+ #include <QLabel>
+ #include <QMouseEvent>
+@@ -59,8 +60,8 @@ extern "C" {
+ #include "unitbar.h"
+ 
+ // Logical sizes at 1x; the same at 2x, pixmaps carry the pixel ratio.
+-static const int PORTRAIT_SIZE = 80;
+-static const int PORTRAIT_IMAGE = 64;
++static const int PORTRAIT_SIZE = 56;
++static const int PORTRAIT_IMAGE = 42;
+ static const int HEALTH_BAR_HEIGHT = 6;
+ static const int CHIP_SIZE = 30;
+ static const int CHIP_IMAGE = 24;
+@@ -68,6 +69,9 @@ static const int MAX_CHIPS = 8;
+ static const int ACTION_SIZE = 36;
+ static const int ACTION_ICON = 24;
+ static const int BAR_MARGIN = 12;
++static const int GAP = 6;
++// The bar is as wide as its action boxes, up to this many a row; more wrap
++static const int MAX_COLUMNS = 6;
+ 
+ /************************************************************************//**
+   Draw the unit as the map draws it, cropped to its ink, scaled to the given
+@@ -339,7 +343,8 @@ void unit_action_button::run()
+ }
+ 
+ /************************************************************************//**
+-  The bar itself.
++  The bar itself: the portrait and the unit's lines on top, the tile mates'
++  chips under them, then the action boxes in rows.
+ ****************************************************************************/
+ unit_bar::unit_bar(QWidget *parent) : QFrame(parent)
+ {
+@@ -348,39 +353,40 @@ unit_bar::unit_bar(QWidget *parent) : QFrame(parent)
+ 
+   setObjectName("unit_bar");
+   setFrameShape(QFrame::StyledPanel);
+-  main_row = new QHBoxLayout(this);
+-  main_row->setContentsMargins(BAR_MARGIN, 8, BAR_MARGIN, 8);
+-  main_row->setSpacing(BAR_MARGIN);
++  main_column = new QVBoxLayout(this);
++  main_column->setContentsMargins(BAR_MARGIN, 8, BAR_MARGIN, 8);
++  main_column->setSpacing(GAP);
+ 
++  header_row = new QHBoxLayout;
++  header_row->setSpacing(8);
+   portrait = new unit_portrait(this);
+-  main_row->addWidget(portrait, 0, Qt::AlignTop);
++  header_row->addWidget(portrait, 0, Qt::AlignTop);
+ 
+   text_column = new QVBoxLayout;
+-  text_column->setSpacing(2);
++  text_column->setSpacing(1);
+   name_label = new QLabel(this);
+   name_font.setBold(true);
+   name_label->setFont(name_font);
+   sub_label = new QLabel(this);
+   sub_label->setFont(small_font);
+-  stats_label = new QLabel(this);
+-  stats_label->setFont(small_font);
++  moves_label = new QLabel(this);
++  moves_label->setFont(small_font);
++  strength_label = new QLabel(this);
++  strength_label->setFont(small_font);
+   text_column->addWidget(name_label);
+   text_column->addWidget(sub_label);
+-  text_column->addWidget(stats_label);
++  text_column->addWidget(moves_label);
++  text_column->addWidget(strength_label);
+   text_column->addStretch(1);
+-  main_row->addLayout(text_column);
+-
+-  right_column = new QVBoxLayout;
+-  right_column->setSpacing(6);
+-  chips_row = new QHBoxLayout;
+-  chips_row->setSpacing(6);
+-  chips_row->addStretch(1);
+-  actions_row = new QHBoxLayout;
+-  actions_row->setSpacing(6);
+-  actions_row->addStretch(1);
+-  right_column->addLayout(chips_row);
+-  right_column->addLayout(actions_row);
+-  main_row->addLayout(right_column);
++  header_row->addLayout(text_column, 1);
++  main_column->addLayout(header_row);
++
++  chips_grid = new QGridLayout;
++  chips_grid->setSpacing(GAP);
++  main_column->addLayout(chips_grid);
++  actions_grid = new QGridLayout;
++  actions_grid->setSpacing(GAP);
++  main_column->addLayout(actions_grid);
+ 
+   setFocusPolicy(Qt::NoFocus);
+   hide();
+@@ -394,25 +400,63 @@ unit_bar::~unit_bar()
+ }
+ 
+ /************************************************************************//**
+-  Remove the chips or action buttons from a row (its stretch stays).
+-  A refresh can run inside a chip's or a button's own click handler, so
+-  they are deleted later, not here.
++  Remove the chips or action buttons from a grid. A refresh can run inside
++  a chip's or a button's own click handler, so they are deleted later, not
++  here.
+ ****************************************************************************/
+-void unit_bar::clear_row(QHBoxLayout *row)
++void unit_bar::clear_grid(QGridLayout *grid)
+ {
+-  QList<QWidget *> &list = (row == chips_row) ? chips : actions;
++  QList<QWidget *> &list = (grid == chips_grid) ? chips : actions;
+ 
+   foreach (QWidget *w, list) {
+-    row->removeWidget(w);
++    grid->removeWidget(w);
+     w->hide();
+     w->deleteLater();
+   }
+   list.clear();
+ }
+ 
++/************************************************************************//**
++  Lay the boxes out left to right, wrapping after the given number. Each is
++  shown now, so adjustSize() counts it while the bar is up.
++****************************************************************************/
++void unit_bar::fill_grid(QGridLayout *grid, QList<QWidget *> &items,
++                         int columns)
++{
++  int i = 0;
++
++  foreach (QWidget *w, items) {
++    grid->addWidget(w, i / columns, i % columns,
++                    Qt::AlignLeft | Qt::AlignTop);
++    w->show();
++    i++;
++  }
++  // A spare column takes any room left over, so the boxes sit together
++  for (int c = 0; c < grid->columnCount(); c++) {
++    grid->setColumnStretch(c, 0);
++  }
++  grid->setColumnStretch(columns, 1);
++}
++
++/************************************************************************//**
++  Put the text in the label, cut short with an ellipsis when wider than
++  the room it has; the whole line goes in the tooltip then.
++****************************************************************************/
++static void set_fitted(QLabel *label, const QString &text, int width)
++{
++  QString shown = label->fontMetrics().elidedText(text, Qt::ElideRight,
++                                                  width);
++
++  label->setText(shown);
++  label->setToolTip(shown == text ? QString() : text);
++  label->setVisible(!text.isEmpty());
++}
++
+ /************************************************************************//**
+   Fill the bar for the head focus unit, or hide it when nothing is in
+-  focus or the option is off.
++  focus or the option is off. The bar is as wide as its action boxes need,
++  up to MAX_COLUMNS of them, and the boxes wrap onto more rows after that;
++  the unit's lines are fitted to that width.
+ ****************************************************************************/
+ void unit_bar::refresh(struct unit_list *punits)
+ {
+@@ -420,10 +464,15 @@ void unit_bar::refresh(struct unit_list *punits)
+   const struct unit_type *ptype;
+   struct city *home;
+   const char *vet;
+-  QString sub, stats;
++  QString sub, moves, strength;
++  QList<QWidget *> new_chips;
++  QList<QWidget *> new_actions;
+   int shown = 0;
+   int own = 0;
+   int focus_count;
++  int columns, chip_columns, chip_count;
++  int content, text_room, text_need;
++  const int max_content = MAX_COLUMNS * ACTION_SIZE + (MAX_COLUMNS - 1) * GAP;
+ 
+   if (punit == nullptr || !gui_options.gui_qt_freeciv45_panels
+       || !can_client_change_view() || city_overlay_is_open()) {
+@@ -434,7 +483,6 @@ void unit_bar::refresh(struct unit_list *punits)
+   setUpdatesEnabled(false);
+   ptype = unit_type_get(punit);
+   portrait->set_unit(punit);
+-  name_label->setText(QString(unit_name_translation(punit)));
+ 
+   vet = utype_veteran_name_translation(ptype, punit->veteran);
+   if (vet != nullptr) {
+@@ -447,53 +495,27 @@ void unit_bar::refresh(struct unit_list *punits)
+     }
+     sub += QString("(%1)").arg(city_name_get(home));
+   }
+-  sub_label->setText(sub);
+ 
+-  // TRANS: unit bar: attack / defence, moves left, hit points
+-  stats = QString(_("str %1 / %2   moves %3   hp %4/%5"))
+-          .arg(QString::number(ptype->attack_strength),
+-               QString::number(ptype->defense_strength),
+-               QString(move_points_text(punit->moves_left, false)),
++  // TRANS: unit bar: moves left, hit points
++  moves = QString(_("moves %1  hp %2/%3"))
++          .arg(QString(move_points_text(punit->moves_left, false)),
+                QString::number(punit->hp),
+                QString::number(ptype->hp));
++  // TRANS: unit bar: attack / defence
++  strength = QString(_("str %1 / %2"))
++             .arg(QString::number(ptype->attack_strength),
++                  QString::number(ptype->defense_strength));
+   focus_count = unit_list_size(get_units_in_focus());
+   if (focus_count > 1) {
+-    stats += QString(PL_("   (Selected %1 unit)", "   (Selected %1 units)",
+-                         focus_count)).arg(focus_count);
++    // TRANS: unit bar: how many units are in focus
++    strength += QString(_(", %1 selected")).arg(focus_count);
+   }
+-  stats_label->setText(stats);
+ 
+-  clear_row(chips_row);
+-  unit_list_iterate(unit_tile(punit)->units, other) {
+-    if (unit_owner(other) != client_player()) {
+-      continue;
+-    }
+-    own++;
+-    if (shown < MAX_CHIPS) {
+-      bool focused = (unit_list_search(get_units_in_focus(), other) != nullptr);
+-      unit_chip *chip = new unit_chip(other, focused, this);
+-
+-      chips_row->insertWidget(chips_row->count() - 1, chip);
+-      chip->show();
+-      chips.append(chip);
+-      shown++;
+-    }
+-  } unit_list_iterate_end;
+-  if (own > shown) {
+-    unit_chip *chip = new unit_chip(own - shown, unit_tile(punit), this);
+-
+-    chips_row->insertWidget(chips_row->count() - 1, chip);
+-    chip->show();
+-    chips.append(chip);
+-  }
+-
+-  clear_row(actions_row);
++  // The actions: only those every unit in focus can do
+   {
+-    QList<unit_action_button *> row;
+     bool all_fortify = true;
+     bool all_sentry = true;
+ 
+-    // With several units in focus, offer only what all of them can do
+     unit_list_iterate(get_units_in_focus(), pfocus) {
+       all_fortify = all_fortify
+                     && can_unit_do_activity_client(pfocus,
+@@ -502,24 +524,86 @@ void unit_bar::refresh(struct unit_list *punits)
+                    && can_unit_do_activity_client(pfocus, ACTIVITY_SENTRY);
+     } unit_list_iterate_end;
+ 
+-    row.append(new unit_action_button(SC_GOTO, "goto", this));
++    new_actions.append(new unit_action_button(SC_GOTO, "goto", this));
+     if (all_fortify) {
+-      row.append(new unit_action_button(SC_FORTIFY, "fortify", this));
++      new_actions.append(new unit_action_button(SC_FORTIFY, "fortify",
++                                                this));
+     }
+     if (all_sentry) {
+-      row.append(new unit_action_button(SC_SENTRY, "sentry", this));
++      new_actions.append(new unit_action_button(SC_SENTRY, "sentry", this));
+     }
+-    row.append(new unit_action_button(SC_WAIT, "wait", this));
+-    row.append(new unit_action_button(SC_DONE_MOVING, "done", this));
+-    foreach (unit_action_button *b, row) {
+-      actions_row->insertWidget(actions_row->count() - 1, b);
+-      // Shown now, so adjustSize() below counts it while the bar is up
+-      b->show();
+-      actions.append(b);
++    new_actions.append(new unit_action_button(SC_WAIT, "wait", this));
++    new_actions.append(new unit_action_button(SC_DONE_MOVING, "done",
++                                              this));
++  }
++
++  unit_list_iterate(unit_tile(punit)->units, other) {
++    if (unit_owner(other) == client_player()) {
++      own++;
+     }
++  } unit_list_iterate_end;
++  // The chips: none when the unit is alone, its portrait shows it
++  chip_count = (own > 1 ? qMin(own, MAX_CHIPS) + (own > MAX_CHIPS ? 1 : 0)
++                        : 0);
++
++  /* The width: the action boxes, or the unit's lines when they are wider,
++   * but never more than MAX_COLUMNS boxes. The labels take the theme's
++   * font first, so they are measured as they are drawn. */
++  name_label->ensurePolished();
++  sub_label->ensurePolished();
++  moves_label->ensurePolished();
++  strength_label->ensurePolished();
++  columns = qBound(1, (int) new_actions.size(), MAX_COLUMNS);
++  content = columns * ACTION_SIZE + (columns - 1) * GAP;
++  text_need = qMax(qMax(name_label->fontMetrics().horizontalAdvance(
++                          QString(unit_name_translation(punit))),
++                        sub_label->fontMetrics().horizontalAdvance(sub)),
++                   qMax(moves_label->fontMetrics().horizontalAdvance(moves),
++                        strength_label->fontMetrics()
++                        .horizontalAdvance(strength)));
++  // Two pixels over, so a line measured to the pixel is not cut short
++  content = qMax(content, qMin(PORTRAIT_SIZE + 8 + text_need + 2,
++                               max_content));
++  if (chip_count > 0) {
++    content = qMax(content, qMin(chip_count * CHIP_SIZE
++                                 + (chip_count - 1) * GAP, max_content));
+   }
++  text_room = content - PORTRAIT_SIZE - 8;
++  set_fitted(name_label, QString(unit_name_translation(punit)), text_room);
++  set_fitted(sub_label, sub, text_room);
++  set_fitted(moves_label, moves, text_room);
++  set_fitted(strength_label, strength, text_room);
++
++  /* The tile mates, as chips; none when the unit is alone, since its
++   * portrait already shows it */
++  clear_grid(chips_grid);
++  if (own > 1) {
++    unit_list_iterate(unit_tile(punit)->units, other) {
++      if (unit_owner(other) != client_player()) {
++        continue;
++      }
++      if (shown < MAX_CHIPS) {
++        bool focused
++          = (unit_list_search(get_units_in_focus(), other) != nullptr);
++
++        new_chips.append(new unit_chip(other, focused, this));
++        shown++;
++      }
++    } unit_list_iterate_end;
++    if (own > shown) {
++      new_chips.append(new unit_chip(own - shown, unit_tile(punit), this));
++    }
++  }
++  chip_columns = qMax(1, (content + GAP) / (CHIP_SIZE + GAP));
++  chips = new_chips;
++  fill_grid(chips_grid, chips, chip_columns);
++
++  clear_grid(actions_grid);
++  actions = new_actions;
++  fill_grid(actions_grid, actions, columns);
+ 
+   setUpdatesEnabled(true);
++  setFixedWidth(content + 2 * BAR_MARGIN);
+   adjustSize();
+   place();
+   show();
+diff --git a/client/gui-qt/unitbar.h b/client/gui-qt/unitbar.h
+index d483777..e746d99 100644
+--- a/client/gui-qt/unitbar.h
++++ b/client/gui-qt/unitbar.h
+@@ -27,6 +27,7 @@
+ // gui-qt
+ #include "shortcuts.h"
+ 
++class QGridLayout;
+ class QHBoxLayout;
+ class QLabel;
+ class QVBoxLayout;
+@@ -105,16 +106,18 @@ public:
+   void refresh(struct unit_list *punits);
+   void place();
+ private:
+-  void clear_row(QHBoxLayout *row);
++  void clear_grid(QGridLayout *grid);
++  void fill_grid(QGridLayout *grid, QList<QWidget *> &items, int columns);
+   unit_portrait *portrait;
+   QLabel *name_label;
+   QLabel *sub_label;
+-  QLabel *stats_label;
+-  QHBoxLayout *chips_row;
+-  QHBoxLayout *actions_row;
+-  QHBoxLayout *main_row;
++  QLabel *moves_label;
++  QLabel *strength_label;
++  QGridLayout *chips_grid;
++  QGridLayout *actions_grid;
++  QVBoxLayout *main_column;
++  QHBoxLayout *header_row;
+   QVBoxLayout *text_column;
+-  QVBoxLayout *right_column;
+   QList<QWidget *> chips;
+   QList<QWidget *> actions;
+ };
+-- 
+2.56.0
+

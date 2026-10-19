@@ -346,6 +346,7 @@ as patch 0018 (issue #140) behind its own option, `gui_qt_freeciv45_edges`; what
 (#146) followed as patch 0027 (`extras-slice.md`, shots in `extras-test/`). Dragging the map to pan it and two-finger
 scrolling (#231) came as patch 0042 (`pan-slice.md`, shots in `pan-test/`).
 The selected unit's movement range (#232) followed as patch 0044 (`range-slice.md`, shots in `range-test/`).
+The unit bar was sized to its action boxes (#233) as patch 0046 (`barsize-slice.md`, shots in `barsize-test/`).
 
 ## 8. The map's edges: top strip, right-edge column, "what next" and the tile box
 
