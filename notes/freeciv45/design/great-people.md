@@ -63,7 +63,7 @@ value at Invention (units-and-upgrades.md 1) not applying to "Help Wonder", the 
 | Points per turn per city | Sum of `User_Effect_3` in the city: 1 for a tier-1 building (Temple, Library, Marketplace, Amphitheater, Courthouse), 2 for tier 2 (University, Bank, Cathedral, Factory, Police Station), 3 for tier 3 (Research Lab, Stock Exchange, Mfg. Plant), 2 for every wonder in section 2, 2 for every Resident | `effects.ruleset`, one row per building |
 | Multiplier | `User_Effect_4` percent: Golden Age +100 (section 5); nothing else at first | `effects.ruleset` |
 | Pool | `fc45_gp_pool_<city id>`, grows by rate × (100 + pct) / 100 each `turn_begin`; reset to 0 at a birth; dropped when the city is destroyed (`city_destroyed` is already handled at `civ45/script.lua:19-25`) | `script.lua` |
-| Threshold | `150 + 75 × fc45_gp_born_<player id>`: 150, 225, 300, ... with no cap | `script.lua` constants `FC45_GP_BASE 150`, `FC45_GP_STEP 75` |
+| Threshold | `150 + 200 × fc45_gp_born_<player id>`: 150, 350, 550, ... with no cap (the step was 75 until issue 166, 2026-10-18) | `script.lua` constants `FC45_GP_BASE 150`, `FC45_GP_STEP 200` |
 | Kind | Draw one kind with probability equal to its share of the city's points, from the Lua table `fc45_gp_sources = { ["Library"] = {"sage", 1}, ... }` that mirrors the effect rows | `script.lua` |
 | Birth | `edit.create_unit(owner, city.tile, find.unit_type("Great " .. kind), 0, city, 2)` plus `notify.event(owner, city.tile, E.UNIT_BUILT, ...)` (the `E.SCRIPT` form is at `civ45/script.lua:32`) and a `fc45_gp_born` increment | `script.lua` |
 | First to a tech | `tech_researched(tech, player, reason)` (`script_server.c:483-485`): if `fc45_gp_first_<tech rule name>` is unset and `reason == "researched"`, set it to the player id and create the kind: Philosophy → Sage, Theology → Oracle, Economics → Magnate, Electricity → Builder (all four in tech-tree.md, eras II, III, IV and V) | `script.lua` |
@@ -74,6 +74,13 @@ one wonder and it is 38; a mid-game city with Library, University, Marketplace, 
 makes 8 a turn and, with four births already behind the player, needs 450 ÷ 8 = 57 turns. Expect 3 to 6 great
 people per player per game without wonders, 8 to 12 with them. The reference pace is in mechanics.md 2.9; these
 numbers are Freeciv45's own and are the first thing to tune.
+
+Tuned 2026-10-18 (issue 166): with the step at 75, AI games made 7 to 22 great people per civ (balance report 1,
+`notes/freeciv45/balance-1.md` section 4), and up to 26 at the Normal AI level, mostly late. A player who earns P
+points in a game gets about n births with 150n + step × n(n - 1) / 2 = P. In ten-AI, 475-turn Normal games on seed 3
+a step of 150 gave 1 to 19 per civ, 200 gave 2 to 15 and 300 gave 1 to 10, against 1 to 26 at 75. 300 also slowed
+the tree most (Great Sages and golden ages feed research), so the step is 200; on seed 42 it gave 2 to 9
+(`notes/freeciv45/balance-2.md`).
 
 The effect rows and the Lua table carry the same numbers twice. The test plan (section 7) has a check that diffs
 them; the alternative, a single source, is open question 1.

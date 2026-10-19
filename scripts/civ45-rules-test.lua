@@ -162,6 +162,8 @@ end
 -- Great people (slice 11, notes/freeciv45/design/great-people.md): points, deeds, the golden age and the
 -- settling enabler, in Testerburg; the birth, the settling and the age's end are checked a turn later.
 function fc45_gp_test_run(tester, used)
+  check("a great person costs 150 points plus 200 for each one the player had (issue 166)",
+        FC45_GP_BASE == 150 and FC45_GP_STEP == 200)
   local city = fc45_test.city
   if city == nil then
     log.normal("FC45TEST SKIP no Testerburg for the great people cases")
