@@ -1,0 +1,264 @@
+From a47e2a06845540e83ced96d84c3de8bf0949acd8 Mon Sep 17 00:00:00 2001
+From: John O'Dell <149541420+John-ODell@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 19:27:08 -0500
+Subject: [PATCH] Tilespec: whole-tile variants per neighbour form, and a pair
+ with several types
+
+A whole-tile terrain layer drawn from variants (no match, or a pair) that
+has a match type may also give variants per cardinal form,
+t.l<n>.<tag>_<form>_1 and up (and t.l<n>.<tag>_<type>_<form>_1 and up for
+its pair set). A tile draws from the set for the form its cardinal
+neighbours with the same match type make, when there is one, and from its
+usual variants otherwise. Freeciv45iso uses it for hill ridges and
+mountain ranges that run along the grid line their own kind continues on.
+
+A whole-tile layer whose match_with names several types now pairs with any
+of them (it was MATCH_FULL, which whole tiles never had); the pair set is
+named after the first.
+---
+ client/tilespec.c | 170 +++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 147 insertions(+), 23 deletions(-)
+
+diff --git a/client/tilespec.c b/client/tilespec.c
+index 61173e2..eeac37a 100644
+--- a/client/tilespec.c
++++ b/client/tilespec.c
+@@ -190,6 +190,14 @@ struct drawing_data {
+     struct sprite_vector base;
+     int pair_first; /* Whole tiles with MATCH_PAIR: base from here on are the
+                      * variants for a tile next to the second match type */
++    /* Freeciv45: whole tiles with variants and a match type may also have
++     * variants per cardinal form (cardinal_index_str()), drawn where the
++     * cardinal neighbours with the same match type make that form:
++     * t.l<n>.<tag>_<form>_1 and up, and with a pair
++     * t.l<n>.<tag>_<type>_<form>_1 and up. */
++    bool has_forms;
++    struct sprite_vector form[MAX_INDEX_CARDINAL];
++    struct sprite_vector pair_form[MAX_INDEX_CARDINAL];
+     struct sprite *match[MAX_INDEX_CARDINAL];
+     struct sprite **cells;
+ 
+@@ -730,6 +738,10 @@ static void drawing_data_destroy(struct drawing_data *draw)
+ 
+     sprite_vector_free(&draw->layer[i].base);
+     sprite_vector_free(&draw->layer[i].allocated);
++    for (j = 0; j < MAX_INDEX_CARDINAL; j++) {
++      sprite_vector_free(&draw->layer[i].form[j]);
++      sprite_vector_free(&draw->layer[i].pair_form[j]);
++    }
+     free(draw->layer[i].cells);
+   }
+   free(draw);
+@@ -2581,7 +2593,11 @@ static struct tileset *tileset_read_toplevel(const char *tileset_name,
+ 
+       switch (dlp->sprite_type) {
+       case CELL_WHOLE:
+-        /* OK, no problem */
++        /* Freeciv45: a whole-tile layer matched with several types pairs
++         * with any of them (its pair set is named after the first). */
++        if (dlp->match_style == MATCH_FULL) {
++          dlp->match_style = MATCH_PAIR;
++        }
+         break;
+       case CELL_CORNER:
+         if (dlp->is_tall
+@@ -4336,6 +4352,30 @@ static struct sprite *blend_piece(const struct tileset *t,
+   return out;
+ }
+ 
++/************************************************************************//**
++  Freeciv45: load the sprites <prefix>_1, <prefix>_2 and up into set, until
++  one is missing. Returns whether there was any.
++****************************************************************************/
++static bool load_whole_set(struct tileset *t, struct sprite_vector *set,
++                           const char *prefix)
++{
++  char buffer[MAX_LEN_NAME + 40];
++  int j;
++
++  for (j = 0; ; j++) {
++    struct sprite *sprite;
++
++    fc_snprintf(buffer, sizeof(buffer), "%s_%d", prefix, j + 1);
++    sprite = load_sprite(t, buffer, TRUE, FALSE, FALSE);
++    if (!sprite) {
++      break;
++    }
++    sprite_vector_append(set, sprite);
++  }
++
++  return j > 0;
++}
++
+ /************************************************************************//**
+   Set tile_type sprite values; should only happen after
+   tilespec_load_tiles().
+@@ -4417,6 +4457,22 @@ void tileset_setup_tile_type(struct tileset *t,
+                       pair, terrain_rule_name(pterrain), pair);
+           }
+         }
++        if (dlp->match_indices > 0) {
++          /* Freeciv45: optional variants per cardinal form. */
++          for (i = 0; i < t->num_index_cardinal; i++) {
++            fc_snprintf(buffer, sizeof(buffer), "t.l%d.%s_%s",
++                        l, draw->name, cardinal_index_str(t, i));
++            dlp->has_forms |= load_whole_set(t, &dlp->form[i], buffer);
++            if (dlp->match_style == MATCH_PAIR) {
++              fc_snprintf(buffer, sizeof(buffer), "t.l%d.%s_%s_%s",
++                          l, draw->name,
++                          tslp->match_types[dlp->match_index[1]],
++                          cardinal_index_str(t, i));
++              dlp->has_forms |= load_whole_set(t, &dlp->pair_form[i],
++                                               buffer);
++            }
++          }
++        }
+         break;
+       case MATCH_SAME:
+         /* Load 16 cardinally-matched sprites. */
+@@ -5411,13 +5467,92 @@ static int fill_city_overlays_sprite_array(const struct tileset *t,
+   return sprs - saved_sprs;
+ }
+ 
++/************************************************************************//**
++  Whether one of the eight neighbours of ptile has one of the other match
++  types of whole-tile layer l (MATCH_PAIR), so that ptile draws its pair
++  set.
++****************************************************************************/
++static bool whole_pair_near(const struct tileset *t,
++                            const struct drawing_layer *dlp, int l,
++                            const struct tile *ptile)
++{
++  enum direction8 dir;
++
++  for (dir = 0; dir < DIR8_MAGIC_MAX; dir++) {
++    struct tile *adjc = mapstep(&(wld.map), ptile, dir);
++    const struct drawing_data *odraw;
++    int k;
++
++    if (adjc == NULL || client_tile_get_known(adjc) == TILE_UNKNOWN
++        || tile_terrain(adjc) == NULL) {
++      continue;
++    }
++    odraw = t->sprites.drawing[terrain_index(tile_terrain(adjc))];
++    if (odraw == NULL || odraw->num_layers <= l
++        || odraw->layer[l].match_indices <= 0) {
++      continue;
++    }
++    for (k = 1; k < dlp->match_indices; k++) {
++      if (odraw->layer[l].match_index[0] == dlp->match_index[k]) {
++        return TRUE;
++      }
++    }
++  }
++
++  return FALSE;
++}
++
++/************************************************************************//**
++  Freeciv45: the variant of whole-tile layer l drawn on ptile from its sets
++  per cardinal form, or NULL when there is none for the form the cardinal
++  neighbours with the same match type make (or for the pair, when a
++  neighbour has one of the other match types). The tile then draws from
++  whole_variant().
++****************************************************************************/
++static struct sprite *whole_form(const struct tileset *t,
++                                 const struct drawing_layer *dlp, int l,
++                                 const struct tile *ptile,
++                                 struct terrain **tterrain_near)
++{
++  const struct sprite_vector *set;
++  int tileno = 0, i, n;
++
++  if (!dlp->has_forms) {
++    return NULL;
++  }
++  for (i = 0; i < t->num_cardinal_tileset_dirs; i++) {
++    const struct drawing_data *odraw
++      = t->sprites.drawing[terrain_index(
++                             tterrain_near[t->cardinal_tileset_dirs[i]])];
++
++    if (odraw != NULL && odraw->num_layers > l
++        && odraw->layer[l].match_indices > 0
++        && odraw->layer[l].match_index[0] == dlp->match_index[0]) {
++      tileno |= 1 << i;
++    }
++  }
++  if (dlp->match_style == MATCH_PAIR
++      && dlp->pair_first < sprite_vector_size(&dlp->base)
++      && whole_pair_near(t, dlp, l, ptile)) {
++    set = &dlp->pair_form[tileno];
++  } else {
++    set = &dlp->form[tileno];
++  }
++  n = sprite_vector_size(set);
++  if (n <= 0) {
++    return NULL;
++  }
++
++  return set->p[fc_randomly(tile_index(ptile) % 32000, n)];
++}
++
+ /************************************************************************//**
+   The index in dlp->base of the sprite drawn on ptile for whole-tile layer l
+   drawn from variants, or -1 when there is none. A pseudo-random
+   reproducible pick by tile index (modulo, to keep the number in
+   [0..32000)). With MATCH_PAIR the pick is among the pair variants when one
+-  of the eight neighbours has the layer's second match type, and among the
+-  others when none has.
++  of the eight neighbours has one of the layer's other match types, and
++  among the others when none has.
+ ****************************************************************************/
+ static int whole_variant(const struct tileset *t,
+                          const struct drawing_layer *dlp, int l,
+@@ -5426,23 +5561,7 @@ static int whole_variant(const struct tileset *t,
+   int first = 0, count = sprite_vector_size(&dlp->base);
+ 
+   if (dlp->match_style == MATCH_PAIR && dlp->pair_first < count) {
+-    bool near = FALSE;
+-    enum direction8 dir;
+-
+-    for (dir = 0; dir < DIR8_MAGIC_MAX && !near; dir++) {
+-      struct tile *adjc = mapstep(&(wld.map), ptile, dir);
+-      const struct drawing_data *odraw;
+-
+-      if (adjc == NULL || client_tile_get_known(adjc) == TILE_UNKNOWN
+-          || tile_terrain(adjc) == NULL) {
+-        continue;
+-      }
+-      odraw = t->sprites.drawing[terrain_index(tile_terrain(adjc))];
+-      near = (odraw != NULL && odraw->num_layers > l
+-              && odraw->layer[l].match_indices > 0
+-              && odraw->layer[l].match_index[0] == dlp->match_index[1]);
+-    }
+-    if (near) {
++    if (whole_pair_near(t, dlp, l, ptile)) {
+       first = dlp->pair_first;
+     } else {
+       count = dlp->pair_first;
+@@ -5762,14 +5881,19 @@ static int fill_terrain_sprite_array(struct tileset *t,
+       case MATCH_NONE:
+       case MATCH_PAIR:
+         {
+-          int v = whole_variant(t, dlp, l, ptile);
++          struct sprite *spr = whole_form(t, dlp, l, ptile, tterrain_near);
++
++          if (spr == NULL) {
++            int v = whole_variant(t, dlp, l, ptile);
+ 
+-          if (v >= 0) {
++            spr = v >= 0 ? dlp->base.p[v] : NULL;
++          }
++          if (spr != NULL) {
+             if (dlp->is_tall) {
+               ox += FULL_TILE_X_OFFSET;
+               oy += FULL_TILE_Y_OFFSET;
+             }
+-            ADD_SPRITE(dlp->base.p[v], TRUE, ox, oy);
++            ADD_SPRITE(spr, TRUE, ox, oy);
+           }
+           break;
+         }
+-- 
+2.56.0
+

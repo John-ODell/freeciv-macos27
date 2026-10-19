@@ -116,7 +116,9 @@ rules, isometric tilesets such as amplio2.
 `tilesets/freeciv45iso` is the angled tileset: the painted ground as 192 x 96 diamonds with soft, wandering edges,
 amplio2 (scaled 2x) for units, cities, rivers and the rest (patch 0033 lets isometric tilesets blend through the
 masks; `notes/freeciv45/iso/freeciv45iso.md`). `tilesets/make-freeciv45iso.py` rebuilds it from the same cut as
-freeciv45test.
+freeciv45test. Its trees, hills and mountains are the art pack's props baked into a few variants per terrain; hill
+ridges and mountain ranges follow the grid line their own kind continues on (patch 0034 lets whole-tile variants
+depend on the neighbours' form, and a pair name several types).
 
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It

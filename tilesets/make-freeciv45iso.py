@@ -40,7 +40,7 @@ usage: make-freeciv45iso.py --data ~/freeciv-builds/qt/share/freeciv
 Needs Pillow (python3.14 on this Mac has it).
 """
 import argparse, glob, importlib.util, math, os, random, re, tempfile
-from PIL import Image, ImageChops, ImageCms, ImageDraw
+from PIL import Image, ImageChops, ImageCms, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location("make_freeciv45test", os.path.join(HERE, "make-freeciv45test.py"))
@@ -105,37 +105,52 @@ RESOURCES = [
     ("ts.fish", "run1", "fish_2"), ("ts.whales", "run1", "whales_1"),
 ]
 
-# Trees, hills and mountains (issue 224): the Freeciv45 art pack's standing props (the art repo's
-# freeciv45/02_terrain_features, --features-art), cut at 192 px = one tile wide (post/raw), placed the way its
-# TREES_AND_RELIEF.md ("Runs 1 to 4") says. The client draws one sprite per layer per tile, so each terrain gets
-# variants baked here, each a scatter of trees or one hill or mountain on a full tile (W x 3H/2, drawn tall on layer
-# 2); the client picks one per tile. A "<terrain>_<type>" set is drawn where one of the eight neighbours has that layer
-# 2 match type (patch 0030): pines and snowy peaks next to tundra, dry hills next to desert. Only the props named here
-# end up in the tileset, baked into features.png.
+# Trees, hills and mountains (issues 224 and 229): the Freeciv45 art pack's standing props, set 2 (the art repo's
+# freeciv45/02_terrain_features, --features-art, runs 5 to 8; run 4's dark peaks for inaccessible), cut at 192 px = one
+# tile wide (post/raw), placed the way its TREES_AND_RELIEF_2.md ("Runs 5 to 8") says. The client draws one sprite per
+# layer per tile, so each terrain gets variants baked here, each one stand of trees (with a clump) or one hill or
+# mountain on a full tile (W x 3H/2, drawn tall on layer 2); the client picks one per tile. A "<terrain>_<type>" set is
+# drawn where one of the eight neighbours has that layer 2 match type (patch 0030): pines next to tundra, dry hills
+# next to desert, cold peaks next to tundra or glacier. Hills and mountains also have sets per neighbour form (patch
+# 0034): a ridge or range along the grid line their own kind continues on. Only the props named here end up in the
+# tileset, baked into features.png.
 FH = H * 3 // 2                       # the full tile: the diamond at the bottom, half a tile of headroom
-FEATURE_PANELS = {"trees": "run1/panel1", "plants": "run2/panel2", "hills": "run3/panel3", "peaks": "run4/panel4"}
-# tag: (panel, props, props per tile (min, max), scale, variants, one more of these on every tile)
-SCATTER = {
-    "forest": ("trees", ["broadleaf_[1-5]", "broadleaf_group_*", "pine_[1-4]"], (6, 7), 0.6, 12, None),
-    "forest_tundra": ("trees", ["pine_[1-5]", "pine_group_*", "pine_snow_*"], (6, 7), 0.6, 8, None),
-    "jungle": ("plants", ["jungle_[1-8]", "jungle_group_*"], (7, 7), 0.45, 12, ["palm_*", "tree_fern_*"]),
-    "swamp": ("plants", ["swamp_mangrove", "swamp_snag", "swamp_reeds", "swamp_tussock"], (3, 3), 0.6, 8, None),
+FEATURE_PANELS = {"forest": "run5/panel5", "wet": "run6/panel6", "hills": "run7/panel7", "peaks": "run8/panel8",
+                  "dark": "run4/panel4"}
+# tag: (panel, stands (a pattern twice makes those stands twice as common), stand scale, clump scale, share of
+# variants with a clump). One variant per stand: the stand's foot 24 px below the diamond centre, a clump of its kind
+# (CLUMPS) 44 px to one side and 34 px below.
+TREES = {
+    "forest": ("forest", ["stand_broadleaf_*", "stand_mixed_*", "stand_pine_*"] * 2 + ["stand_autumn_*"], 0.82, 0.65,
+               1),                    # autumn on about one forest tile in eleven
+    "forest_tundra": ("forest", ["stand_pine_*", "stand_snowpine_*"], 0.82, 0.65, 1),
+    "jungle": ("wet", ["stand_jungle_[1-5]", "stand_jungle_[1-5]", "stand_jungle_palm_*", "stand_jungle_tall_2"],
+               0.82, 0.65, 1),        # the tall emergents look like mushrooms: one of them, rarely
+    "swamp": ("wet", ["stand_mangrove_*", "stand_reeds_*", "stand_snags_*"] * 2, 0.5, 0.4, 0.6),
 }
-# tag: (panel, props, scale, foot below the diamond centre in px, share of the height faded out at the bottom); one
-# variant per prop. A prop too tall for the full tile is scaled down to fit (FH), so redraws never clip it.
-STAND = {
-    "hills": ("hills", ["hill_green_*", "hill_rocky_*", "hill_dome", "hill_double", "hill_flat", "hill_knoll",
-                        "hill_ridge"], 0.85, 22, 0.18),
-    "hills_desert": ("hills", ["hill_dry_*"], 0.85, 22, 0.18),
-    "mountains": ("peaks", ["peak_bare_*", "range_*", "peak_spire", "peak_massif", "peak_twin", "peak_ridge",
-                            "peak_cliff"], 0.78, 26, 0),
-    "mountains_tundra": ("peaks", ["peak_snow_*"], 0.78, 26, 0),
-    "inaccessible": ("peaks", ["peak_dark_*"], 0.82, 30, 0),
+CLUMPS = {"stand_broadleaf": "clump_broadleaf_*", "stand_autumn": "clump_broadleaf_*", "stand_mixed": "clump_mixed_*",
+          "stand_pine": "clump_pine_*", "stand_snowpine": "clump_pine_*", "stand_jungle": "clump_jungle_*",
+          "stand_jungle_palm": "clump_jungle_*", "stand_jungle_tall": "clump_jungle_*", "stand_mangrove": "swamp_*",
+          "stand_reeds": "swamp_*", "stand_snags": "swamp_*"}
+# tag: (panel, singles, ridges or ranges along the right-rising grid line, along the left-rising one, single scale,
+# ridge scale, a single's foot below the diamond centre in px). One variant per prop. A ridge's foot is a quarter of
+# its width below the centre, so its ends meet the next tile's on the grid line. A tile with its own kind on one grid
+# line only (cardinal forms, patch 0034) draws a ridge along it; one with its kind on both or neither, a single.
+RELIEF2 = {
+    "hills": ("hills", ["cluster_green_*", "cluster_rocky_*"], ["ridge_green_r*", "ridge_rocky_r*"],
+              ["ridge_green_l*", "ridge_rocky_l*"], 0.9, 1.1, 22),
+    "hills_desert": ("hills", ["cluster_dry_*"], ["ridge_dry_r*"], ["ridge_dry_l*"], 0.9, 1.1, 22),
+    "mountains": ("peaks", ["peak_warm_*", "peak_tipped_*"], ["range_r*"], ["range_l*"], 0.85, 1.15, 22),
+    "mountains_tundra": ("peaks", ["peak_cold_*"], ["range_r*"], ["range_l*"], 0.85, 1.15, 22),
+    "inaccessible": ("dark", ["peak_dark_*"], [], [], 0.82, 0, 30),
 }
-STRIP = ("peak_spire", "peak_massif", "peak_twin", "peak_ridge", "peak_cliff", "range_1", "range_2")  # cell above at top
-# Each tile's layer 2: (match type, the neighbour type of its second set or None).
-FEATURE_TILES = {"forest": ("forest", "tundra"), "jungle": ("jungle", None), "swamp": ("swamp", None),
-                 "hills": ("hills", "desert"), "mountains": ("mountains", "tundra"), "inaccessible": ("inaccessible", None)}
+CLEAN = ("range_l1", "range_l2")      # edge fragments next to the range (run 8 r4c1 and r4c2)
+# The client's cardinal forms (n, e, s, w): north and south lie on the right-rising grid line in the iso view.
+LINE_FORMS = {"r": ["n1e0s0w0", "n0e0s1w0", "n1e0s1w0"], "l": ["n0e1s0w0", "n0e0s0w1", "n0e1s0w1"]}
+# Each tile's layer 2: (match type, the neighbour types of its second set, named after the first).
+FEATURE_TILES = {"forest": ("forest", ["tundra"]), "jungle": ("jungle", []), "swamp": ("swamp", []),
+                 "hills": ("hills", ["desert"]), "mountains": ("mountains", ["tundra", "arctic"]),
+                 "inaccessible": ("inaccessible", [])}
 # Ground under the props: green-gold plains under hills, tundra under the pines next to tundra (forest_tundra), and
 # under mountains the rocky desert, graded grey-brown (GRADE). Forest and jungle stand on CANOPY_BASE's grassland.
 FEATURE_BASE = [("hills", "run6", sq.row(1)), ("mountains", "run19", sq.row(5)), ("forest_tundra", "run19", sq.row(3))]
@@ -318,77 +333,97 @@ def resources(res_dir, out_dir, record):
                      cols * W, rows * H))
     return {t for t, _, _ in RESOURCES}
 
-def strip(im):
-    """A prop without the strip of the cell above at its top: everything above the last empty row in the top 40 %
-    (the art repo's judge/stand-relief.py), then trimmed."""
-    a = im.getchannel("A"); w, h = a.size; last = 0
-    for y in range(1, int(h * 0.4)):
-        if a.crop((0, y, w, y + 1)).getextrema()[1] < 16 and a.crop((0, y - 1, w, y)).getextrema()[1] >= 16: last = y
-    im = im.crop((0, last, w, h)); return im.crop(im.getbbox())
-
-def fade(im, frac):
-    """The bottom frac of the prop's height faded out, so a hill melts into the ground instead of a hard rim."""
-    n = max(1, int(im.height * frac)); g = Image.new("L", im.size, 255); d = ImageDraw.Draw(g)
-    for i in range(n): d.line([(0, im.height - 1 - i), (im.width, im.height - 1 - i)], fill=255 * i // n)
-    im = im.copy(); im.putalpha(ImageChops.multiply(im.getchannel("A"), g)); return im
+def largest(im):
+    """The prop with only its largest piece of alpha (and that piece's soft rim), then trimmed: drops the fragments of
+    a neighbouring cell at the edge."""
+    a = im.getchannel("A"); w, h = a.size; px = a.load(); seen = bytearray(w * h); best = []
+    for y0 in range(h):
+        for x0 in range(w):
+            if px[x0, y0] < 16 or seen[y0 * w + x0]: continue
+            todo, piece = [(x0, y0)], []; seen[y0 * w + x0] = 1
+            while todo:
+                x, y = todo.pop(); piece.append((x, y))
+                for nx in (x - 1, x, x + 1):
+                    for ny in (y - 1, y, y + 1):
+                        if 0 <= nx < w and 0 <= ny < h and not seen[ny * w + nx] and px[nx, ny] >= 16:
+                            seen[ny * w + nx] = 1; todo.append((nx, ny))
+            if len(piece) > len(best): best = piece
+    keep = Image.new("L", (w, h), 0); kp = keep.load()
+    for x, y in best: kp[x, y] = 255
+    keep = keep.filter(ImageFilter.MaxFilter(5))
+    im = im.copy(); im.putalpha(ImageChops.multiply(a, keep)); return im.crop(im.getbbox())
 
 def scaled(im, s):
     im = im.convert("RGBa").resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
     return im.convert("RGBA")
 
 def features(feat_dir, out_dir, record):
-    """features.png and features.spec: SCATTER's and STAND's variants, ten to a row, each a W x FH full tile."""
+    """features.png and features.spec: TREES' and RELIEF2's variants, ten to a row, each a W x FH full tile. A cell
+    drawn for several sets (the ranges, for mountains and cold mountains, on each of a line's three forms) carries all
+    their tags."""
     def props(panel, pats):
         out = []
         for pat in pats:
             for path in sorted(glob.glob(os.path.join(feat_dir, FEATURE_PANELS[panel], "post", "raw", pat + ".png"))):
                 name = os.path.basename(path)[:-4]
                 im = Image.open(path).convert("RGBA")
-                out.append((name, strip(im) if name in STRIP else im.crop(im.getbbox())))
+                out.append((name, largest(im) if name in CLEAN else im.crop(im.getbbox())))
         assert out, (panel, pats)
         return out
     cx, cy = W / 2, FH - H / 2           # the diamond's centre on the canvas
-    cells, used = [], set()
-    for tag, (panel, pats, (lo, hi), scale, count, extra) in SCATTER.items():
-        pool, more = props(panel, pats), props(panel, extra) if extra else []
-        for k in range(count):
-            rng = random.Random("%s %d" % (tag, k)); canvas = Image.new("RGBA", (W, FH), (0, 0, 0, 0)); placed = []
-            for name, im in [rng.choice(pool) for _ in range(rng.randint(lo, hi))] + ([rng.choice(more)] if more else []):
-                im = scaled(im, scale * rng.uniform(0.85, 1.1))
-                for _ in range(400):     # a foot inside the diamond, off the rim, the prop inside the canvas
-                    u, v = rng.uniform(-0.8, 0.8), rng.uniform(-0.8, 0.8)
-                    x, y = cx + u * W / 2, cy + v * H / 2
-                    if abs(u) + abs(v) > 0.8 or y - im.height < 0: continue
-                    x = min(max(x, im.width / 2), W - im.width / 2)
-                    if all(math.hypot(x - ox, 2 * (y - oy)) >= 0.35 * (im.width + ow) / 2 for ox, oy, ow, _, _ in placed):
-                        placed.append((x, y, im.width, im, name)); break
-            for x, y, _, im, name in sorted(placed, key=lambda t: t[1]):
-                canvas.alpha_composite(im, (round(x - im.width / 2), min(FH, round(y + 2)) - im.height)); used.add(name)
-            cells.append(("t.l2.%s%d" % (tag, k + 1), canvas))
-    for tag, (panel, pats, scale, foot, frac) in STAND.items():
-        rng = random.Random(tag)
+    cells, made, used = [], {}, set()
+    def put(canvas, tag, key=None):
+        if key in made: cells[made[key]][0].append(tag); return
+        if key: made[key] = len(cells)
+        cells.append(([tag], canvas))
+    def stand(canvas, name, im, s, x, foot):
+        """im scaled by s, no larger than the full tile, its foot foot px below the centre and its middle at x."""
+        im = scaled(im, min(s, (cy + foot) / im.height, W / im.width))
+        x = min(max(x, im.width / 2), W - im.width / 2)
+        canvas.alpha_composite(im, (round(x - im.width / 2), round(min(FH, cy + foot)) - im.height)); used.add(name)
+    for tag, (panel, pats, scale, cscale, share) in TREES.items():
         for k, (name, im) in enumerate(props(panel, pats)):
-            if frac: im = fade(im, frac)
-            s = min(scale * rng.uniform(0.92, 1.05), (cy + foot) / im.height, W / im.width)
-            im = scaled(im, s); canvas = Image.new("RGBA", (W, FH), (0, 0, 0, 0))
-            canvas.alpha_composite(im, (round(cx - im.width / 2), round(cy + foot) - im.height)); used.add(name)
-            cells.append(("t.l2.%s%d" % (tag, k + 1), canvas))
+            rng = random.Random("%s %d" % (tag, k)); canvas = Image.new("RGBA", (W, FH), (0, 0, 0, 0))
+            stand(canvas, name, im, scale * rng.uniform(0.94, 1.04), cx + rng.randint(-6, 6), 24)
+            if rng.random() < share:
+                cname, cim = rng.choice(props(panel, [CLUMPS[name.rstrip("0123456789").rstrip("_")]]))
+                stand(canvas, cname, cim, cscale * rng.uniform(0.94, 1.04), cx + rng.choice((-44, 44)), 34)
+            put(canvas, "t.l2.%s%d" % (tag, k + 1))
+    for tag, (panel, singles, right, left, scale, rscale, foot) in RELIEF2.items():
+        rng = random.Random(tag)
+        for k, (name, im) in enumerate(props(panel, singles)):
+            canvas = Image.new("RGBA", (W, FH), (0, 0, 0, 0))
+            stand(canvas, name, im, scale * rng.uniform(0.94, 1.04), cx, foot)
+            put(canvas, "t.l2.%s%d" % (tag, k + 1))
+        for line, pats in (("r", right), ("l", left)):
+            for k, (name, im) in enumerate(props(panel, pats) if pats else []):
+                canvas = None
+                if (panel, name) not in made:
+                    canvas = Image.new("RGBA", (W, FH), (0, 0, 0, 0)); s = min(rscale, W / im.width)
+                    stand(canvas, name, im, s, cx, round(im.width * s) / 4 + 4)
+                for form in LINE_FORMS[line]:
+                    put(canvas, "t.l2.%s_%s_%d" % (tag, form, k + 1), (panel, name))
     cols = 10; rows = (len(cells) + cols - 1) // cols
     sheet = Image.new("RGBA", (cols * W, rows * FH), (0, 0, 0, 0))
     for i, (_, canvas) in enumerate(cells): sheet.paste(canvas, ((i % cols) * W, (i // cols) * FH))
     sheet.save(os.path.join(out_dir, "features.png"), optimize=True)
     with open(os.path.join(out_dir, "features.spec"), "w") as f:
         f.write("; Trees, hills and mountains for the Freeciv45 iso tileset: the Freeciv45 art pack's standing props\n"
-                "; (freeciv45/02_terrain_features), scattered or stood on full tiles by tilesets/make-%s.py (see RECORD.md).\n\n"
+                "; (freeciv45/02_terrain_features), stood on full tiles by tilesets/make-%s.py (see RECORD.md).\n\n"
                 '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    John O\'Dell (sheet workflow)\n"\n\n'
                 '[file]\ngfx = "%s/features"\n\n[grid_main]\n\nx_top_left = 0\ny_top_left = 0\ndx = %d\ndy = %d\n\n'
                 'tiles = { "row", "column", "tag"\n%s\n}\n'
-                % (NAME, NAME, W, FH, "\n".join('  %d, %d, "%s"' % (i // cols, i % cols, t) for i, (t, _) in enumerate(cells))))
-    sets = ["%s %d" % (t, sum(1 for c, _ in cells if re.fullmatch(r"t\.l2\.%s\d+" % t, c))) for t in list(SCATTER) + list(STAND)]
-    record.append("| `%s/features.spec` | the art pack's standing props (`freeciv45/02_terrain_features`, runs 1-4, "
-                  "`post/raw`): %s; variants %s | LANCZOS (SCATTER and STAND scales) | %dx%d |"
-                  % (NAME, ", ".join("`%s`" % n for n in sorted(used)), ", ".join(sets), cols * W, rows * FH))
-    return {t for t, _ in cells}, sorted(used)
+                % (NAME, NAME, W, FH, "\n".join('  %d, %d, %s' % (i // cols, i % cols, ", ".join('"%s"' % t for t in ts))
+                                               for i, (ts, _) in enumerate(cells))))
+    tags = [t for ts, _ in cells for t in ts]
+    sets = ["%s %d" % (t, sum(1 for c in tags if re.fullmatch(r"t\.l2\.%s\d+" % t, c))) for t in list(TREES) + list(RELIEF2)]
+    forms = ["%s %d" % (t, sum(1 for c in tags if re.fullmatch(r"t\.l2\.%s_n1e0s1w0_\d+" % t, c)))
+             for t in RELIEF2 if RELIEF2[t][2]]
+    record.append("| `%s/features.spec` | the art pack's standing props (`freeciv45/02_terrain_features`, runs 4-8, "
+                  "`post/raw`): %s; variants %s; ridges and ranges per grid line %s | LANCZOS (TREES and RELIEF2 "
+                  "scales) | %dx%d |" % (NAME, ", ".join("`%s`" % n for n in sorted(used)), ", ".join(sets),
+                                         ", ".join(forms), cols * W, rows * FH))
+    return set(tags), sorted(used)
 
 def feature_sections(ours):
     """freeciv45test's sections with the props on layer 2 (FEATURE_TILES): whole-tile variants, tall, with a second
@@ -405,7 +440,8 @@ def feature_sections(ours):
             kind, pair = FEATURE_TILES[terrain]
             text = re.sub(r'layer2_match_type = "water"\n(layer2_match_with = "\w+"\n)?',
                           'layer2_match_type = "%s"\n%slayer2_is_tall = TRUE\n'
-                          % (kind, 'layer2_match_with = "%s"\n' % pair if pair else ""), text)
+                          % (kind, 'layer2_match_with = %s\n' % ", ".join('"%s"' % p for p in pair) if pair else ""),
+                          text)
             text = text.replace('layer2_sprite_type = "corner"\n', "")
         elif terrain in ("tundra", "desert"):
             text = text.replace('layer2_match_type = "water"', 'layer2_match_type = "%s"' % terrain)
@@ -642,9 +678,11 @@ def main():
             f.write("\n## Trees, hills and mountains\n\n`features.spec` / `features.png`: forest, jungle, swamp, hills, "
                     "mountains and inaccessible drawn with the Freeciv45 art pack's standing props (John O'Dell's sheet "
                     "workflow with OpenAI image generation through Codex, art repo folder `freeciv45/02_terrain_features`, "
-                    "runs 1 to 4, placed as its `TREES_AND_RELIEF.md` says). The props are scattered (trees) or stood "
-                    "(one hill or mountain) on %dx%d full tiles in a few variants per terrain, so the client draws one "
-                    "sprite per tile on layer 2 (issue 224). Only these %d props are used, and only inside the baked "
+                    "runs 5 to 8 and run 4's dark peaks, placed as its `TREES_AND_RELIEF_2.md` says). The props are "
+                    "stood (a stand of trees with a clump, or one hill or mountain) on %dx%d full tiles in a few "
+                    "variants per terrain, so the client draws one sprite per tile on layer 2; hills and mountains "
+                    "draw a ridge or range along the grid line their own kind continues on (issues 224 and 229, "
+                    "patch 0034). Only these %d props are used, and only inside the baked "
                     "variants: %s. No panels, alternates or other files from the art repo. GPL-2.0-or-later, like the "
                     "rest of the folder.\n" % (W, FH, len(feature_props), ", ".join("`%s`" % n for n in feature_props)))
     print("\n".join(amplio_record + painted_record))

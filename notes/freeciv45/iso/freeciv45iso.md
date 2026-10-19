@@ -299,6 +299,59 @@ and every terrain draws its stand.
 
 ![the labelled field: amplio2, today, our props; 1:1](features-terrain-names-1to1.jpg)
 
+## Set 2: stands, ridges and ranges (issue 229, 2026-10-18)
+
+Set 2 of the trees and relief replaces set 1 for forest, jungle, swamp, hills and mountains. It comes from BK-Art
+PR 86, commit 38fd559, `freeciv45/02_terrain_features` runs 5 to 8, placed as `TREES_AND_RELIEF_2.md` ("Runs 5 to
+8") says. Inaccessible keeps run 4's dark peaks. It closes #226 (hills don't join), #227 (no snowy peaks by glacier)
+and #228 (forest reads as open woodland).
+- **Trees (`TREES`):** one stand per variant at 0.82, its foot 24 px below the diamond centre, plus a clump of its
+  kind (`CLUMPS`) at 0.65, 44 px to one side and 34 px below. Swamp's stand is at 0.5, and 6 of its 10 variants have
+  a small clump at 0.4.
+  - forest: broadleaf, mixed and pine stands (each twice) plus the 3 autumn stands, 33 variants, so autumn is on
+    about one forest tile in eleven;
+  - forest next to tundra: pine and snowy-pine stands, 7;
+  - jungle: stands 1 to 5 (each twice), 2 with palms and 1 tall emergent (the mushroom look, so only one), 13;
+  - swamp: mangroves, reeds and snags, 10.
+- **Hills and mountains (`RELIEF2`):** the form comes from the neighbours along the two grid lines.
+  - In the iso view, the client's cardinal neighbours north and south lie on the right-rising line, and east and
+    west on the left-rising one.
+  - A tile whose own kind is on one line only draws a ridge (hills, 1.1) or range (mountains, 1.15) along it. Its
+    foot is a quarter of its width (plus 4 px) below the centre, so the ends meet the next tile's.
+  - A tile with its kind on both lines or neither draws a single: a cluster (hills, 0.9) or a peak (`peak_warm_*`,
+    `peak_tipped_*`, 0.85), foot 22 px below the centre.
+  - Hills next to desert draw dry clusters and ridges.
+  - Mountains next to tundra or glacier draw cold peaks as singles and keep the ranges on a line.
+  - `range_l1` and `range_l2` lose the edge fragments of the next cell (`largest()`: only the largest piece of
+    alpha).
+- **Patch 0034** is the client side.
+  - A whole-tile layer drawn from variants can also have variants per cardinal form,
+    `t.l2.<tag>_<form>_<k>` (and `t.l2.<tag>_<type>_<form>_<k>` for the pair set). Forms without their own set
+    draw the usual variants.
+  - A `layer2_match_with` that names several types pairs with any of them (mountains: `"tundra", "arctic"`).
+  - amplio2's own match (MATCH_SAME) wasn't enough: it loads one sprite per form, so every inner tile of a chain
+    would repeat one ridge, and it can't also pair.
+  - Each ridge or range is baked once and carries the tags of its line's three forms (and, for ranges, of the cold
+    set too).
+  - The tileset now needs a client with patch 0034. Without it, the mountains' several-type pair is an unknown
+    match style on whole tiles.
+- **Size limit:** every variant stays inside the full tile (192 x 144). A stand 165 px tall at 0.82 would reach above
+  it, so the tallest stands come out at about 0.73. The widest ranges are held to 192 px (about 1.1).
+- **Only the props drawn are shipped:** 118 baked tiles in `features.png`. RECORD.md "Trees, hills and mountains"
+  names the 100 props they use, under GPL-2.0-or-later.
+
+**Check (observed):** mapseed 21 in the same window, and the labelled field, on the patched client. The client log
+shows no warning.
+- Forest and jungle read as closed stands.
+- The hills north-west of the start join into one ridge, and the mountains by the south coast into one range.
+- The mountain block by the glacier draws cold peaks.
+- In the field's 3 x 3 blocks every inner tile has its kind on both lines, so blocks draw singles, as the brief
+  says.
+
+![today (set 1) and set 2; mapseed 21, 1:1](set2-seed21-1to1.jpg)
+
+![the labelled field: today (set 1) and set 2; 1:1](set2-terrain-names-1to1.jpg)
+
 ## Not done, and findings
 
 - Hills and mountains had no relief in the first build (issue 194). They now draw our own props (issue 224).
