@@ -1,0 +1,31 @@
+From 584f876d4b987fc4cbe123bfb71dc167c54ac659 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 21:08:42 -0500
+Subject: [PATCH] civ45: the game description gives the culture victory as
+ 30000 points and a quarter more
+
+Issue 243: patch 0043 set victory_min_points 30000 and a lead of a
+quarter, but the description players read still said 8000 points and
+half again as much.
+---
+ data/civ45/game.ruleset | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index 77b3a80..e54d659 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -47,8 +47,8 @@ can bombard a stack of two or more units, wounding every unit in it \
+ and killing none. The map is a square grid seen from above that wraps \
+ east to west, and each city works 21 tiles. \
+ Six ways to win: conquest; domination (hold 60 percent of the land \
+-and half the world's people for three turns); culture (8000 points \
+-and half again as much as the runner-up); a spaceship that arrives; \
++and half the world's people for three turns); culture (30000 points \
++and a quarter more than the runner-up); a spaceship that arrives; \
+ the last alliance standing; or the highest score when the game ends \
+ after turn 475. \
+ Also: strategic resources (Legion needs Iron, Armor needs Oil) and a \
+-- 
+2.56.0
+

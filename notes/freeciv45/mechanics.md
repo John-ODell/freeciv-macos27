@@ -521,7 +521,8 @@ Logs: `logs/test-qt-20261017-155025` and `logs/test-qt-20261017-155028` (final s
 - The design note's five questions for John, built here with its recommended values: the domination thresholds
   (60 % land, 50 % citizens, 3 turns) against the spec's "about 65 % plus a population lead"; whether allies should
   win domination jointly (needs an engine getter or the `DiplRel` trick); `endturn` 475 as the shipped default;
-  culture 8000 and a 50 % lead now, before the culture slice changes the pace; and whether the score winner should be
+  culture 8000 and a 50 % lead now, before the culture slice changes the pace (30000 and a quarter since issue 165);
+  and whether the score winner should be
   announced through Lua at all.
 - Culture and domination numbers are untuned (see the autogame); re-tune with roadmap row 8 and after slice 10.
 

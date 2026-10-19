@@ -257,7 +257,7 @@ before turn 400, raise `victory_min_points`; if none passes 4,000 by turn 475, l
    (2.5), so "yes" means the `DiplRel` trick or waiting for an engine getter.
 3. `endturn` 475 (the year 2050) as the shipped default, or leave the engine's 5000 and let hosts set it?
 4. Culture: 8000 and a 50% lead now, knowing row 8 of the roadmap will change the pace, or leave 20000 until
-   that slice lands?
+   that slice lands? (Built as 8000 and 50 %; changed to 30000 and a quarter in issue 165, balance report 2.)
 5. Should the score winner at `endturn` be announced through Lua (2.6), or is the plain turn-limit ending enough?
 
 ## Implementation order
