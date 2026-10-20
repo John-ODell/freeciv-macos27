@@ -156,13 +156,12 @@ files =
   "freeciv45iso/blend.spec",
   "freeciv45iso/resources.spec",
   "freeciv45iso/features.spec",
+  "freeciv45iso/extras.spec",
   "freeciv45iso/maglev.spec",
-  "freeciv45iso/water.spec",
   "freeciv45iso/volcano.spec",
+  "freeciv45iso/badges.spec",
   "freeciv45iso/tiles.spec",
-  "freeciv45iso/upkeep.spec",
   "freeciv45iso/marks.spec",
-  "freeciv45iso/activities.spec",
   "freeciv45iso/fog.spec",
   "misc/small.spec",
   "misc/events.spec",
@@ -402,13 +401,14 @@ styles =
       "road.river",    "River"
       "tx.irrigation", "Cardinals"
       "tx.farmland",   "Cardinals"
-      "tx.mine",       "Single1"
-      "tx.oil_mine",   "Single1"
-      "tx.oil_rig",    "Single1"
+      "tx.mine",       "3Layer"
+      "tx.oil_mine",   "3Layer"
+      "tx.oil_rig",    "3Layer"
       "tx.nets",       "Single1"
       "tx.pollution",  "Single2"
       "tx.fallout",    "Single2"
-      "tx.village",    "Single1"
+      "tx.village",    "3Layer"
+      "tx.hermit",     "3Layer"
       "base.outpost",  "3Layer"
       "base.fortress", "3Layer"
       "base.airstrip", "3Layer"

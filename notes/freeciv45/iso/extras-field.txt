@@ -1,0 +1,22 @@
+# Map extras (issue 262): a 15 x 9 tile field around the tile 3 east and 3 south of the start stack (as field.txt), grassland with a
+# row of hills and one of desert, over three rows of ocean, and on it every extra the art pack now draws: mines on hills, an oil well
+# on desert, a hut, a hermit, a transport hub, Fort, Fortress and Castle with a unit in each, an airstrip and an airbase, irrigation,
+# farmland, pollution and fallout, roads and rails in straight and diagonal runs, a river into the sea (outlet), a buoy and an oil
+# platform at sea, and a stack of units. Run as units-cities-field.txt (drive.sh, QT_SCALE_FACTOR=2, rulesetdir civ45 with
+# revealmap, fog and diplomacy off); TILESETS is the folder with the freeciv45iso build to look at.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd T = {}; local u0; for p in players_iterate() do if p:is_human() then H = p; for u in p:units_iterate() do u0 = u.tile; break end end end; for t in whole_map_iterate() do local dx, dy = math.floor(t.x - u0.x - 3), math.floor(t.y - u0.y - 3); if dx >= -7 and dx <= 7 and dy >= -4 and dy <= 4 then T[dx .. "," .. dy] = t; local k = dy >= 2 and "Ocean" or (dy == -3 and dx <= -4 and "Hills") or (dy == -3 and dx == -3 and "Desert") or (dy == -3 and dx == -2 and "Mountains") or "Grassland"; edit.change_terrain(t, find.terrain(k)) end end
+wait 2000
+chat /lua cmd local function x(n, ...) for _, e in ipairs({...}) do pcall(function() edit.create_extra(T[n], e) end) end end; x("-6,-3", "Mine"); x("-5,-3", "Mine"); x("-4,-3", "Mine"); x("-3,-3", "Oil Well"); x("-2,-3", "Hermit"); x("-1,-3", "Hut"); x("0,-3", "Ancient Transport Hub"); x("2,-3", "Fort"); x("3,-3", "Fort", "Fortress"); x("4,-3", "Fort", "Fortress", "Castle"); x("6,-3", "Airstrip"); x("6,-2", "Airstrip", "Airbase"); for dx = -6, -3 do x(dx .. ",-1", "Irrigation") end; for dx = -6, -4 do x(dx .. ",0", "Irrigation", "Farmland") end; x("-2,-1", "Pollution"); x("-2,0", "Fallout"); for dx = -1, 5 do x(dx .. ",-2", "Road") end; x("6,-1", "Road"); x("7,0", "Road"); x("4,-1", "Road"); x("4,0", "Road"); for dx = 0, 3 do x(dx .. ",-1", "Road", "Railroad") end; x("-1,0", "Road", "Railroad"); x("-2,1", "Road", "Railroad"); for _, n in ipairs({"1,0", "1,1", "2,1", "3,1", "3,0"}) do x(n, "River") end; x("1,0", "Road"); x("-4,3", "Buoy"); x("4,3", "Oil Platform")
+wait 2000
+chat /lua cmd local function mk(n, name, k) for i = 1, k or 1 do edit.create_unit(H, T[n], find.unit_type(name), 0, nil, 1) end end; mk("2,-3", "Warriors"); mk("3,-3", "Phalanx"); mk("4,-3", "Pikemen"); mk("0,0", "Warriors", 3); mk("6,-2", "Riflemen"); mk("6,1", "Workers")
+wait 5000
+key escape
+wait 1000
+dismiss
+state all
+shot field
+quit
