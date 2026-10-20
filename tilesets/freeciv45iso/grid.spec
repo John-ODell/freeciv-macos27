@@ -37,9 +37,5 @@ tiles = { "row", "column", "tag"
    1,  4, "grid.selected.ns"
    0,  5, "grid.coastline.we"
    1,  5, "grid.coastline.ns"
-   2,  0, "grid.borders.n"
-   2,  1, "grid.borders.s"
-   2,  2, "grid.borders.w"
-   2,  3, "grid.borders.e"
 }
 

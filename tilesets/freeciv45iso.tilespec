@@ -183,6 +183,7 @@ files =
   "freeciv45iso/bases.spec",
   "freeciv45iso/select.spec",
   "freeciv45iso/grid.spec",
+  "freeciv45iso/borders.spec",
   "misc/cursors.spec",
   "freeciv45iso/overlays.spec",
   "freeciv45iso/citybar.spec",
