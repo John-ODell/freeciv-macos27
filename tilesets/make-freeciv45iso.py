@@ -45,6 +45,12 @@ National borders (issue 259): amplio2's dashed grid.borders.n/s/w/e are replaced
 tints per nation (borders.spec, see BORDER_CORE and BORDER_FADE): a solid band along each diamond edge, crisp on the outer
 side and fading inward; --no-borders keeps amplio2's.
 
+Map extras (issue 262): mines, oil wells and platforms, huts, hermits, the transport hub, buoys, Fort, Fortress and Castle,
+airstrips and airbases, irrigation, farmland, pollution, fallout, roads, rails, rivers and the badges come from the art repo's
+freeciv45/09_map_extras runs 1 to 6 (extras.spec, badges.spec; see EXTRA_RUNS): standing props on the full tile, the forts split
+into back and front halves, the overlays turned like the ground, the road, rail and river pieces painted from seamless bands,
+the counted badges drawn with a number. amplio2's maglev stays until its retake; --no-bk-extras keeps all of amplio2's.
+
 From amplio2 (Freeciv 3.2.6, GPL-2.0-or-later, the artists named in each spec's [info] section, copied verbatim):
 every spec file amplio2.tilespec lists under amplio2/ except the ocean cells the painted ground replaces
 (SKIPPED; the forest and jungle overlays too with --canopy painted), each sprite scaled 2x with nearest-neighbour sampling (recut). The tilespec is amplio2's with the sizes
@@ -55,10 +61,11 @@ usage: make-freeciv45iso.py --data ~/freeciv-builds/qt/share/freeciv
                             [--out tilesets] [--olive-pine] [--no-tone-match] [--no-level] [--no-blend]
                             [--no-relief] [--relief-base flat|painted] [--canopy amplio2|painted]
                             [--land-grade L,A,B] [--units-art 04_units] [--cities-art 05_cities] [--no-bk-units]
+                            [--extras-art 09_map_extras] [--no-bk-extras]
 Needs Pillow (python3.14 on this Mac has it).
 """
 import argparse, glob, importlib.util, math, os, random, re, tempfile
-from PIL import Image, ImageChops, ImageCms, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageCms, ImageDraw, ImageFilter, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location("make_freeciv45test", os.path.join(HERE, "make-freeciv45test.py"))
@@ -863,6 +870,297 @@ def borders(out_dir, record, ss=4):
                   % (NAME, BORDER_CORE, BORDER_FADE, BORDER_CURVE, *sheet.size))
     return set(BORDER_TAGS)
 
+# Map extras (issue 262): the art pack's freeciv45/09_map_extras runs 1 to 6 (--extras-art), in place of amplio2's improvements,
+# bases, roads, rails, rivers and badges; the picks follow its MAP_EXTRAS.md ("Runs 1 to 6: verdicts").
+# - Standing props (EXTRA_PROPS: mines, oil well and platform, hut, hermit, transport hub, buoy) are drawn 3Layer, as `_mg` on the
+#   full tile (W x FH, under the units), so they can stand taller than the diamond; the tilespec's [extras] styles say so
+#   (EXTRA_3LAYER) and add tx.hermit, which amplio2 drew as its village. Run 1's props cross the even grid's row lines, so they
+#   are cut from the whole panel: every piece of alpha goes to the cell its middle lies in (panel_props).
+# - Fort, Fortress and Castle (EXTRA_FORTS; civ45's Fort draws base.outpost) are split into `_bg` and `_fg` along the top of
+#   the front walls (the footprint's lower edges raised by FORT_WALL of its width), so a unit stands inside; the airstrip and
+#   airbase are `_bg` pads.
+# - Irrigation, farmland, pollution and fallout (EXTRA_OVERLAYS) are run 3's straight-down seamless squares turned into the
+#   diamond like the ground.
+# - Roads, rails and rivers are painted in square tile space from run 4's seamless bands (ROAD_BANDS: the middle of the band,
+#   feathered, at a set width), one piece from the tile's middle to each neighbour (to an edge's middle, or to a corner for a
+#   diagonal) with a round end at the middle, then turned into the W x H rectangle like the ground (the ends past a corner
+#   overlap the neighbour, as amplio2's do). Rivers: the 16 cardinal forms and the outlets, drawn on the ocean tile from the
+#   river's edge, widening and fading into the water. Maglev stays amplio2's until its retake (art run 7).
+# - Badges (run 6): the activity marks the units art lacks, stacked, loaded, connecting and the two auto modes, occupied and
+#   disorder, and the counted upkeep (1 to 4 symbols, then a symbol and a number) and tile output (a symbol and a number) drawn
+#   by script, at amplio2's places. The numbers are Pillow's built-in Aileron Regular (CC0).
+# civ45 has no animal units, so run 5's animals wait in the art repo.
+EXTRA_RUNS = {"props": "run1/panel1/built_on_tiles.png", "forts": "run2/panel2", "overlays": "run3/panel3", "roads": "run4/panel4",
+              "badges": "run6/panel6"}
+# tag: (cut, width as a share of W, foot y on the full tile, at most this tall)
+EXTRA_PROPS = {"tx.mine": ("mine_1", 0.46, 106, 92), "tx.oil_mine": ("oil_mine_1", 0.40, 106, 92),
+               "tx.oil_rig": ("oil_rig_1", 0.50, 108, 100), "tx.village": ("village_1", 0.56, 110, 90),
+               "tx.hermit": ("hermit_1", 0.48, 108, 92), "extra.transport_hub": ("transport_hub_1", 0.62, 114, 80),
+               "base.buoy": ("buoy_1", 0.18, 104, 56)}
+EXTRA_3LAYER = ("tx.mine", "tx.oil_mine", "tx.oil_rig", "tx.village", "tx.hermit")
+# tag: (cut, footprint width as a share of W, wall height as a share of the footprint width; 0: a pad, all _bg)
+EXTRA_FORTS = {"base.outpost": ("outpost_2", 0.62, 0.16), "base.fortress": ("fortress_1", 0.86, 0.13),
+               "base.castle": ("castle_1", 0.88, 0.19), "base.airstrip": ("airstrip_1", 0.90, 0),
+               "base.airbase": ("airbase_1", 0.90, 0)}
+FORT_FROM_PROPS = ("outpost_",)          # cuts that come from run 1's panel, not run 2's post/raw
+# tag: (seamless cell of run 3, opacity, rolled by half a tile: seamless.py moved irrigation's crossing ditches to the edges)
+EXTRA_OVERLAYS = {"tx.irrigation": ("r1c1", 1.0, True), "tx.farmland": ("r2c2", 0.95, False),
+                  "tx.pollution": ("r3c1", 0.9, False), "tx.fallout": ("r4c1", 0.9, False)}
+# kind: (seamless cell of run 4, share of the band's height kept, width in square tile px, feathered share of each edge,
+# colour scale). The road keeps its wheel ruts, darkened a little and soft at the edges, so it reads as a track, not a plank.
+ROAD_BANDS = {"road": ("r1c1", 0.75, 20, 0.35, 0.85), "rail": ("r2c1", 0.9, 26, 0.15, 1.0),
+              "river": ("r4c1", 0.62, 30, 0.25, 0.92)}
+ROAD_DIRS = [("n", 0, -1), ("ne", 1, -1), ("e", 1, 0), ("se", 1, 1), ("s", 0, 1), ("sw", -1, 1), ("w", -1, 0), ("nw", -1, -1)]
+# Badges: (tag or tags, cut, cell kind, centre x, centre y, size): the activity marks (56 x 48), the unit badges on a W x H cell,
+# the city ones on the full tile; the places are amplio2's.
+BADGES = [(("unit.maglev",), "maglev", "act"), (("unit.oil_mine",), "oil_mine", "act"), (("unit.oil_rig",), "oil_rig", "act"),
+          (("unit.airstrip",), "airstrip", "act"), (("unit.outpost",), "outpost", "act"), (("unit.buoy",), "buoy", "act"),
+          (("unit.fallout",), "fallout", "act")]
+TILE_BADGES = [("unit.stack", "stack_1", 57, 81, 30), ("unit.loaded", "loaded", 128, 62, 28),
+               ("unit.connect", "connect_1", 76, 11, 22), ("unit.auto_attack", "auto_attack", 76, 11, 22),
+               ("unit.auto_settler", "auto_worker", 76, 11, 22)]
+CITY_STYLES = ("european", "classical", "asian", "tropical", "celtic", "babylonian", "industrial", "electricage", "modern",
+               "postmodern")
+CITY_BADGES = [(["cd.occupied"] + ["city.%s_occupied_0" % s for s in CITY_STYLES], "occupied_1", 18, 18, 28),
+               (["city.disorder"], "disorder_1", 95, 68, 44)]
+UPKEEP = [("shield", "upkeep_shield"), ("gold", "upkeep_gold"), ("food", "upkeep_food"), ("unhappy", "upkeep_unhappy")]
+UPKEEP_CELL, UPKEEP_SIZE, UPKEEP_STEP = (W, 38), 28, 26
+OUTPUT = [("food", "food", 52), ("shields", "shields", 96), ("trade", "trade", 140)]     # tag, cut, group's centre x on the tile
+OUTPUT_Y, OUTPUT_SIZE = 72, 20
+
+def panel_props(panel, names, grid=5, floor=24):
+    """name: the cell's prop, cut from the whole panel (RGBA): every 8-connected piece of alpha (from floor, found on a
+    half-size mask) goes to the grid cell its middle lies in, so a prop that crosses into the next row stays whole and the
+    pieces of it that cross are not left in the neighbour."""
+    im = Image.open(panel).convert("RGBA"); w, h = im.size
+    small = im.getchannel("A").resize((w // 2, h // 2), Image.BOX); sw, sh = small.size; px = small.load()
+    label = [0] * (sw * sh); cells = {}
+    for y0 in range(sh):
+        for x0 in range(sw):
+            if px[x0, y0] < floor or label[y0 * sw + x0]: continue
+            todo, piece = [(x0, y0)], []; label[y0 * sw + x0] = -1
+            while todo:
+                x, y = todo.pop(); piece.append((x, y))
+                for nx in (x - 1, x, x + 1):
+                    for ny in (y - 1, y, y + 1):
+                        if 0 <= nx < sw and 0 <= ny < sh and not label[ny * sw + nx] and px[nx, ny] >= floor:
+                            label[ny * sw + nx] = -1; todo.append((nx, ny))
+            mx = sum(x for x, _ in piece) / len(piece); my = sum(y for _, y in piece) / len(piece)
+            k = min(grid - 1, int(my * grid / sh)) * grid + min(grid - 1, int(mx * grid / sw)) + 1
+            for x, y in piece: label[y * sw + x] = k
+    out = {}
+    for k, name in enumerate(names, 1):
+        if name == "-": continue
+        m = Image.new("L", (sw, sh), 0); mp = m.load()
+        for i, v in enumerate(label):
+            if v == k: mp[i % sw, i // sw] = 255
+        m = m.resize((w, h), Image.NEAREST).filter(ImageFilter.MaxFilter(5))
+        prop = im.copy(); prop.putalpha(ImageChops.multiply(im.getchannel("A"), m))
+        box = prop.getchannel("A").point(lambda v: 255 if v >= 16 else 0).getbbox()
+        if box: out[name] = defringe(prop.crop(box))
+    return out
+
+def read_names(path):
+    return [l.split("#", 1)[0].strip() for l in open(path) if l.split("#", 1)[0].strip()]
+
+def stand(im, width, foot, top):
+    """im scaled to `width` px wide (at most `top` px tall), centred on the full tile with its foot at y = foot."""
+    im = scaled(im, min(width / im.width, top / im.height)); cell = Image.new("RGBA", (W, FH), (0, 0, 0, 0))
+    cell.alpha_composite(im, ((W - im.width) // 2, max(0, foot - im.height))); return cell
+
+def fort_halves(im, share, wall):
+    """A fort (or a pad, wall 0) on the full tile: scaled to share x W wide, its footprint's bottom corner near the diamond's,
+    split into the back (`_bg`) and the front walls (`_fg`, below the footprint's lower edges raised by wall x its width)."""
+    fw = share * W; im = scaled(im, fw / im.width)
+    bottom = min(FH - 1, round(H + H / 2 + fw / 4 + 2)); x0, y0 = (W - im.width) // 2, max(0, bottom - im.height)
+    whole = Image.new("RGBA", (W, FH), (0, 0, 0, 0)); whole.alpha_composite(im, (x0, y0))
+    if not wall: return whole, None
+    cx, cy, rise = W / 2, bottom - fw / 4, wall * fw
+    front = Image.new("L", (W, FH), 0); fp = front.load()
+    for y in range(FH):
+        for x in range(W):
+            if y + 0.5 > cy + (fw / 2 - abs(x + 0.5 - cx)) / 2 - rise: fp[x, y] = 255
+    a = whole.getchannel("A"); bg, fg = whole.copy(), whole.copy()
+    bg.putalpha(ImageChops.multiply(a, ImageChops.invert(front))); fg.putalpha(ImageChops.multiply(a, front))
+    return bg, fg
+
+def iso_overlay(square, opacity=1.0):
+    """A T px seamless RGBA square (alpha where the ground shows through) as the W x H diamond."""
+    wrap = Image.new("RGBA", (3 * T, 3 * T), (0, 0, 0, 0))
+    for j in range(3):
+        for i in range(3): wrap.paste(square, (i * T, j * T))
+    out = to_iso(wrap, -T, -T, (W, H), (0, 0))
+    out.putalpha(ImageChops.multiply(out.getchannel("A").point(lambda v: round(v * opacity)), DIAMOND)); return out
+
+def band(cell, keep, feather=0.12, tone=1.0):
+    """The middle `keep` share of a seamless band cell's opaque rows, its long edges feathered over `feather` of its height
+    and its colour scaled by `tone`: the texture a piece repeats."""
+    box = cell.getchannel("A").point(lambda v: 255 if v >= 128 else 0).getbbox()
+    top, bot = box[1], box[3]; cut = (bot - top) * (1 - keep) / 2
+    tex = cell.crop((0, round(top + cut), cell.width, round(bot - cut))).convert("RGBA"); th = tex.height
+    if tone != 1.0:
+        a = tex.getchannel("A"); tex = tex.convert("RGB").point(lambda v: min(255, round(v * tone))).convert("RGBA"); tex.putalpha(a)
+    ramp = Image.new("L", (1, th)); rp = ramp.load(); f = max(2, th * feather)
+    for y in range(th): rp[0, y] = round(255 * min(1.0, (y + 0.5) / f, (th - y - 0.5) / f))
+    tex.putalpha(ImageChops.multiply(tex.getchannel("A"), ramp.resize(tex.size))); return tex
+
+def strip(tex, width, length, cap=True, widen=0.0, fade=False):
+    """The band texture repeated to `length` px at `width` px wide (scaled evenly), plus width/2 before 0 with a round end
+    when cap; widen grows it toward the far end (outlets: the strip is drawn twice as wide and masked), fade lets it vanish."""
+    width = round(width); s = width / tex.height; t = scaled(tex, s); pre = width // 2 if cap else 0
+    room = round(width * (1 + widen)); total = round(length) + pre
+    out = Image.new("RGBA", (total, room), (0, 0, 0, 0)); tt = scaled(tex, room / tex.height) if widen else t
+    x = 0
+    while x < total: out.alpha_composite(tt, (x, 0)); x += tt.width
+    m = Image.new("L", out.size, 0); mp = m.load(); r = width / 2; cy = room / 2
+    for y in range(room):
+        for x in range(total):
+            a = x - pre; half = r * (1 + widen * max(0.0, a) / length) if widen else r
+            inside = abs(y + 0.5 - cy) <= half if a >= 0 else (cap and (a + 0.5) ** 2 + (y + 0.5 - cy) ** 2 <= r * r)
+            if inside: mp[x, y] = round(255 * (1 - max(0.0, a) / length) ** 1.5) if fade else 255
+    out.putalpha(ImageChops.multiply(out.getchannel("A"), m)); return out, pre
+
+def piece_on(canvas, st, pre, start, d):
+    """Draw strip st (its point (pre, middle) at square point start, running along unit vector d) onto the 3T square canvas."""
+    dx, dy = d; cx, cy = start[0] + T, start[1] + T; ch = st.height / 2
+    big = st.convert("RGBa").transform(canvas.size, Image.AFFINE,
+                                        (dx, dy, -dx * cx - dy * cy + pre, -dy, dx, dy * cx - dx * cy + ch),
+                                        resample=Image.BICUBIC)
+    canvas.alpha_composite(big.convert("RGBA"))
+
+def road_tile(tex, width, dirs, outlet=None, pond=False):
+    """A W x H sprite: pieces from the tile's middle toward each of dirs (ROAD_DIRS names); an outlet from that edge's middle
+    toward the middle; a pond (a disc) when there is nothing else."""
+    canvas = Image.new("RGBA", (3 * T, 3 * T), (0, 0, 0, 0)); mid = (T / 2, T / 2)
+    for name, ux, uy in ROAD_DIRS:
+        if name not in dirs: continue
+        n = (ux * ux + uy * uy) ** 0.5; st, pre = strip(tex, width, T / 2 * n)
+        piece_on(canvas, st, pre, mid, (ux / n, uy / n))
+    if outlet:
+        ux, uy = [(a, b) for name, a, b in ROAD_DIRS if name == outlet][0]
+        st, pre = strip(tex, width, T * 0.3, cap=False, widen=1.2, fade=True)
+        piece_on(canvas, st, pre, (T / 2 + ux * T / 2, T / 2 + uy * T / 2), (-ux, -uy))
+    if pond or not (dirs or outlet):
+        st, pre = strip(tex, width * 2, 1)
+        piece_on(canvas, st, pre, mid, (1, 0))
+    return to_iso(canvas, -T, -T, (W, H), (0, 0))
+
+def digits_on(im, text, x, y, size):
+    font = ImageFont.load_default(size=size)
+    ImageDraw.Draw(im).text((x, y), text, font=font, fill=(255, 255, 255, 255), stroke_width=max(1, size // 8),
+                            stroke_fill=(20, 20, 20, 255), anchor="lm")
+
+def extras(art, out_dir, record):
+    """extras.png/.spec (props, forts and pads on W x FH cells; overlays, roads, rails and rivers on W x H cells) and
+    badges.png/.spec; returns the tags drawn and the cuts used."""
+    props = panel_props(os.path.join(art, EXTRA_RUNS["props"]), read_names(os.path.join(art, "built_on_tiles.names")))
+    def fort_cut(name):
+        if name.startswith(FORT_FROM_PROPS): return props[name]
+        return tidy(os.path.join(art, EXTRA_RUNS["forts"], "post", "raw", name + ".png"))
+    full, flat, used = [], [], []
+    for tag, (name, share, foot, top) in EXTRA_PROPS.items():
+        full.append((tag + "_mg", stand(props[name], share * W, foot, top))); used.append(name)
+    for tag, (name, share, wall) in EXTRA_FORTS.items():
+        bg, fg = fort_halves(fort_cut(name), share, wall); used.append(name)
+        full.append((tag + "_bg", bg))
+        if fg: full.append((tag + "_fg", fg))
+    seam = os.path.join(art, EXTRA_RUNS["overlays"], "post", "seamless")
+    for tag, (cell, opacity, roll) in EXTRA_OVERLAYS.items():
+        sqr = Image.open(os.path.join(seam, cell + ".png")).convert("RGBA")
+        if roll: sqr = ImageChops.offset(sqr, T // 2, T // 2)
+        flat.append((tag, iso_overlay(sqr, opacity)))
+        used.append("%s (overlays %s)" % (tag[3:], cell))
+    texs = {}
+    for kind, (cell, keep, width, feather, tone) in ROAD_BANDS.items():
+        texs[kind] = (band(Image.open(os.path.join(art, EXTRA_RUNS["roads"], "post", "seamless", cell + ".png")), keep, feather,
+                           tone), width)
+        used.append("%s band (%s)" % (kind, cell))
+    for kind in ("road", "rail"):
+        tex, width = texs[kind]
+        flat.append(("road.%s_isolated" % kind, road_tile(tex, width, [], pond=True)))
+        for name, _, _ in ROAD_DIRS: flat.append(("road.%s_%s" % (kind, name), road_tile(tex, width, [name])))
+    tex, width = texs["river"]
+    for code in range(16):
+        n, e, s, w_ = (code >> 3) & 1, (code >> 2) & 1, (code >> 1) & 1, code & 1
+        dirs = [d for d, on in zip("nesw", (n, e, s, w_)) if on]
+        flat.append(("road.river_s_n%de%ds%dw%d" % (n, e, s, w_), road_tile(tex, width, dirs)))
+    for d in "nesw": flat.append(("road.river_outlet_" + d, road_tile(tex, width, [], outlet=d)))
+    cols = 10; frows, trows = (len(full) + cols - 1) // cols, (len(flat) + cols - 1) // cols
+    sheet = Image.new("RGBA", (cols * W, frows * FH + trows * H), (0, 0, 0, 0))
+    for i, (_, c) in enumerate(full): sheet.paste(c, ((i % cols) * W, (i // cols) * FH))
+    for i, (_, c) in enumerate(flat): sheet.paste(c, ((i % cols) * W, frows * FH + (i // cols) * H))
+    sheet.save(os.path.join(out_dir, "extras.png"), optimize=True)
+    write_spec(out_dir, "extras", "Map extras for the Freeciv45 iso tileset: the Freeciv45 art pack's freeciv45/09_map_extras runs 1 to 4\n"
+               "(improvements, forts, airfields, overlays, road, rail and river bands), cut and painted by tilesets/make-%s.py\n"
+               "(see RECORD.md)." % NAME,
+               [("full", 0, W, FH, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(full)]),
+                ("tile", frows * FH, W, H, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(flat)])])
+    record.append("| `%s/extras.spec` | the art pack's map extras (`freeciv45/09_map_extras`, runs 1 to 4): %s | props scaled onto the "
+                  "full tile, forts split into back and front, overlays turned into diamonds, road, rail and river pieces painted "
+                  "from the bands | %dx%d |" % (NAME, ", ".join("`%s`" % u for u in used), *sheet.size))
+    tags = {t for t, _ in full + flat}
+    btags, bused = badges(art, out_dir, record)
+    return tags | btags, used + bused
+
+def badges(art, out_dir, record):
+    raw = os.path.join(art, EXTRA_RUNS["badges"], "post", "raw"); got = {}
+    def b(name, size):
+        if name not in got: got[name] = tidy(os.path.join(raw, name + ".png"), whole=True)
+        im = got[name]; return scaled(im, min(size / im.width, size / im.height))
+    act = []
+    for tags, name, _ in BADGES:
+        c = Image.new("RGBA", MARK_CELL, (0, 0, 0, 0)); im = b(name, 44)
+        c.alpha_composite(im, ((MARK_CELL[0] - im.width) // 2, (MARK_CELL[1] - im.height) // 2)); act.append((list(tags), c))
+    tile = []
+    for tag, name, cx, cy, size in TILE_BADGES:
+        c = Image.new("RGBA", (W, H), (0, 0, 0, 0)); im = b(name, size)
+        c.alpha_composite(im, (round(cx - im.width / 2), max(0, round(cy - im.height / 2)))); tile.append(([tag], c))
+    for tag, name, cx in OUTPUT:
+        for k in range(10):
+            c = Image.new("RGBA", (W, H), (0, 0, 0, 0)); im = b(name, OUTPUT_SIZE)
+            c.alpha_composite(im, (round(cx - 12 - im.width / 2), round(OUTPUT_Y - im.height / 2)))
+            digits_on(c, str(k), cx - 1, OUTPUT_Y, 18); tile.append((["city.t_%s_%d" % (tag, k)], c))
+    city = []
+    for tags, name, cx, cy, size in CITY_BADGES:
+        c = Image.new("RGBA", (W, FH), (0, 0, 0, 0)); im = b(name, size)
+        c.alpha_composite(im, (round(cx - im.width / 2), round(cy - im.height / 2))); city.append((tags, c))
+    upkeep = []
+    for kind, name in UPKEEP:
+        for n in range(1, 11):
+            c = Image.new("RGBA", UPKEEP_CELL, (0, 0, 0, 0)); im = b(name, UPKEEP_SIZE); y = (UPKEEP_CELL[1] - im.height) // 2
+            if n <= 4:
+                for i in range(n): c.alpha_composite(im, (i * UPKEEP_STEP, y))
+            else:
+                c.alpha_composite(im, (0, y)); digits_on(c, str(n), im.width + 2, UPKEEP_CELL[1] // 2, 22)
+            upkeep.append((["upkeep.%s%s" % (kind, "" if n == 1 else n)], c))
+    grids, y, sheet_w = [], 0, 10 * W
+    parts = [("act", MARK_CELL, act), ("tile", (W, H), tile), ("city", (W, FH), city), ("upkeep", UPKEEP_CELL, upkeep)]
+    height = sum(((len(cells) + (sheet_w // cw) - 1) // (sheet_w // cw)) * ch for _, (cw, ch), cells in parts)
+    sheet = Image.new("RGBA", (sheet_w, height), (0, 0, 0, 0))
+    for gname, (cw, ch), cells in parts:
+        cols = sheet_w // cw
+        for i, (_, c) in enumerate(cells): sheet.paste(c, ((i % cols) * cw, y + (i // cols) * ch))
+        grids.append((gname, y, cw, ch, [(i // cols, i % cols, t) for i, (t, _) in enumerate(cells)]))
+        y += ((len(cells) + cols - 1) // cols) * ch
+    sheet.save(os.path.join(out_dir, "badges.png"), optimize=True)
+    write_spec(out_dir, "badges", "Badges for the Freeciv45 iso tileset: the Freeciv45 art pack's freeciv45/09_map_extras run 6, placed\n"
+               "where amplio2 draws its badges by tilesets/make-%s.py, the counted upkeep and tile output drawn with a number\n"
+               "(see RECORD.md)." % NAME, grids)
+    record.append("| `%s/badges.spec` | the art pack's badges (`freeciv45/09_map_extras` run 6, `post/raw`): %s | cleaned (fringe), "
+                  "scaled to amplio2's places; upkeep 1 to 4 symbols, then a symbol and a number; tile output a symbol and a "
+                  "number (Aileron Regular, CC0) | %dx%d |" % (NAME, ", ".join("`%s`" % n for n in sorted(got)), *sheet.size))
+    return {t for _, _, cells in parts for ts, _ in cells for t in ts}, sorted(got)
+
+def extras_styles(path):
+    """The tilespec's [extras] styles: EXTRA_3LAYER's tags drawn 3Layer, and tx.hermit added (amplio2 draws its village)."""
+    text = open(path).read()
+    for tag in EXTRA_3LAYER:
+        text, n = re.subn(r'("%s",\s*)"Single1"' % re.escape(tag), r'\1"3Layer"', text)
+        if tag != "tx.hermit": assert n == 1, tag
+    if '"tx.hermit"' not in text:
+        text = re.sub(r'(\n(\s*)"tx.village",[^\n]*)', r'\1\n\2"tx.hermit",     "3Layer"', text, count=1)
+    open(path, "w").write(text)
+
 RECORD_HEAD = """# %(name)s: where every sprite came from
 
 The isometric Freeciv45 tileset (issue 190): %(w)dx%(h)d diamonds at `pixel_ratio = 2`, amplio2's tile doubled, so the
@@ -921,6 +1219,8 @@ def main():
     ap.add_argument("--no-borders", action="store_true", help="keep amplio2's dashed national borders")
     ap.add_argument("--no-bk-icons", action="store_true", help="keep the stock tech icons and building pictures")
     ap.add_argument("--no-bk-units", action="store_true", help="keep amplio2's units, cities and marks")
+    ap.add_argument("--extras-art", help="the art repo's freeciv45/09_map_extras (default: next to --art)")
+    ap.add_argument("--no-bk-extras", action="store_true", help="keep amplio2's improvements, bases, roads, rivers and badges")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
@@ -962,6 +1262,11 @@ def main():
         tech_props, building_props, _ = icons(a.tech_art or os.path.join(base, "06_tech_icons"),
                                               a.building_art or os.path.join(base, "07_building_icons"), out_dir, painted_record)
     if not a.no_borders: own |= borders(out_dir, painted_record)
+    extra_props = []
+    if not a.no_bk_extras:
+        new, extra_props = extras(a.extras_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "09_map_extras"),
+                                  out_dir, painted_record)
+        own |= new
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -980,9 +1285,10 @@ def main():
             continue
         if rel.startswith("amplio2/"):
             drop.prefixes = DROP_PREFIX.get(rel, ())
+            if bku and rel == "amplio2/activities.spec": files.append("%s/marks.spec" % NAME)
+            if not a.no_bk_extras and rel == "amplio2/tiles.spec": files.append("%s/badges.spec" % NAME)
             if bku and not any(t not in drop for g in sq.parse_spec(os.path.join(a.data, rel))[1]
                                for _, _, tags in g["cells"] for t in tags): continue   # nothing of amplio2's left in it
-            if bku and rel == "amplio2/activities.spec": files.append("%s/marks.spec" % NAME)
             sq.recut(a.data, rel, out_dir, amplio_record, scale=AMPLIO_SCALE)
             files.append("%s/%s" % (NAME, os.path.basename(rel)))
             if not a.no_borders and rel.endswith("grid.spec"): files.append("%s/borders.spec" % NAME)
@@ -997,6 +1303,7 @@ def main():
                 files += ["%s/terrain45.spec" % NAME, "%s/coast.spec" % NAME] + ([] if a.no_blend else ["%s/blend.spec" % NAME])
                 files += [] if a.no_resources else ["%s/resources.spec" % NAME]
                 files += ["%s/features.spec" % NAME] if bk else []
+                files += [] if a.no_bk_extras else ["%s/extras.spec" % NAME]
         elif sq.map_misc_scale(rel) and sq.map_misc_scale(rel) != 1:
             drop.prefixes = ()
             sq.recut(a.data, rel, out_dir, amplio_record, scale=sq.map_misc_scale(rel))
@@ -1006,6 +1313,7 @@ def main():
             if not a.no_bk_icons and rel == "misc/techs.spec": files.append("%s/tech_icons.spec" % NAME)
             if not a.no_bk_icons and rel == "misc/wonders-large.spec": files.append("%s/building_icons.spec" % NAME)
     tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku, icons=not a.no_bk_icons)
+    if not a.no_bk_extras: extras_styles(os.path.join(a.out, NAME + ".tilespec"))
     with open(os.path.join(out_dir, "RECORD.md"), "w") as f:
         f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED if not (canopy and s in CANOPY)),
                              "canopy": " `terrain2.spec`, the forest and jungle overlays, moves the same way over painted "
@@ -1040,12 +1348,29 @@ def main():
                     "folders `freeciv45/04_units` and `freeciv45/05_cities`, runs 1 to 5, issue 245), in place of amplio2's. "
                     "Only the sprites the ruleset uses ship, one per tag (the better take of each unit; the unused takes, "
                     "ruins, panels and art-repo records stay in the art repo). Units used (%d): %s. Cities and the ruins (%d): "
-                    "%s. Marks (%d): %s. GPL-2.0-or-later, like the rest of the folder. Left from amplio2 (`activities.spec`, "
-                    "`bases.spec`, `tiles.spec` and the rest of the scaled files): the maglev, oil mine, oil rig, airstrip, "
-                    "outpost, buoy and fallout marks, the occupied and disorder badges and the fortress, airbase, castle and "
-                    "outpost bases.\n" % (len(unit_props), ", ".join("`%s`" % n for n in unit_props), len(city_props),
+                    "%s. Marks (%d): %s. GPL-2.0-or-later, like the rest of the folder. Left from amplio2 (`bases.spec`, `tiles.spec` and "
+                    "the rest of the scaled files): %s.\n" % (len(unit_props), ", ".join("`%s`" % n for n in unit_props), len(city_props),
                                            ", ".join("`%s`" % n for n in city_props), len(mark_props),
-                                           ", ".join("`%s`" % n for n in mark_props)))
+                                           ", ".join("`%s`" % n for n in mark_props),
+                                           "the hit point bars, the city size digits, the ruins' and castle2's leftovers and the "
+                                           "maglev" if extra_props else "the maglev, oil mine, oil rig, airstrip, outpost, buoy "
+                                           "and fallout marks, the occupied and disorder badges and the fortress, airbase, "
+                                           "castle and outpost bases"))
+        if extra_props:
+            f.write("\n## Map extras and badges\n\n`extras.spec` and `badges.spec`: the Freeciv45 art pack's map extras (John "
+                    "O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder "
+                    "`freeciv45/09_map_extras`, runs 1 to 4 and 6, the picks in its `MAP_EXTRAS.md`; issue 262), in place of "
+                    "amplio2's. Standing props are drawn `3Layer` as `_mg` on the %dx%d full tile (the tilespec's `[extras]` "
+                    "styles say so for %s, and add `tx.hermit`); Fort (`base.outpost`), Fortress and Castle are split into "
+                    "`_bg` and `_fg` along the top of the front walls so a unit stands inside; the airstrip and airbase are "
+                    "`_bg` pads; irrigation, farmland, pollution and fallout are the straight-down seamless squares turned "
+                    "into diamonds; road, rail and river pieces are painted in square tile space from the seamless bands "
+                    "and turned the same way. The badges sit where amplio2's do; the counted upkeep (1 to 4 symbols, then "
+                    "a symbol and a number) and tile output (a symbol and a number) are drawn by the builder, the numbers "
+                    "in Pillow's built-in Aileron Regular (CC0). Used: %s. Nothing else of the art repo ships (no panels, "
+                    "other takes or records). amplio2's maglev stays until its retake. GPL-2.0-or-later, like the rest of "
+                    "the folder.\n" % (W, FH, ", ".join("`%s`" % t for t in EXTRA_3LAYER),
+                                         ", ".join("`%s`" % n for n in extra_props)))
         if not a.no_bk_icons:
             f.write("\n## Tech icons and building pictures\n\n`tech_icons.spec` and `building_icons.spec`: the Freeciv45 art pack's "
                     "tech icons and building and wonder pictures (John O'Dell's sheet workflow with OpenAI image generation "
