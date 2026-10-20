@@ -399,28 +399,26 @@ Pictures at 2x and 1x:
 - The city bar's flag is a small chip beside the name, not a large flag over the city (issue 252, patch 0049,
   `citybar-flag.md`).
 
-## Tech icons and building pictures (issue 254)
+## Tech icons and building pictures (issues 254 and 255)
 
-`tech_icons.spec` and `building_icons.spec` carry the art pack's tech icons (48 of civ45's techs, runs 1 and 2 of
-`freeciv45/06_tech_icons`) and building and wonder pictures (90 of the 94, runs 1 to 4 of `freeciv45/07_building_icons`;
-`colossus` and `pyramids` are the `_alt` takes). Each is cleaned like the units (specks out, edge fringe defringed), fitted
+`tech_icons.spec` and `building_icons.spec` carry the art pack's tech icons (all 95 of civ45's techs: runs 1 and 2 of
+`freeciv45/06_tech_icons`, the industrial and modern retakes of runs 5 and 6, and run 6's second takes for `the_wheel` and
+`the_republic`) and building and wonder pictures (all 94, runs 1 to 5 of `freeciv45/07_building_icons`; `colossus` and
+`pyramids` are the `_alt` takes, and `georgia_guidestones`, `united_nations`, `shakespeares_theatre` and `statue_of_liberty`
+are run 5's retakes r1, r3, r1 and r1). Each is cleaned like the units (specks out, edge fringe defringed), fitted
 into the client's own cell (48x48 for a tech, 64x48 for a building) and centred. The Qt client draws these at those logical
 sizes at 1x and 2x alike (only the map follows `pixel_ratio`), so there is one set. The tilespec sets `duplicates_ok` and lists
 the two specs after `misc/techs.spec` and `misc/wonders-large.spec`; the lattermost tag wins, so ours replace the stock
-icons and every tag we do not ship keeps its stock one. No client patch.
+icons; every tag of the ruleset now has ours. No client patch.
 
-Kept stock for now (Codex retakes pending): `the_wheel`, `the_republic`, the techs of runs 3 and 4, and the buildings
-`georgia_guidestones`, `united_nations`, `statue_of_liberty` and `shakespeares_theatre`.
-
-**Check (observed):** `icons-field.txt` gives the human player 33 techs, founds a city with 17 improvements and wonders (and the Palace)
-and researches Chivalry. The city dialog's building list, the production chooser and the research strip at 2x (1:1) and at 1x:
+**Check (observed):** `icons-field.txt` gives the human player 36 techs, founds a city with 17 improvements and wonders, the four retaken
+wonders and the Palace, and researches Electricity. The city dialog's building list, the production chooser and the research strip at 2x (1:1) and at 1x:
 
 ![icons, 2x, 1:1](icons-2x-1to1.jpg)
 
 ![icons at 1x](icons-1x.jpg)
 
-- The improvements list and the build list show our pictures, readable at both scales, with the stock ones (Chichen Itza,
-  Sun Tzu, Marco Polo, Temple of Artemis, Cathedral) beside them.
+- The improvements list (with the four retaken wonders) and the build list show our pictures, readable at both scales.
 - The tech icon shows in the research combobox and the top strip. The research report's tree shows unit and building pictures
   per tech, not tech icons.
 
@@ -436,6 +434,6 @@ and researches Chivalry. The city dialog's building list, the production chooser
   four unit panels' every second take, city sizes 9 to 17 in a real game (only through the shifted thresholds), the
   rulesets other than civ45 (civ54's units and styles are the same names), and a hand-made `unit_offset` on a Retina
   window.
-- **Tech icons and building pictures (issue 254), not checked:** the tech icon at large sizes (help dialog, the research
-  menu's popup list), a 2x-resolution icon set (needs a client patch that scales these icons by the device ratio), and
-  the kept stock icons next to ours in the same list.
+- **Tech icons and building pictures (issues 254 and 255), not checked:** the wonder report (F7: the test driver's `key`
+  takes no function keys and cannot click a menu entry), the tech icon at large sizes (help dialog, the research
+  menu's popup list), a 2x-resolution icon set (needs a client patch that scales these icons by the device ratio, #256).
