@@ -2,9 +2,10 @@
 
 Getting [Freeciv](https://www.freeciv.org/) running well on macOS 27 (Apple Silicon), then improving it.
 
-Freeciv is the GPL empire-building game inspired by Civilization I/II. This repo holds
+Freeciv is a free, open-source (GPL) empire-building strategy game. This repo holds
 the macOS 27 port work: notes, build scripts, exported patches against upstream, and
-packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
+packaging. It does not contain Freeciv itself, and it holds no code or assets from any
+commercial game.
 
 ## Layout
 
@@ -14,7 +15,7 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 | `port/` | Working fork of Freeciv where fixes are made and built. Its own git repo. | No |
 | `patches/` | Patches exported from `port/` with `git format-patch`, one per concern, upstreamable. | Yes |
 | `scripts/` | `build.sh` (configure+build+install), `test.sh` (autogame + save/load probe), `bundle.sh` + `fix-dylibs.py` (self-contained .app with a compiled `launcher.c` and the `collect-licenses.py` notices), `sign-app.sh` (ad-hoc or Developer ID, hardened runtime), `dmg.sh` (DMG, optional notarization), and the probe helpers used for the evidence. | Yes |
-| `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log, Civ4/5 planning menu (`civ45-planning.md`), the proposal for the port, civ45 and civ54 as two or three games (`game-directions.md`), and the Freeciv45 build plan (`freeciv45-plan.md`, research in `freeciv45/`). | Yes |
+| `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log, the Freeciv45 planning menu (`civ45-planning.md`), the proposal for the port, civ45 and civ54 as two or three games (`game-directions.md`), and the Freeciv45 build plan (`freeciv45-plan.md`, research in `freeciv45/`). | Yes |
 | `downloads/` | Prebuilt macOS apps and tarballs used for diagnosis. | No |
 | `inbox/` | Notes between this desk and other Claude desks (rules in `inbox/README.md`). Local only. | No |
 
@@ -64,7 +65,7 @@ counts the great people born and spent by the AI from the `FC45GP` lines civ45's
 table in `script.lua`;
 `test.sh` reads the installed data unless given `--data port/freeciv/data`, and its result line names the directory
 the ruleset came from. `--ruleset civ54` does the same for civ54, the copy of civ45's earlier one-unit-per-tile hex
-rules kept for the later Civ5-style game (patch 0005, `data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz`
+rules kept for a later hex game (patch 0005, `data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz`
 counts units per tile in the saves an autogame leaves behind (add `--ruleset port/freeciv/data/civ54` to apply civ54's
 exemptions for aircraft and ships in port, or `--report` for civ45, where stacks are the rule).
 `scripts/civ45-rules-test.sh ~/freeciv-builds/qt` checks Freeciv45's rules in a game with one human-controlled
