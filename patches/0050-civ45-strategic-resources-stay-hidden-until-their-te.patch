@@ -1,0 +1,125 @@
+From 00d26f5a444fee771de5c6750263fc2694ca8d0a Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Tue, 20 Oct 2026 15:05:52 -0500
+Subject: [PATCH] civ45: strategic resources stay hidden until their tech
+
+Issue 265: map generation places every resource, so a new game showed
+Iron, Horses, Coal and Oil from turn 1. Each now has a visibility_req
+(Iron Working, Horseback Riding, Steam Engine, Electricity), and
+Output_Add_Tile effects take the resource's bonus back off the tile
+until its owner has the tech, since hiding covers the map only.
+Every unit that needs one of these resources already needs its tech.
+---
+ data/civ45/effects.ruleset | 54 ++++++++++++++++++++++++++++++++++++++
+ data/civ45/terrain.ruleset | 12 +++++++++
+ 2 files changed, 66 insertions(+)
+
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index 1971563..648a2d2 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -6331,3 +6331,57 @@ reqs    =
+     { "type", "name", "range"
+       "Building", "Draft Unrest 4", "City"
+     }
++
++; Strategic resources stay hidden until their tech (visibility_req in
++; terrain.ruleset). Hiding only covers the map, so these take the
++; resource's own bonus back off the tile until the player can see it.
++
++[effect_hidden_iron_shield]
++type    = "Output_Add_Tile"
++value   = -3
++reqs    =
++    { "type", "name", "range", "present"
++      "Extra", "Iron", "Tile", TRUE
++      "Tech", "Iron Working", "Player", FALSE
++      "OutputType", "Shield", "Local", TRUE
++    }
++
++[effect_hidden_horses_shield]
++type    = "Output_Add_Tile"
++value   = -1
++reqs    =
++    { "type", "name", "range", "present"
++      "Extra", "Horses", "Tile", TRUE
++      "Tech", "Horseback Riding", "Player", FALSE
++      "OutputType", "Shield", "Local", TRUE
++    }
++
++[effect_hidden_horses_trade]
++type    = "Output_Add_Tile"
++value   = -1
++reqs    =
++    { "type", "name", "range", "present"
++      "Extra", "Horses", "Tile", TRUE
++      "Tech", "Horseback Riding", "Player", FALSE
++      "OutputType", "Trade", "Local", TRUE
++    }
++
++[effect_hidden_coal_shield]
++type    = "Output_Add_Tile"
++value   = -2
++reqs    =
++    { "type", "name", "range", "present"
++      "Extra", "Coal", "Tile", TRUE
++      "Tech", "Steam Engine", "Player", FALSE
++      "OutputType", "Shield", "Local", TRUE
++    }
++
++[effect_hidden_oil_shield]
++type    = "Output_Add_Tile"
++value   = -3
++reqs    =
++    { "type", "name", "range", "present"
++      "Extra", "Oil", "Tile", TRUE
++      "Tech", "Electricity", "Player", FALSE
++      "OutputType", "Shield", "Local", TRUE
++    }
+diff --git a/data/civ45/terrain.ruleset b/data/civ45/terrain.ruleset
+index c5b1573..1723e78 100644
+--- a/data/civ45/terrain.ruleset
++++ b/data/civ45/terrain.ruleset
+@@ -2062,6 +2062,9 @@ act_gfx_alt2   = "-"
+ rmact_gfx      = "None"
+ rmact_gfx_alt  = "-"
+ rmact_gfx_alt2 = "-"
++; Hidden until the player knows Iron Working; effects.ruleset takes its
++; bonus away until then, so the land gives nothing away either.
++visibility_req = "Iron Working"
+ 
+ [extra_game]
+ name           = _("?animals:Game")
+@@ -2104,6 +2107,9 @@ act_gfx_alt2   = "-"
+ rmact_gfx      = "None"
+ rmact_gfx_alt  = "-"
+ rmact_gfx_alt2 = "-"
++; Hidden until the player knows Steam Engine; effects.ruleset takes its
++; bonus away until then, so the land gives nothing away either.
++visibility_req = "Steam Engine"
+ 
+ [extra_fish]
+ name           = _("Fish")
+@@ -2174,6 +2180,9 @@ act_gfx_alt2   = "-"
+ rmact_gfx      = "None"
+ rmact_gfx_alt  = "-"
+ rmact_gfx_alt2 = "-"
++; Hidden until the player knows Horseback Riding; effects.ruleset takes its
++; bonus away until then, so the land gives nothing away either.
++visibility_req = "Horseback Riding"
+ 
+ [extra_wheat]
+ name           = _("Wheat")
+@@ -2329,6 +2338,9 @@ act_gfx_alt2   = "-"
+ rmact_gfx      = "None"
+ rmact_gfx_alt  = "-"
+ rmact_gfx_alt2 = "-"
++; Hidden until the player knows Electricity; effects.ruleset takes its
++; bonus away until then, so the land gives nothing away either.
++visibility_req = "Electricity"
+ 
+ ; /* <-- avoid gettext warnings
+ ;
+-- 
+2.56.0
+
