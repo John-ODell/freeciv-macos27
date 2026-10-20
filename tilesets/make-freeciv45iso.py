@@ -35,8 +35,8 @@ right (UNIT_FLIP), scaled to a common figure size and set on a 160 x 128 cell (u
 one (cities.spec). amplio2's units.spec, extra_units.spec, cities.spec and veterancy.spec go; its sprites stay only
 where the art pack has none (see RECORD.md); --no-bk-units keeps amplio2's units, cities and marks.
 
-Tech icons and building pictures (issue 254): the art repo's freeciv45/06_tech_icons (runs 1 and 2) and
-07_building_icons (runs 1 to 4), cleaned like the units and fitted into the client's own icon cells (48 x 48 for a
+Tech icons and building pictures (issue 254): the art repo's freeciv45/06_tech_icons (runs 1, 2, 5 and 6) and
+07_building_icons (runs 1 to 5), cleaned like the units and fitted into the client's own icon cells (48 x 48 for a
 tech, 64 x 48 for a building, the sizes the Qt client draws at 1x and 2x alike). They go in tech_icons.spec and
 building_icons.spec, listed after misc/techs.spec and misc/wonders-large.spec under duplicates_ok, so they override the
 stock icons they cover and the rest stay as they were; --no-bk-icons leaves the stock icons alone.
@@ -763,16 +763,19 @@ def marks(art, out_dir, record):
 
 # Tech icons and building pictures (issue 254): the art pack's freeciv45/06_tech_icons and 07_building_icons, cut at 192 px (post/raw).
 # The client draws the research screen's icons at 48 x 48 and a building's picture at 64 x 48, whatever pixel_ratio is (only the
-# map follows it), so each picture is fitted into that cell. What ships: every tech of the first two panels but the two that read
-# wrongly (retaken: ICON_RETAKES), and every building and wonder picture but the four that copy a real monument or are being
-# retaken (BUILD_SKIP); the second take of the colossus (the first has a face) and the pyramids. The tags the runs do not
-# give keep the stock misc/ icons: ours are listed after the stock files and the tilespec says duplicates_ok, so ours win.
-TECH_RUNS = ("run1/panel1", "run2/panel2")
-TECH_SKIP = ("the_wheel", "the_republic")
+# map follows it), so each picture is fitted into that cell. What ships (issue 255 completed it): every tech, the ancient and
+# classical panels (runs 1 and 2) and the retaken industrial and modern ones (runs 5 and 6), with run 6's second takes for the
+# wheel and the republic (TECH_PICK); every building and wonder picture, the second takes of the colossus and the pyramids and
+# run 5's retakes of the four wonders (BUILD_PICK). Ours are listed after the stock misc/ files and the tilespec says
+# duplicates_ok, so ours win; a tag the runs do not give would keep its stock icon.
+TECH_RUNS = ("run1/panel1", "run2/panel2", "run5/panel3", "run6/panel4")      # ancient, classical, industrial, modern (retakes, issue 255)
+TECH_PICK = {"the_wheel": "the_wheel_alt", "the_republic": "the_republic_alt"}  # run 6's row 5 retakes of the two weak cells
 TECH_CELL, TECH_FILL = 48, 44
 BUILD_RUNS = ("run1/panel1", "run2/panel2", "run3/panel3", "run4/panel4")
-BUILD_PICK = {"colossus": "colossus_alt", "pyramids": "pyramids_alt"}
-BUILD_SKIP = ("georgia_guidestones", "united_nations", "statue_of_liberty", "shakespeares_theatre")
+BUILD_RUNS += ("run5/panel5",)
+BUILD_PICK = {"colossus": "colossus_alt", "pyramids": "pyramids_alt", "georgia_guidestones": "georgia_guidestones_r1",
+              "united_nations": "united_nations_r3", "shakespeares_theatre": "shakespeares_theatre_r1",
+              "statue_of_liberty": "statue_of_liberty_r1"}      # run 5's wonder retakes (issue 255); its lighthouse row is spares
 BUILD_CELL, BUILD_FILL = (64, 48), (62, 46)
 
 def raw_names(base, runs):
@@ -797,18 +800,19 @@ def icon_sheet(base, runs, names, cell, fill, out_dir, sheet_name, tag_prefix, c
 
 def icons(tech_art, build_art, out_dir, record):
     """tech_icons.spec (a.<tech>) and building_icons.spec (b.<building>); returns the two tag lists."""
-    techs = [n for n in raw_names(tech_art, TECH_RUNS) if not n.endswith("_alt") and n not in TECH_SKIP]
-    size = icon_sheet(tech_art, TECH_RUNS, [(n, n) for n in techs], (TECH_CELL, TECH_CELL), (TECH_FILL, TECH_FILL), out_dir,
+    techs = [n for n in raw_names(tech_art, TECH_RUNS) if not n.endswith("_alt")]
+    assert len(techs) == len(set(techs)) and set(TECH_PICK) <= set(techs), "a tech has two cuts, or a pick has no first take"
+    size = icon_sheet(tech_art, TECH_RUNS, [(n, TECH_PICK.get(n, n)) for n in techs], (TECH_CELL, TECH_CELL), (TECH_FILL, TECH_FILL), out_dir,
                       "tech_icons", "a.", "Tech icons for the Freeciv45 iso tileset: the Freeciv45 art pack's freeciv45/06_tech_icons\n"
-                      "runs 1 and 2, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells." % (NAME, TECH_CELL, TECH_CELL))
+                      "runs 1, 2, 5 and 6, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells." % (NAME, TECH_CELL, TECH_CELL))
     record.append("| `%s/tech_icons.spec` | the art pack's tech icons (`freeciv45/06_tech_icons`, %s, `post/raw`), %d of civ45's techs: %s | cleaned "
                   "(specks, fringe), fitted into %dx%d | %dx%d |" % (NAME, ", ".join("`%s`" % r for r in TECH_RUNS), len(techs),
                   ", ".join("`%s`" % n for n in techs), TECH_FILL, TECH_FILL, *size))
-    names = [n for n in raw_names(build_art, BUILD_RUNS) if not n.endswith("_alt") and n not in BUILD_SKIP]
-    pick = [(n, BUILD_PICK.get(n, n)) for n in names]
+    names = [n for n in raw_names(build_art, BUILD_RUNS) if not n.endswith("_alt") and not re.search(r"_r\d$", n)]
+    pick = [(n, BUILD_PICK.get(n, n)) for n in names + [n for n in BUILD_PICK if n not in names and BUILD_PICK[n][-3:-1] == "_r"]]
     size = icon_sheet(build_art, BUILD_RUNS, pick, BUILD_CELL, BUILD_FILL, out_dir, "building_icons", "b.",
                       "Building and wonder pictures for the Freeciv45 iso tileset: the Freeciv45 art pack's\n"
-                      "freeciv45/07_building_icons runs 1 to 4, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells."
+                      "freeciv45/07_building_icons runs 1 to 5, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells."
                       % (NAME, *BUILD_CELL))
     record.append("| `%s/building_icons.spec` | the art pack's building pictures (`freeciv45/07_building_icons`, %s, `post/raw`), %d of civ45's: %s "
                   "| cleaned (specks, fringe), fitted into %dx%d | %dx%d |" % (NAME, ", ".join("`%s`" % r for r in BUILD_RUNS), len(pick),
@@ -1004,12 +1008,13 @@ def main():
                     "building, the sizes the Qt client draws at 1x and 2x alike (only the map follows `pixel_ratio`). The "
                     "tilespec sets `duplicates_ok` and lists the two specs after `misc/techs.spec` and "
                     "`misc/wonders-large.spec`, so these tags override the stock icons and every other tag keeps its stock "
-                    "icon. Techs (%d, runs 1 and 2): %s. Kept from the stock set until Codex's retakes land: `the_wheel`, "
-                    "`the_republic` and the techs of runs 3 and 4. Buildings (%d, runs 1 to 4; `colossus` and `pyramids` are "
-                    "the `_alt` takes): %s. Kept stock: %s. GPL-2.0-or-later, like the rest of the folder.\n"
+                    "icon. Techs (%d, runs 1, 2, 5 and 6; `the_wheel` and `the_republic` are run 6's `_alt` takes): %s. "
+                    "Buildings (%d, runs 1 to 5): %s. The picks that are not the first take: %s. Every tech and building the "
+                    "ruleset names has a picture, so no stock icon is left for these tags. GPL-2.0-or-later, like the rest of "
+                    "the folder.\n"
                     % (TECH_CELL, TECH_CELL, *BUILD_CELL, len(tech_props), ", ".join("`%s`" % n for n in tech_props),
                        len(building_props), ", ".join("`%s`" % n for n in building_props),
-                       ", ".join("`%s`" % n for n in BUILD_SKIP)))
+                       ", ".join("`%s` (`%s`)" % kv for kv in sorted({**TECH_PICK, **BUILD_PICK}.items()))))
     print("\n".join(amplio_record + painted_record))
 
 if __name__ == "__main__":
