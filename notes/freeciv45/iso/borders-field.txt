@@ -1,0 +1,15 @@
+# National borders (issue 259): a civ45 game on the iso tileset where all four nations found a city within five or six tiles of
+# the human player's start, so their borders meet over land and coast. The AI cities are placed by Lua on the first free tile in a
+# spiral around a target offset. Run with QT_SCALE_FACTOR=2 on the 3680 x 2284 screen (SCALE=1 and the 1728 x 1030 screen for the
+# 1x shots); fog and diplomacy off, as icons-field.txt.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd local ok, e = pcall(function() local list, home = {}, nil; for p in players_iterate() do if p.is_alive then table.insert(list, p) end; if p:is_human() then home = p end end; local u0; for u in home:units_iterate() do u0 = u.tile; break end; local offs = {{0, 0}, {5, 0}, {-1, 5}, {5, 5}}; local placed = {}; for i, p in ipairs(list) do local want = offs[((i - 1) % 4) + 1]; local done = false; for r = 0, 4 do for dx = -r, r do for dy = -r, r do if not done and math.max(math.abs(dx), math.abs(dy)) == r then local t = find.tile(math.floor(u0.x + want[1] + dx), math.floor(u0.y + want[2] + dy)); if t then local ok2, c = pcall(function() return edit.create_city(p, t, "City" .. i) end); if ok2 and c then done = true; table.insert(placed, i .. "@" .. t.x .. "," .. t.y) end end end end end end end; log.error("P " .. table.concat(placed, " ")) end); log.error("T " .. tostring(ok) .. tostring(e))
+wait 3500
+dismiss
+wait 800
+state borders
+shot borders
+quit
