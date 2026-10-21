@@ -31,7 +31,7 @@ symlinks (notes/installed.md:126-132). The start image is the tileset's `main_in
 | Unit | What | Kind |
 |---|---|---|
 | 2a | `for_ruleset = "civ45"` in freeciv45iso.tilespec, so every local game starts on civ45 | data |
-| 2b | Freeciv45.app's launcher passes `-t freeciv45iso` unless the player gives `-t` | launcher |
+| 2b | Freeciv45.app's launcher passes `-t freeciv45iso` until its options file names a tileset, unless the player gives `-t` (so a tileset picked later is kept) | launcher |
 | 2c | Our own title picture as `main_intro_file`, and our own window and city icons (`icon.freeciv`, `icon.cityicon`) | art + data |
 
 ## 3. Our own art throughout

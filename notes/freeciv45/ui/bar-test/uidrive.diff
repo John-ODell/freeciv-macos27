@@ -20,10 +20,10 @@ index 954872c..82fd58a 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..6ddef9d
+index 0000000..d73b9c1
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,847 @@
+@@ -0,0 +1,869 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -251,6 +251,14 @@ index 0000000..6ddef9d
 +}
 +
 +/************************************************************************//**
++  The head focus unit, or nullptr; before a game there is no focus list
++****************************************************************************/
++static struct unit *focus_head()
++{
++  return get_num_units_in_focus() > 0 ? head_of_units_in_focus() : nullptr;
++}
++
++/************************************************************************//**
 +  One line describing the client's unit focus and the bar
 +****************************************************************************/
 +static void log_state(const QString &label)
@@ -258,28 +266,33 @@ index 0000000..6ddef9d
 +  QString s = QString("== %1  turn %2").arg(label).arg(game.info.turn);
 +
 +  s += QString("  title \"%1\"").arg(gui()->windowTitle());
++  s += QString("  tileset %1  ruleset \"%2\"")
++       .arg(tileset != nullptr ? tileset_basename(tileset) : "none")
++       .arg(game.control.name);
 +  unit_bar *bar = gui()->unitbar_wdg;
 +  QStringList chips, acts, texts;
 +
 +  s += QString("  hover_state %1").arg((int) hover_state);
-+  unit_list_iterate(get_units_in_focus(), punit) {
-+    int x, y;
++  if (get_num_units_in_focus() > 0) {
++    unit_list_iterate(get_units_in_focus(), punit) {
++      int x, y;
 +
-+    index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
-+    s += QString("\n   focus #%1 %2 at (%3,%4) activity %5 moves %6 hp %7"
-+                 " orders %8 done %9 ssa %10")
-+         .arg(punit->id).arg(unit_rule_name(punit)).arg(x).arg(y)
-+         .arg(get_activity_text(punit->activity))
-+         .arg(punit->moves_left).arg(punit->hp)
-+         .arg(punit->has_orders ? "yes" : "no")
-+         .arg(punit->done_moving ? "yes" : "no")
-+         .arg((int) punit->ssa_controller);
-+  } unit_list_iterate_end;
-+  if (unit_list_size(get_units_in_focus()) == 0) {
++      index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
++      s += QString("\n   focus #%1 %2 at (%3,%4) activity %5 moves %6 hp %7"
++                   " orders %8 done %9 ssa %10")
++           .arg(punit->id).arg(unit_rule_name(punit)).arg(x).arg(y)
++           .arg(get_activity_text(punit->activity))
++           .arg(punit->moves_left).arg(punit->hp)
++           .arg(punit->has_orders ? "yes" : "no")
++           .arg(punit->done_moving ? "yes" : "no")
++           .arg((int) punit->ssa_controller);
++    } unit_list_iterate_end;
++  }
++  if (get_num_units_in_focus() == 0) {
 +    s += "\n   focus: none";
 +  } else {
 +    s += "\n   stack";
-+    unit_list_iterate(unit_tile(head_of_units_in_focus())->units, punit) {
++    unit_list_iterate(unit_tile(focus_head())->units, punit) {
 +      if (unit_owner(punit) == client_player()) {
 +        s += QString(" #%1:%2%3").arg(punit->id)
 +             .arg(get_activity_text(punit->activity))
@@ -481,7 +494,7 @@ index 0000000..6ddef9d
 +static void run_line(const QString &raw)
 +{
 +  QString line = raw;
-+  struct unit *head = head_of_units_in_focus();
++  struct unit *head = focus_head();
 +  QStringList w;
 +
 +  if (head != nullptr) {
@@ -592,7 +605,7 @@ index 0000000..6ddef9d
 +      dsend_packet_player_research(&client.conn, advance_number(padv));
 +    }
 +  } else if (cmd == "clicktile" && w.size() > 2) {
-+    struct unit *punit = head_of_units_in_focus();
++    struct unit *punit = focus_head();
 +
 +    if (punit == nullptr) {
 +      drive_log("   !! no focus unit");
@@ -621,7 +634,7 @@ index 0000000..6ddef9d
 +    bool ok = true;
 +
 +    if (w[1] == "unit") {
-+      struct unit *punit = head_of_units_in_focus();
++      struct unit *punit = focus_head();
 +      float cx, cy;
 +
 +      if (punit == nullptr
@@ -805,6 +818,9 @@ index 0000000..6ddef9d
 +    key_end_turn();
 +  } else if (cmd == "page" && w.size() > 1 && w[1] == "main") {
 +    gui()->switch_page(PAGE_MAIN);
++  } else if (cmd == "saveopts") {
++    // as on leaving the client: write the options file
++    options_save(NULL);
 +  } else if (cmd == "state") {
 +    log_state(w.size() > 1 ? w[1] : QString());
 +  } else if (cmd == "shot" && w.size() > 1) {
@@ -824,7 +840,7 @@ index 0000000..6ddef9d
 +{
 +  if (!started) {
 +    if (client_state() == C_S_RUNNING && can_client_change_view()
-+        && head_of_units_in_focus() != nullptr
++        && focus_head() != nullptr
 +        && gui()->unitbar_wdg != nullptr) {
 +      started = true;
 +      gui()->raise();
@@ -870,6 +886,12 @@ index 0000000..6ddef9d
 +  drive_timer = new QTimer(gui());
 +  QObject::connect(drive_timer, &QTimer::timeout, tick);
 +  drive_timer->start(500);
++  // FREECIV_UI_DRIVE_NOW: run the lines from the start page on, without
++  // waiting for a game (for "Start new game" checks)
++  if (getenv("FREECIV_UI_DRIVE_NOW") != nullptr) {
++    started = true;
++    drive_log("== starting the script at once");
++  }
 +}
 diff --git a/client/gui-qt/uidrive.h b/client/gui-qt/uidrive.h
 new file mode 100644

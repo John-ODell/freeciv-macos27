@@ -554,6 +554,8 @@ def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=Fa
             if icons and key == "options":       # tech_icons.spec and building_icons.spec come after the stock misc/ ones
                 out.append(line.rstrip().rstrip('"') + ' duplicates_ok"'); continue
             if key == "name": out.append('name = "Freeciv45 iso"'); continue
+            if line.startswith(";for_ruleset"):      # issue 272: "Start new game" passes --ruleset civ45
+                out.append('for_ruleset = "civ45"'); continue
             if key == "priority": out.append("priority = 4"); continue
             if key == "summary":
                 out.append('summary = _("Freeciv45 iso tileset: %dx%d diamonds, painted ground for every terrain, '

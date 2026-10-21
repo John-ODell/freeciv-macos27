@@ -1,0 +1,28 @@
+# Start new game in Freeciv45.app (issue 272), 2026-10-21: three runs of newgame.txt on one throwaway HOME, the
+# test bundle built from the fork at patch 0055 plus the driver. <app> is the bundle, <home> the HOME. The state
+# lines are from drive.log, the process lines from ps about 25 s into each run.
+
+## Run 1: empty HOME, no options file. The launcher passes -t; the client saves the tileset it loaded.
+== main  turn 0  title "Freeciv45"  tileset freeciv45iso  ruleset ""
+== pregame  turn 0  title "Freeciv45"  tileset freeciv45iso  ruleset "Freeciv45 ruleset"
+== ingame  turn 1  title "Freeciv45"  tileset freeciv45iso  ruleset "Freeciv45 ruleset"
+   ps: <app>/Contents/MacOS/freeciv-qt -t freeciv45iso
+   (this run's ps filter missed the server; the ruleset line above shows civ45)
+
+## Run 2: same HOME, the options file from run 1. No -t; the saved freeciv45iso and civ45 again.
+== main  turn 0  title "Freeciv45"  tileset freeciv45iso  ruleset ""
+== pregame  turn 0  title "Freeciv45"  tileset freeciv45iso  ruleset "Freeciv45 ruleset"
+== ingame  turn 1  title "Freeciv45"  tileset freeciv45iso  ruleset "Freeciv45 ruleset"
+   ps: <app>/Contents/MacOS/freeciv-qt
+   ps: freeciv-server -p 5557 --bind localhost -q 1 -e --saves <home>/.freeciv/saves --scenarios <home>/.freeciv/scenarios -A none --ruleset civ45
+
+## Run 3: same HOME, the options file edited to default_tileset_square_name="amplio2", as a player who picked
+## another tileset. No -t; the player's tileset is kept, and with it the server's default ruleset (see the PR).
+== main  turn 0  title "Freeciv45"  tileset amplio2  ruleset ""
+== pregame  turn 0  title "Freeciv45"  tileset amplio2  ruleset "Civ2Civ3 ruleset"
+== ingame  turn 1  title "Freeciv45"  tileset amplio2  ruleset "Civ2Civ3 ruleset"
+   ps: <app>/Contents/MacOS/freeciv-qt
+   ps: freeciv-server -p 5557 --bind localhost -q 1 -e --saves <home>/.freeciv/saves --scenarios <home>/.freeciv/scenarios -A none
+
+## Options file after run 1
+default_tileset_square_name="freeciv45iso"
