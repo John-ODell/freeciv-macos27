@@ -1,0 +1,897 @@
+From fb4b86b728c08451e9df158c7c10b00837c0161d Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Wed, 21 Oct 2026 01:43:41 -0500
+Subject: [PATCH 51/53] civ45: seven faiths founded by tech, spreading on their
+ own
+
+Issue 273 (notes/freeciv45/design/religion.md). The first civ to learn
+Mysticism, Polytheism, Ruler Apotheosis, Philosophy, Astronomy,
+Monotheism or Theology founds one of seven invented faiths in its
+largest city, which becomes the holy city. Faiths spread each turn into
+nearby cities that follow none, faster near the same owner's cities
+and the holy city. Each civ's state faith is the one most of its cities
+follow; cities of the state faith get one more content citizen, and
+one more each from a Temple and a Cathedral. A holy city adds 2 history
+a turn and can build the Shrine (2 content, +25% gold, 1 gold a turn per
+city of its faith).
+
+Marker buildings that cannot be built carry the native effects, so the
+AI sees them; the Lua record fc45_rel_<city id> is the source of truth
+and re-creates markers that are sold, razed or lost at conquest.
+---
+ data/civ45/buildings.ruleset | 407 +++++++++++++++++++++++++++++++++++
+ data/civ45/effects.ruleset   | 229 ++++++++++++++++++++
+ data/civ45/script.lua        | 205 ++++++++++++++++++
+ 3 files changed, 841 insertions(+)
+
+diff --git a/data/civ45/buildings.ruleset b/data/civ45/buildings.ruleset
+index 344379f..db1446b 100644
+--- a/data/civ45/buildings.ruleset
++++ b/data/civ45/buildings.ruleset
+@@ -3035,6 +3035,413 @@ until the next turn. The limit is one draft a turn for every 400 land \
+ tiles of the map, from one to five.\
+ ")
+ 
++[building_faith_hearth]
++name		= _("Hearth Faith")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.faith_hearth"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_faith_hearth"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++This city follows The Hearth, founded by the first nation to learn Mysticism. \
++When The Hearth is its owner's state faith it makes \
++one citizen content, and one more each with a Temple and a Cathedral. \
++It cannot be built or bought: faiths are founded and spread on their own.\
++")
++
++[building_faith_many_hands]
++name		= _("Many Hands Faith")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.faith_many_hands"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_faith_many_hands"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++This city follows The Many Hands, founded by the first nation to learn Polytheism. \
++When The Many Hands is its owner's state faith it makes \
++one citizen content, and one more each with a Temple and a Cathedral. \
++It cannot be built or bought: faiths are founded and spread on their own.\
++")
++
++[building_faith_sun_throne]
++name		= _("Sun Throne Faith")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.faith_sun_throne"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_faith_sun_throne"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++This city follows The Sun Throne, founded by the first nation to learn Ruler Apotheosis. \
++When The Sun Throne is its owner's state faith it makes \
++one citizen content, and one more each with a Temple and a Cathedral. \
++It cannot be built or bought: faiths are founded and spread on their own.\
++")
++
++[building_faith_quiet_way]
++name		= _("Quiet Way Faith")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.faith_quiet_way"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_faith_quiet_way"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++This city follows The Quiet Way, founded by the first nation to learn Philosophy. \
++When The Quiet Way is its owner's state faith it makes \
++one citizen content, and one more each with a Temple and a Cathedral. \
++It cannot be built or bought: faiths are founded and spread on their own.\
++")
++
++[building_faith_star_path]
++name		= _("Star Path Faith")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.faith_star_path"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_faith_star_path"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++This city follows The Star Path, founded by the first nation to learn Astronomy. \
++When The Star Path is its owner's state faith it makes \
++one citizen content, and one more each with a Temple and a Cathedral. \
++It cannot be built or bought: faiths are founded and spread on their own.\
++")
++
++[building_faith_one_flame]
++name		= _("One Flame Faith")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.faith_one_flame"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_faith_one_flame"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++This city follows The One Flame, founded by the first nation to learn Monotheism. \
++When The One Flame is its owner's state faith it makes \
++one citizen content, and one more each with a Temple and a Cathedral. \
++It cannot be built or bought: faiths are founded and spread on their own.\
++")
++
++[building_faith_deep_well]
++name		= _("Deep Well Faith")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.faith_deep_well"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_faith_deep_well"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++This city follows The Deep Well, founded by the first nation to learn Theology. \
++When The Deep Well is its owner's state faith it makes \
++one citizen content, and one more each with a Temple and a Cathedral. \
++It cannot be built or bought: faiths are founded and spread on their own.\
++")
++
++[building_state_faith_hearth]
++name		= _("Hearth State Faith")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.state_faith_hearth"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_state_faith_hearth"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++The Hearth is this nation's state faith: the faith most of its cities follow. \
++Its cities get one more content citizen, and one more each with a Temple and a \
++Cathedral. It sits in the capital and cannot be built or bought.\
++")
++
++[building_state_faith_many_hands]
++name		= _("Many Hands State Faith")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.state_faith_many_hands"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_state_faith_many_hands"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++The Many Hands is this nation's state faith: the faith most of its cities follow. \
++Its cities get one more content citizen, and one more each with a Temple and a \
++Cathedral. It sits in the capital and cannot be built or bought.\
++")
++
++[building_state_faith_sun_throne]
++name		= _("Sun Throne State Faith")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.state_faith_sun_throne"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_state_faith_sun_throne"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++The Sun Throne is this nation's state faith: the faith most of its cities follow. \
++Its cities get one more content citizen, and one more each with a Temple and a \
++Cathedral. It sits in the capital and cannot be built or bought.\
++")
++
++[building_state_faith_quiet_way]
++name		= _("Quiet Way State Faith")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.state_faith_quiet_way"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_state_faith_quiet_way"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++The Quiet Way is this nation's state faith: the faith most of its cities follow. \
++Its cities get one more content citizen, and one more each with a Temple and a \
++Cathedral. It sits in the capital and cannot be built or bought.\
++")
++
++[building_state_faith_star_path]
++name		= _("Star Path State Faith")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.state_faith_star_path"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_state_faith_star_path"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++The Star Path is this nation's state faith: the faith most of its cities follow. \
++Its cities get one more content citizen, and one more each with a Temple and a \
++Cathedral. It sits in the capital and cannot be built or bought.\
++")
++
++[building_state_faith_one_flame]
++name		= _("One Flame State Faith")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.state_faith_one_flame"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_state_faith_one_flame"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++The One Flame is this nation's state faith: the faith most of its cities follow. \
++Its cities get one more content citizen, and one more each with a Temple and a \
++Cathedral. It sits in the capital and cannot be built or bought.\
++")
++
++[building_state_faith_deep_well]
++name		= _("Deep Well State Faith")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.state_faith_deep_well"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_state_faith_deep_well"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++The Deep Well is this nation's state faith: the faith most of its cities follow. \
++Its cities get one more content citizen, and one more each with a Temple and a \
++Cathedral. It sits in the capital and cannot be built or bought.\
++")
++
++[building_holy_city]
++name		= _("Holy City")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.holy_city"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_holy_city"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++A faith was founded here. The holy city adds 2 history a turn and is the only \
++place that faith's Shrine can be built. It cannot be built or bought.\
++")
++
++[building_shrine]
++name		= _("Shrine")
++genus		= "Improvement"
++reqs	=
++    { "type", "name", "range"
++      "Tech", "Philosophy", "Player"
++      "Building", "Holy City", "City"
++    }
++graphic         = "b.shrine"
++graphic_alt     = "b.temple"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 120
++upkeep		= 2
++sabotage	= 100
++sound		= "b_shrine"
++sound_alt	= "b_temple"
++sound_alt2      = "-"
++helptext	= _("\
++Built only in a holy city. Makes two citizens content and adds 25% gold here, and \
++pays its owner 1 gold a turn for every city in the world that follows the faith \
++founded here, whoever owns it.\
++")
++
+ [building_capitalization]
+ name		= _("Coinage")
+ genus		= "Convert"
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index 6a401c3..23c58d4 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -6388,3 +6388,232 @@ reqs    =
+       "Tech", "Electricity", "Player", FALSE
+       "OutputType", "Shield", "Local", TRUE
+     }
++
++; Religion (notes/freeciv45/design/religion.md 4.4). Markers are made by script.lua.
++[effect_faith_hearth_state_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Hearth Faith", "City"
++      "Building", "Hearth State Faith", "Player"
++    }
++
++[effect_faith_hearth_temple_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple", "City"
++      "Building", "Hearth Faith", "City"
++      "Building", "Hearth State Faith", "Player"
++    }
++
++[effect_faith_hearth_cathedral_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Cathedral", "City"
++      "Building", "Hearth Faith", "City"
++      "Building", "Hearth State Faith", "Player"
++    }
++
++[effect_faith_many_hands_state_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Many Hands Faith", "City"
++      "Building", "Many Hands State Faith", "Player"
++    }
++
++[effect_faith_many_hands_temple_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple", "City"
++      "Building", "Many Hands Faith", "City"
++      "Building", "Many Hands State Faith", "Player"
++    }
++
++[effect_faith_many_hands_cathedral_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Cathedral", "City"
++      "Building", "Many Hands Faith", "City"
++      "Building", "Many Hands State Faith", "Player"
++    }
++
++[effect_faith_sun_throne_state_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Sun Throne Faith", "City"
++      "Building", "Sun Throne State Faith", "Player"
++    }
++
++[effect_faith_sun_throne_temple_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple", "City"
++      "Building", "Sun Throne Faith", "City"
++      "Building", "Sun Throne State Faith", "Player"
++    }
++
++[effect_faith_sun_throne_cathedral_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Cathedral", "City"
++      "Building", "Sun Throne Faith", "City"
++      "Building", "Sun Throne State Faith", "Player"
++    }
++
++[effect_faith_quiet_way_state_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Quiet Way Faith", "City"
++      "Building", "Quiet Way State Faith", "Player"
++    }
++
++[effect_faith_quiet_way_temple_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple", "City"
++      "Building", "Quiet Way Faith", "City"
++      "Building", "Quiet Way State Faith", "Player"
++    }
++
++[effect_faith_quiet_way_cathedral_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Cathedral", "City"
++      "Building", "Quiet Way Faith", "City"
++      "Building", "Quiet Way State Faith", "Player"
++    }
++
++[effect_faith_star_path_state_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Star Path Faith", "City"
++      "Building", "Star Path State Faith", "Player"
++    }
++
++[effect_faith_star_path_temple_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple", "City"
++      "Building", "Star Path Faith", "City"
++      "Building", "Star Path State Faith", "Player"
++    }
++
++[effect_faith_star_path_cathedral_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Cathedral", "City"
++      "Building", "Star Path Faith", "City"
++      "Building", "Star Path State Faith", "Player"
++    }
++
++[effect_faith_one_flame_state_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "One Flame Faith", "City"
++      "Building", "One Flame State Faith", "Player"
++    }
++
++[effect_faith_one_flame_temple_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple", "City"
++      "Building", "One Flame Faith", "City"
++      "Building", "One Flame State Faith", "Player"
++    }
++
++[effect_faith_one_flame_cathedral_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Cathedral", "City"
++      "Building", "One Flame Faith", "City"
++      "Building", "One Flame State Faith", "Player"
++    }
++
++[effect_faith_deep_well_state_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Deep Well Faith", "City"
++      "Building", "Deep Well State Faith", "Player"
++    }
++
++[effect_faith_deep_well_temple_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Temple", "City"
++      "Building", "Deep Well Faith", "City"
++      "Building", "Deep Well State Faith", "Player"
++    }
++
++[effect_faith_deep_well_cathedral_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Cathedral", "City"
++      "Building", "Deep Well Faith", "City"
++      "Building", "Deep Well State Faith", "Player"
++    }
++
++[effect_holy_city_history]
++type    = "History"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Holy City", "City"
++    }
++
++[effect_shrine_content]
++type    = "Make_Content"
++value   = 2
++reqs    =
++    { "type", "name", "range"
++      "Building", "Shrine", "City"
++    }
++
++[effect_shrine_gold]
++type    = "Output_Bonus"
++value   = 25
++reqs    =
++    { "type", "name", "range"
++      "Building", "Shrine", "City"
++      "OutputType", "Gold", "Local"
++    }
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index d7f0b5b..e23cb6b 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -1131,3 +1131,208 @@ function fc45_unrest_city_destroyed(city, loser, destroyer)
+   fc45_gp_set(fc45_gp_key("fc45_unrest_", city.id), nil)
+ end
+ signal.connect("city_destroyed", "fc45_unrest_city_destroyed")
++
++-- Religion (notes/freeciv45/design/religion.md). Seven faiths, founded by the first civ to learn a tech,
++-- spread on their own into cities that follow none, and a state faith picked for each civ. The record
++-- fc45_rel_<city id> (";1;4;") is the truth; the "<Faith> Faith" and "Holy City" markers mirror it and are
++-- re-created when sold, razed or lost. The content, history and Shrine effects are in effects.ruleset.
++fc45_rel_faiths = { {"Hearth", "Mysticism"}, {"Many Hands", "Polytheism"}, {"Sun Throne", "Ruler Apotheosis"},
++                    {"Quiet Way", "Philosophy"}, {"Star Path", "Astronomy"}, {"One Flame", "Monotheism"},
++                    {"Deep Well", "Theology"} }
++fc45_rel_by_tech = {}
++for n, f in ipairs(fc45_rel_faiths) do fc45_rel_by_tech[f[2]] = n end
++FC45_REL_RANGE_SQ = 100   -- spread reaches 10 tiles
++FC45_REL_CAP = 10         -- at most 10 percent a turn
++
++function fc45_rel_list(city)
++  local out = {}
++  local r = rawget(_G, fc45_gp_key("fc45_rel_", city.id))
++  if r ~= nil then
++    for n in string.gmatch(r, "(%d+)") do out[#out + 1] = tonumber(n) end
++  end
++  return out
++end
++
++function fc45_rel_has(city, n)
++  local r = rawget(_G, fc45_gp_key("fc45_rel_", city.id))
++  return r ~= nil and string.find(r, ";" .. string.format("%d", n) .. ";", 1, true) ~= nil
++end
++
++function fc45_rel_marker(n) return find.building_type(fc45_rel_faiths[n][1] .. " Faith") end
++function fc45_rel_state_marker(n) return find.building_type(fc45_rel_faiths[n][1] .. " State Faith") end
++function fc45_rel_holy(n) return rawget(_G, fc45_gp_key("fc45_rel_holy_", n)) end
++
++function fc45_rel_add(city, n, why)
++  if fc45_rel_has(city, n) then return end
++  local key = fc45_gp_key("fc45_rel_", city.id)
++  fc45_gp_set(key, (rawget(_G, key) or ";") .. string.format("%d", n) .. ";")
++  if not city:has_building(fc45_rel_marker(n)) then edit.create_building(city, fc45_rel_marker(n)) end
++  log.normal("FC45REL turn %d %s %s %s of %s", game.turn(), fc45_rel_faiths[n][1], why, city.name, city.owner.name)
++end
++
++-- Put back every marker the record says the city should have.
++function fc45_rel_restore(city)
++  for _, n in ipairs(fc45_rel_list(city)) do
++    local b = fc45_rel_marker(n)
++    if not city:has_building(b) then edit.create_building(city, b) end
++  end
++  local holy = find.building_type("Holy City")
++  if not city:has_building(holy) then
++    for n = 1, #fc45_rel_faiths do
++      if fc45_rel_holy(n) == city.id then edit.create_building(city, holy); break end
++    end
++  end
++end
++
++-- Founding: the first civ to learn the tech, by any means, founds the faith in its largest city that
++-- follows none, else in its largest city.
++function fc45_rel_tech(tech, player, reason)
++  local n = fc45_rel_by_tech[tech:rule_name()]
++  if n == nil or not fc45_is_civ(player) then return end
++  if rawget(_G, fc45_gp_key("fc45_rel_founded_", n)) ~= nil then return end
++  local best, best_free = nil, nil
++  for c in player:cities_iterate() do
++    if best == nil or c.size > best.size then best = c end
++    if #fc45_rel_list(c) == 0 and (best_free == nil or c.size > best_free.size) then best_free = c end
++  end
++  local holy = best_free or best
++  if holy == nil then return end
++  fc45_gp_set(fc45_gp_key("fc45_rel_founded_", n), player.id)
++  fc45_gp_set(fc45_gp_key("fc45_rel_holy_", n), holy.id)
++  fc45_rel_add(holy, n, "founded in")
++  local hb = find.building_type("Holy City")
++  if not holy:has_building(hb) then edit.create_building(holy, hb) end
++  notify.event(nil, nil, E.SCRIPT, _("The %s has been founded in %s."), fc45_rel_faiths[n][1], holy.name)
++end
++signal.connect("tech_researched", "fc45_rel_tech")
++
++-- Spread into civ cities that follow no faith: every city of faith f within range adds weight 1, doubled
++-- for the same owner, tripled for f's holy city; the chance is min(cap, weight) percent a turn.
++-- Loop variables here are not named _, which would hide the _() used by notify.
++function fc45_rel_spread()
++  local holders, free = {}, {}
++  for p in players_iterate() do
++    if fc45_is_civ(p) then
++      for c in p:cities_iterate() do
++        local l = fc45_rel_list(c)
++        if #l > 0 then holders[#holders + 1] = {c.tile, p.id, l, c.id} else free[#free + 1] = c end
++      end
++    end
++  end
++  if #holders == 0 then return end
++  for _i, c in ipairs(free) do
++    local w, total = {}, 0
++    for _j, h in ipairs(holders) do
++      if c.tile:sq_distance(h[1]) <= FC45_REL_RANGE_SQ then
++        for _k, n in ipairs(h[3]) do
++          local x = 1
++          if h[2] == c.owner.id then x = x * 2 end
++          if fc45_rel_holy(n) == h[4] then x = x * 3 end
++          w[n] = (w[n] or 0) + x
++          total = total + x
++        end
++      end
++    end
++    if total > 0 and random(1, 100) <= math.min(FC45_REL_CAP, total) then
++      local r = random(1, total)
++      for n = 1, #fc45_rel_faiths do
++        local x = w[n] or 0
++        if r <= x then
++          fc45_rel_add(c, n, "spread to")
++          notify.event(c.owner, c.tile, E.SCRIPT, _("The %s has spread to %s."), fc45_rel_faiths[n][1], c.name)
++          break
++        end
++        r = r - x
++      end
++    end
++  end
++end
++
++-- The state faith: kept while any of the civ's cities follows it, else the faith most of its cities
++-- follow (ties to the lower number). Its marker small wonder sits in the capital.
++function fc45_rel_state(p)
++  local counts = {}
++  for c in p:cities_iterate() do
++    for _, n in ipairs(fc45_rel_list(c)) do counts[n] = (counts[n] or 0) + 1 end
++  end
++  local key = fc45_gp_key("fc45_rel_state_", p.id)
++  local cur = rawget(_G, key)
++  if cur == nil or (counts[cur] or 0) == 0 then
++    local best = nil
++    for n = 1, #fc45_rel_faiths do
++      if (counts[n] or 0) > 0 and (best == nil or counts[n] > counts[best]) then best = n end
++    end
++    if best ~= cur then
++      fc45_gp_set(key, best)
++      if best ~= nil then
++        notify.event(p, nil, E.SCRIPT, _("The %s is now your state faith."), fc45_rel_faiths[best][1])
++        log.normal("FC45REL turn %d state faith of %s is %s", game.turn(), p.name, fc45_rel_faiths[best][1])
++      end
++    end
++    cur = best
++  end
++  local cap = p:primary_capital()
++  for n = 1, #fc45_rel_faiths do
++    local b = fc45_rel_state_marker(n)
++    for c in p:cities_iterate() do
++      if c:has_building(b) and (n ~= cur or cap == nil or c.id ~= cap.id) then edit.remove_building(c, b) end
++    end
++  end
++  if cur ~= nil and cap ~= nil and not cap:has_building(fc45_rel_state_marker(cur)) then
++    edit.create_building(cap, fc45_rel_state_marker(cur))
++  end
++end
++
++-- Shrine gold: 1 a turn to the holy city's owner for every civ city in the world following its faith.
++function fc45_rel_shrine_gold(counts)
++  local shrine = find.building_type("Shrine")
++  for n = 1, #fc45_rel_faiths do
++    local id = fc45_rel_holy(n)
++    if id ~= nil and (counts[n] or 0) > 0 then
++      local c = find.city(nil, id)
++      if c ~= nil and c:has_building(shrine) then
++        edit.change_gold(c.owner, counts[n])
++        log.verbose("FC45REL turn %d shrine of %s pays %s %d", game.turn(), fc45_rel_faiths[n][1], c.owner.name, counts[n])
++      end
++    end
++  end
++end
++
++function fc45_rel_turn(turn, year)
++  local counts = {}
++  for p in players_iterate() do
++    if fc45_is_civ(p) then
++      for c in p:cities_iterate() do
++        fc45_rel_restore(c)
++        for _, n in ipairs(fc45_rel_list(c)) do counts[n] = (counts[n] or 0) + 1 end
++      end
++    end
++  end
++  fc45_rel_spread()
++  for p in players_iterate() do
++    if fc45_is_civ(p) then fc45_rel_state(p) end
++  end
++  fc45_rel_shrine_gold(counts)
++end
++signal.connect("turn_begin", "fc45_rel_turn")
++
++-- A sold marker comes straight back; razing at conquest is put back by city_transferred, anything else
++-- by the next turn's sweep.
++function fc45_rel_lost(city, building, reason, destroyer)
++  if city == nil or reason ~= "sold" then return end
++  local name = building:rule_name()
++  if name == "Holy City" or (string.sub(name, -6) == " Faith" and string.sub(name, -12) ~= " State Faith") then
++    fc45_rel_restore(city)
++  end
++end
++signal.connect("building_lost", "fc45_rel_lost")
++
++function fc45_rel_city_transferred(city, loser, winner, reason)
++  fc45_rel_restore(city)
++end
++signal.connect("city_transferred", "fc45_rel_city_transferred")
++
++function fc45_rel_city_destroyed(city, loser, destroyer)
++  fc45_gp_set(fc45_gp_key("fc45_rel_", city.id), nil)
++end
++signal.connect("city_destroyed", "fc45_rel_city_destroyed")
+-- 
+2.56.0
+
