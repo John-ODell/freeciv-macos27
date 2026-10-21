@@ -12,9 +12,9 @@
 #   --sign    codesign identity                     (default: "-" = ad-hoc; scripts/sign-app.sh, dmg.sh notarizes)
 #   --game    freeciv45: Freeciv45.app (qt only), the game of its own in notes/freeciv45/standalone.md. Its own
 #             name, bundle id and options file (~/.freeciv/freeciv45-client-rc-<x.y>), the freeciv45iso tileset
-#             inside and passed as -t until the options name a tileset, so "Start new game" plays civ45 (the
-#             tileset's for_ruleset); the icon is tilesets/freeciv45iso/freeciv45.icns when it exists, else the
-#             stock one
+#             inside and passed as -t until the options name a tileset; "Start new game" plays civ45 (the
+#             tileset's for_ruleset, or FREECIV_GAME_RULESET on a tileset that names none); the icon is
+#             tilesets/freeciv45iso/freeciv45.icns when it exists, else the stock one
 #
 # Layout:  <Name>.app/Contents/MacOS/<Name>        launcher compiled from scripts/launcher.c: sets FREECIV_DATA_PATH /
 #                                                   FREECIV_LOCALE_PATH, cd's next to the binaries (so the client's
@@ -105,7 +105,7 @@ done
 # Header padding: fix-dylibs.py adds rpaths to every executable in Contents/MacOS, this one included.
 clang -O2 -Wall -Wextra -Werror -mmacosx-version-min=11.0 -Wl,-headerpad_max_install_names \
   -DCLIENT_BIN="\"freeciv-$CLIENT\"" -DDATASUBDIR="\"$DATASUBDIR\"" \
-  ${GAME:+-DGAME_NAME="\"$GAME_NAME\"" -DGAME_TILESET="\"freeciv45iso\"" -DGAME_OPT="\"freeciv45-client-rc-$DATASUBDIR\""} \
+  ${GAME:+-DGAME_NAME="\"$GAME_NAME\"" -DGAME_TILESET="\"freeciv45iso\"" -DGAME_RULESET="\"civ45\"" -DGAME_OPT="\"freeciv45-client-rc-$DATASUBDIR\""} \
   -o "$C/MacOS/$LAUNCHER" "$ROOT/scripts/launcher.c"
 
 # Info.plist
