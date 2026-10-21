@@ -1,0 +1,82 @@
+== game running, starting the script (window active: yes)
+> pace 1200
+> wait 3000
+> dismiss
+   closing notify_goto
+> wait 1000
+> state ingame
+== ingame  turn 1  title "Freeciv45"  hover_state 0
+   focus #115 Warriors at (8,26) activity Idle moves 6 hp 10 orders no done no ssa 0
+   stack #115:Idle #114:Idle #113:Idle #112:Idle #103:Idle
+   window active yes
+   bar visible yes at 320,574 228x160
+   labels [Warriors | green | moves 1  hp 10/10 | str 1 / 1]
+   chips [Warriors HP:10/10 Idle | Warriors HP:10/10 Idle | Scout HP:10/10 Idle | Workers HP:10/10 Idle | Settlers HP:20/20 Idle]
+   actions [Go to Tile (G) | Fortify Unit (F) | Sentry (S) | Wait (W) | Done (Space)]
+   minimap visible yes, chat visible yes
+   top strip 933x32 [Agriculture +0  0/30 (never) | 50 (+0) | Tax 40  Lux 0  Sci 60 | Culture 0 (+0) |  | 4000 BCE  Turn 1 | End turn]
+   indicators 606,21 93x25 icon 78x18 tip "0 People / Year: 4000 BCE / Turn: 1 / Gold: 50 / Net Income: 0 / Tax rates: Gold:40% Luxury:0% Science:60% / Researching Agriculture: 0/30 (never) / Bulbs per turn: 0 - 0 = 0 / Culture: 0 (+0/turn) / Global warming chance: 0% (-5%/turn) / Nuclear winter chance: 0% (-5%/turn) / Government: Despotism / Click: change the government"
+   edge column 869,32 64x746 [Map | Research / Right-click: choose the research from a menu | Nations / Right-click: the open diplomacy meeting / Wheel: other nations' capitals (up), your capital (down) | Cities / Wheel: other nations' cities (up), your cities (down) | Units / Right-click: centre on the focus unit / Wheel: other nations' units (up), wait and next unit (down) | Economy | More overviews]
+   what next 637,541 224x40 [Unit needs orders | 1 of 5] step blocked (minimap 730,589 131x150)
+   sidebar visible no, game tab 0 (QWidget)
+   hud_units visible no
+   map origin -2501,1440
+   move range 2 tiles
+   other windows []
+   tooltip none
+> shot game
+== shot game  turn 1  title "Freeciv45"  hover_state 0
+   focus #115 Warriors at (8,26) activity Idle moves 6 hp 10 orders no done no ssa 0
+   stack #115:Idle #114:Idle #113:Idle #112:Idle #103:Idle
+   window active yes
+   bar visible yes at 320,574 228x160
+   labels [Warriors | green | moves 1  hp 10/10 | str 1 / 1]
+   chips [Warriors HP:10/10 Idle | Warriors HP:10/10 Idle | Scout HP:10/10 Idle | Workers HP:10/10 Idle | Settlers HP:20/20 Idle]
+   actions [Go to Tile (G) | Fortify Unit (F) | Sentry (S) | Wait (W) | Done (Space)]
+   minimap visible yes, chat visible yes
+   top strip 933x32 [Agriculture +0  0/30 (never) | 50 (+0) | Tax 40  Lux 0  Sci 60 | Culture 0 (+0) |  | 4000 BCE  Turn 1 | End turn]
+   indicators 606,21 93x25 icon 78x18 tip "0 People / Year: 4000 BCE / Turn: 1 / Gold: 50 / Net Income: 0 / Tax rates: Gold:40% Luxury:0% Science:60% / Researching Agriculture: 0/30 (never) / Bulbs per turn: 0 - 0 = 0 / Culture: 0 (+0/turn) / Global warming chance: 0% (-5%/turn) / Nuclear winter chance: 0% (-5%/turn) / Government: Despotism / Click: change the government"
+   edge column 869,32 64x746 [Map | Research / Right-click: choose the research from a menu | Nations / Right-click: the open diplomacy meeting / Wheel: other nations' capitals (up), your capital (down) | Cities / Wheel: other nations' cities (up), your cities (down) | Units / Right-click: centre on the focus unit / Wheel: other nations' units (up), wait and next unit (down) | Economy | More overviews]
+   what next 637,541 224x40 [Unit needs orders | 1 of 5] step blocked (minimap 730,589 131x150)
+   sidebar visible no, game tab 0 (QWidget)
+   hud_units visible no
+   map origin -2501,1440
+   move range 2 tiles
+   other windows []
+   tooltip none
+> page main
+> wait 2000
+> state start
+== start  turn 1  title "Freeciv45"  hover_state 0
+   focus #115 Warriors at (8,26) activity Idle moves 6 hp 10 orders no done no ssa 0
+   stack #115:Idle #114:Idle #113:Idle #112:Idle #103:Idle
+   window active yes
+   bar visible no at 320,570 228x160
+   minimap visible no, chat visible no
+   top strip hidden
+   edge column hidden
+   what next hidden
+   sidebar visible no, game tab 0 (QWidget)
+   hud_units visible no
+   map origin -2501,1440
+   move range 2 tiles
+   other windows []
+   tooltip none
+> shot start
+== shot start  turn 1  title "Freeciv45"  hover_state 0
+   focus #115 Warriors at (8,26) activity Idle moves 6 hp 10 orders no done no ssa 0
+   stack #115:Idle #114:Idle #113:Idle #112:Idle #103:Idle
+   window active yes
+   bar visible no at 320,570 228x160
+   minimap visible no, chat visible no
+   top strip hidden
+   edge column hidden
+   what next hidden
+   sidebar visible no, game tab 0 (QWidget)
+   hud_units visible no
+   map origin -2501,1440
+   move range 2 tiles
+   other windows []
+   tooltip none
+> quit
+== quit
