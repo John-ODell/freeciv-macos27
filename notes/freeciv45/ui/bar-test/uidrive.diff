@@ -1,5 +1,5 @@
 diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
-index 5e6de95..a5ca1a9 100644
+index 954872c..82fd58a 100644
 --- a/client/gui-qt/fc_client.cpp
 +++ b/client/gui-qt/fc_client.cpp
 @@ -54,6 +54,7 @@
@@ -10,7 +10,7 @@ index 5e6de95..a5ca1a9 100644
  #include "unitbar.h"
  
  fc_icons* fc_icons::m_instance = 0;
-@@ -277,6 +278,7 @@ void fc_client::fc_main(QApplication *qapp)
+@@ -307,6 +308,7 @@ void fc_client::fc_main(QApplication *qapp)
  
    startTimer(TIMER_INTERVAL);
    connect(qapp, &QCoreApplication::aboutToQuit, this, &fc_client::closing);
@@ -20,10 +20,10 @@ index 5e6de95..a5ca1a9 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..fba3359
+index 0000000..6ddef9d
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,841 @@
+@@ -0,0 +1,847 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -82,7 +82,9 @@ index 0000000..fba3359
 +    dismiss                 close the modal boxes (welcome message...)
 +                            and an open popup menu
 +    unit ID                 where unit ID is, its activity and orders
-+    state LABEL             append the state to drive.log
++    page main               show the start page (before a shot of it)
++    state LABEL             append the state to drive.log (with the
++                            window title)
 +    shot NAME               state, then NAME.png of the window (+ tooltip)
 +    quit
 +*/
@@ -254,6 +256,8 @@ index 0000000..fba3359
 +static void log_state(const QString &label)
 +{
 +  QString s = QString("== %1  turn %2").arg(label).arg(game.info.turn);
++
++  s += QString("  title \"%1\"").arg(gui()->windowTitle());
 +  unit_bar *bar = gui()->unitbar_wdg;
 +  QStringList chips, acts, texts;
 +
@@ -799,6 +803,8 @@ index 0000000..fba3359
 +    }
 +  } else if (cmd == "endturn") {
 +    key_end_turn();
++  } else if (cmd == "page" && w.size() > 1 && w[1] == "main") {
++    gui()->switch_page(PAGE_MAIN);
 +  } else if (cmd == "state") {
 +    log_state(w.size() > 1 ? w[1] : QString());
 +  } else if (cmd == "shot" && w.size() > 1) {

@@ -1,0 +1,126 @@
+From 124b420687ff58ba01c948d6e985a9ad09f8eeb8 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Wed, 21 Oct 2026 01:47:27 -0500
+Subject: [PATCH] Qt client: name the game from FREECIV_GAME_NAME
+
+Issue 271. A game built on Freeciv (Freeciv45) sets FREECIV_GAME_NAME
+in its app's launcher. The Qt client then uses that name for the
+window title, the status bar's welcome, the first line of the chat
+window and the version line on the start page ("Freeciv45, built on
+Freeciv 3.2.x"). Unset, every string stays the stock one.
+---
+ client/gui-qt/fc_client.cpp | 44 +++++++++++++++++++++++++++++++------
+ client/gui-qt/fc_client.h   |  3 +++
+ client/gui-qt/pages.cpp     |  5 +++++
+ 3 files changed, 45 insertions(+), 7 deletions(-)
+
+diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
+index 5e6de95..954872c 100644
+--- a/client/gui-qt/fc_client.cpp
++++ b/client/gui-qt/fc_client.cpp
+@@ -66,6 +66,18 @@ extern void write_shortcuts();
+ 
+ QString current_theme;
+ 
++/************************************************************************//**
++  The game's name for window titles and greetings: FREECIV_GAME_NAME when
++  set (a game built on Freeciv, such as Freeciv45, sets it in its app's
++  launcher), else NULL for the stock Freeciv strings.
++****************************************************************************/
++const char *fc_game_name(void)
++{
++  const char *name = getenv("FREECIV_GAME_NAME");
++
++  return (name != NULL && name[0] != '\0') ? name : NULL;
++}
++
+ /************************************************************************//**
+   Constructor
+ ****************************************************************************/
+@@ -140,14 +152,18 @@ fc_client::fc_client() : QMainWindow()
+     pages[i] = NULL;
+   }
+ 
+-  wtitle = _("Freeciv (%1)");
+-  wtitle = wtitle.arg(
++  if (fc_game_name() != NULL) {
++    wtitle = fc_game_name();
++  } else {
++    wtitle = _("Freeciv (%1)");
++    wtitle = wtitle.arg(
+ #if FC_QT5_MODE
+-                      "Qt5"
++                        "Qt5"
+ #else  // FC_QT5_MODE
+-                      "Qt6"
++                        "Qt6"
+ #endif // FC_QT5_MODE
+-                      );
++                        );
++  }
+ 
+   setWindowTitle(wtitle);
+ 
+@@ -177,7 +193,12 @@ void fc_client::init()
+   status_bar_label = new QLabel;
+   status_bar_label->setAlignment(Qt::AlignCenter);
+   status_bar->addWidget(status_bar_label, 1);
+-  set_status_bar(_("Welcome to Freeciv"));
++  if (fc_game_name() != NULL) {
++    // TRANS: %1 is the name of a game built on Freeciv
++    set_status_bar(QString(_("Welcome to %1")).arg(fc_game_name()));
++  } else {
++    set_status_bar(_("Welcome to Freeciv"));
++  }
+   create_cursors();
+ 
+   // PAGE_MAIN
+@@ -269,7 +290,16 @@ void fc_client::fc_main(QApplication *qapp)
+   qRegisterMetaType<QTextCursor>("QTextCursor");
+   qRegisterMetaType<QTextBlock>("QTextBlock");
+   fc_allocate_ow_mutex();
+-  real_output_window_append(_("This is Qt-client for Freeciv."), NULL, -1);
++  if (fc_game_name() != NULL) {
++    char buf[256];
++
++    // TRANS: %s is the name of a game built on Freeciv
++    fc_snprintf(buf, sizeof(buf), _("This is %s, built on Freeciv."),
++                fc_game_name());
++    real_output_window_append(buf, NULL, -1);
++  } else {
++    real_output_window_append(_("This is Qt-client for Freeciv."), NULL, -1);
++  }
+   fc_release_ow_mutex();
+   chat_welcome_message(true);
+ 
+diff --git a/client/gui-qt/fc_client.h b/client/gui-qt/fc_client.h
+index 664dfb1..6e6101e 100644
+--- a/client/gui-qt/fc_client.h
++++ b/client/gui-qt/fc_client.h
+@@ -403,4 +403,7 @@ public slots:
+ // Return fc_client instance. Implementation in gui_main.cpp
+ class fc_client *gui();
+ 
++// The name of a game built on Freeciv, or NULL. Implementation in fc_client.cpp
++const char *fc_game_name(void);
++
+ #endif // FC__FC_CLIENT_H
+diff --git a/client/gui-qt/pages.cpp b/client/gui-qt/pages.cpp
+index 2704f30..7f087c5 100644
+--- a/client/gui-qt/pages.cpp
++++ b/client/gui-qt/pages.cpp
+@@ -190,6 +190,11 @@ void fc_client::create_main_page(void)
+ #endif // FC_QT5_MODE
+   }
+ 
++  if (fc_game_name() != NULL) {
++    // TRANS: "Freeciv45, built on Freeciv 3.2.0"
++    fc_snprintf(msgbuf, sizeof(msgbuf), _("%s, built on Freeciv %s"),
++                fc_game_name(), VERSION_STRING);
++  }
+   painter.drawText(main_graphics.width() - fm.horizontalAdvance (msgbuf)
+                    -10, main_graphics.height() - fm.descent(), msgbuf);
+   free_main_pic->setPixmap(main_graphics);
+-- 
+2.56.0
+
