@@ -157,7 +157,6 @@ files =
   "freeciv45iso/resources.spec",
   "freeciv45iso/features.spec",
   "freeciv45iso/extras.spec",
-  "freeciv45iso/maglev.spec",
   "freeciv45iso/volcano.spec",
   "freeciv45iso/badges.spec",
   "freeciv45iso/tiles.spec",
