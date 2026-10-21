@@ -1,0 +1,19 @@
+# Coal retake (issue 208): a 15 x 9 tile field around the tile 3 east and 3 south of the start stack (as field.txt), grassland
+# with a row of hills and one of mountains, and on them coal beside iron, gold and gems, so the new coal can be judged next to
+# the resources it was lost among. The human player learns the techs that reveal coal, iron, horses and oil (patch 0050), so the
+# sprites draw whatever the build's ruleset says. Run as extras-field.txt (drive.sh, QT_SCALE_FACTOR=2, rulesetdir civ45 with
+# revealmap, fog and diplomacy off); TILESETS is the folder with the freeciv45iso build to look at.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd T = {}; local u0; for p in players_iterate() do if p:is_human() then H = p; for u in p:units_iterate() do u0 = u.tile; break end end end; for t in whole_map_iterate() do local dx, dy = math.floor(t.x - u0.x - 3), math.floor(t.y - u0.y - 3); if dx >= -7 and dx <= 7 and dy >= -4 and dy <= 4 then T[dx .. "," .. dy] = t; local k = (dy == -1 and "Hills") or (dy == 1 and "Mountains") or (dy == 3 and dx >= 2 and "Jungle") or "Grassland"; edit.change_terrain(t, find.terrain(k)); for _, r in ipairs({"Coal", "Iron", "Gold", "Gems", "Horses", "Oil", "Resources", "Wheat", "Buffalo", "Spice", "Fruit", "Wine"}) do pcall(function() edit.remove_extra(t, r) end) end end end
+wait 2000
+chat /lua cmd for _, n in ipairs({"Iron Working", "Horseback Riding", "Steam Engine", "Electricity"}) do edit.give_tech(H, find.tech_type(n), 0, false, "hack") end; local function x(n, e) pcall(function() edit.create_extra(T[n], e) end) end; local row = {"Coal", "Iron", "Gold", "Coal", "Iron", "Gold", "Coal"}; for i, e in ipairs(row) do x((i * 2 - 8) .. ",-1", e) end; x("-5,1", "Gold"); x("-3,1", "Iron"); x("-1,1", "Coal"); x("1,1", "Gold"); x("3,3", "Gems"); x("5,3", "Gems")
+wait 5000
+key escape
+wait 1000
+dismiss
+state all
+shot field
+quit
