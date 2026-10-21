@@ -1,6 +1,7 @@
-# Start new game in Freeciv45.app (issues 272, 290, 291), 2026-10-21: five runs of newgame.txt on one throwaway HOME, the
-# test bundle built from the fork at patch 0055 (0056 for run 4, 0057 for run 5) plus the driver. <app> is the bundle, <home> the HOME. The state
-# lines are from drive.log, the process lines from ps about 25 s into each run.
+# Start new game in Freeciv45.app (issues 272, 290, 291), 2026-10-21: five runs of newgame.txt on one throwaway
+# HOME. The test bundle is built from the fork at patch 0055 (0056 for run 4, 0057 for run 5) plus the driver.
+# <app> is the bundle, <home> the HOME. The state lines are from drive.log, the process lines from ps about 25 s
+# into each run.
 
 ## Run 1: empty HOME, no options file. The launcher passes -t; the client saves the tileset it loaded.
 == main  turn 0  title "Freeciv45"  tileset freeciv45iso  ruleset ""
