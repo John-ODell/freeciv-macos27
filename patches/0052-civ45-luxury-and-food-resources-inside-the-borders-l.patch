@@ -1,0 +1,681 @@
+From 5958e4c92fdca04da94d0871ec06a4d5c9571414 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Wed, 21 Oct 2026 01:43:41 -0500
+Subject: [PATCH 52/53] civ45: luxury and food resources inside the borders
+ lift every city
+
+Issue 276 (notes/freeciv45/design/resources.md). Each kind of luxury
+resource (Gold, Gems, Silk, Wine, Spice, Furs, Ivory, Whales) inside a
+civ's borders makes one citizen content in every city; each kind of
+food resource (Wheat, Buffalo, Fruit, Pheasant, Game, Fish, Oasis)
+raises every city's size cap by one and its health by 5%. Copies of a
+kind count once.
+
+Lua recomputes the kinds held from the map each turn and keeps a hidden
+"<Resource> Supply" small wonder per kind in the capital, so the effects
+are native and the AI weighs them. Gains and losses are told once.
+---
+ data/civ45/buildings.ruleset | 382 +++++++++++++++++++++++++++++++++++
+ data/civ45/effects.ruleset   | 177 ++++++++++++++++
+ data/civ45/script.lua        |  70 +++++++
+ 3 files changed, 629 insertions(+)
+
+diff --git a/data/civ45/buildings.ruleset b/data/civ45/buildings.ruleset
+index db1446b..62cdce7 100644
+--- a/data/civ45/buildings.ruleset
++++ b/data/civ45/buildings.ruleset
+@@ -3442,6 +3442,388 @@ pays its owner 1 gold a turn for every city in the world that follows the faith
+ founded here, whoever owns it.\
+ ")
+ 
++[building_gold_supply]
++name		= _("Gold Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.gold_supply"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_gold_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Gold inside its borders: one more content citizen \
++in every city. Each kind of luxury counts once. It sits in the capital \
++and cannot be built or bought; it goes when no Gold is left in your borders.\
++")
++
++[building_gems_supply]
++name		= _("Gems Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.gems_supply"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_gems_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Gems inside its borders: one more content citizen \
++in every city. Each kind of luxury counts once. It sits in the capital \
++and cannot be built or bought; it goes when no Gems is left in your borders.\
++")
++
++[building_silk_supply]
++name		= _("Silk Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.silk_supply"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_silk_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Silk inside its borders: one more content citizen \
++in every city. Each kind of luxury counts once. It sits in the capital \
++and cannot be built or bought; it goes when no Silk is left in your borders.\
++")
++
++[building_wine_supply]
++name		= _("Wine Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.wine_supply"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_wine_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Wine inside its borders: one more content citizen \
++in every city. Each kind of luxury counts once. It sits in the capital \
++and cannot be built or bought; it goes when no Wine is left in your borders.\
++")
++
++[building_spice_supply]
++name		= _("Spice Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.spice_supply"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_spice_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Spice inside its borders: one more content citizen \
++in every city. Each kind of luxury counts once. It sits in the capital \
++and cannot be built or bought; it goes when no Spice is left in your borders.\
++")
++
++[building_furs_supply]
++name		= _("Furs Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.furs_supply"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_furs_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Furs inside its borders: one more content citizen \
++in every city. Each kind of luxury counts once. It sits in the capital \
++and cannot be built or bought; it goes when no Furs is left in your borders.\
++")
++
++[building_ivory_supply]
++name		= _("Ivory Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.ivory_supply"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_ivory_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Ivory inside its borders: one more content citizen \
++in every city. Each kind of luxury counts once. It sits in the capital \
++and cannot be built or bought; it goes when no Ivory is left in your borders.\
++")
++
++[building_whales_supply]
++name		= _("Whales Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.whales_supply"
++graphic_alt     = "b.marketplace"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_whales_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Whales inside its borders: one more content citizen \
++in every city. Each kind of luxury counts once. It sits in the capital \
++and cannot be built or bought; it goes when no Whales is left in your borders.\
++")
++
++[building_wheat_supply]
++name		= _("Wheat Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.wheat_supply"
++graphic_alt     = "b.granary"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_wheat_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Wheat inside its borders: every city can grow one size \
++larger and resists plague 5% better. Each kind of food counts once. It \
++sits in the capital and cannot be built or bought; it goes when no Wheat is \
++left in your borders.\
++")
++
++[building_buffalo_supply]
++name		= _("Buffalo Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.buffalo_supply"
++graphic_alt     = "b.granary"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_buffalo_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Buffalo inside its borders: every city can grow one size \
++larger and resists plague 5% better. Each kind of food counts once. It \
++sits in the capital and cannot be built or bought; it goes when no Buffalo is \
++left in your borders.\
++")
++
++[building_fruit_supply]
++name		= _("Fruit Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.fruit_supply"
++graphic_alt     = "b.granary"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_fruit_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Fruit inside its borders: every city can grow one size \
++larger and resists plague 5% better. Each kind of food counts once. It \
++sits in the capital and cannot be built or bought; it goes when no Fruit is \
++left in your borders.\
++")
++
++[building_pheasant_supply]
++name		= _("Pheasant Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.pheasant_supply"
++graphic_alt     = "b.granary"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_pheasant_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Pheasant inside its borders: every city can grow one size \
++larger and resists plague 5% better. Each kind of food counts once. It \
++sits in the capital and cannot be built or bought; it goes when no Pheasant is \
++left in your borders.\
++")
++
++[building_game_supply]
++name		= _("Game Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.game_supply"
++graphic_alt     = "b.granary"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_game_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Game inside its borders: every city can grow one size \
++larger and resists plague 5% better. Each kind of food counts once. It \
++sits in the capital and cannot be built or bought; it goes when no Game is \
++left in your borders.\
++")
++
++[building_fish_supply]
++name		= _("Fish Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.fish_supply"
++graphic_alt     = "b.granary"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_fish_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Fish inside its borders: every city can grow one size \
++larger and resists plague 5% better. Each kind of food counts once. It \
++sits in the capital and cannot be built or bought; it goes when no Fish is \
++left in your borders.\
++")
++
++[building_oasis_supply]
++name		= _("Oasis Supply")
++genus		= "SmallWonder"
++reqs	=
++    { "type", "name", "range"
++      "MinYear", "9999", "World"
++    }
++graphic         = "b.oasis_supply"
++graphic_alt     = "b.granary"
++graphic_alt2    = "-"
++obsolete_by	=
++    { "type", "name", "range"
++    }
++build_cost	= 1
++upkeep		= 0
++sabotage	= 0
++sound		= "b_oasis_supply"
++sound_alt	= "b_generic"
++sound_alt2      = "-"
++helptext	= _("\
++Your nation holds Oasis inside its borders: every city can grow one size \
++larger and resists plague 5% better. Each kind of food counts once. It \
++sits in the capital and cannot be built or bought; it goes when no Oasis is \
++left in your borders.\
++")
++
+ [building_capitalization]
+ name		= _("Coinage")
+ genus		= "Convert"
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index 23c58d4..b851410 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -6617,3 +6617,180 @@ reqs    =
+       "Building", "Shrine", "City"
+       "OutputType", "Gold", "Local"
+     }
++
++; Resource happiness and health (notes/freeciv45/design/resources.md 6). Markers are kept by script.lua.
++[effect_gold_supply_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Gold Supply", "Player"
++    }
++
++[effect_gems_supply_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Gems Supply", "Player"
++    }
++
++[effect_silk_supply_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Silk Supply", "Player"
++    }
++
++[effect_wine_supply_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Wine Supply", "Player"
++    }
++
++[effect_spice_supply_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Spice Supply", "Player"
++    }
++
++[effect_furs_supply_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Furs Supply", "Player"
++    }
++
++[effect_ivory_supply_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Ivory Supply", "Player"
++    }
++
++[effect_whales_supply_content]
++type    = "Make_Content"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Whales Supply", "Player"
++    }
++
++[effect_wheat_supply_size]
++type    = "Size_Adj"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Wheat Supply", "Player"
++    }
++
++[effect_wheat_supply_health]
++type    = "Health_Pct"
++value   = 5
++reqs    =
++    { "type", "name", "range"
++      "Building", "Wheat Supply", "Player"
++    }
++
++[effect_buffalo_supply_size]
++type    = "Size_Adj"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Buffalo Supply", "Player"
++    }
++
++[effect_buffalo_supply_health]
++type    = "Health_Pct"
++value   = 5
++reqs    =
++    { "type", "name", "range"
++      "Building", "Buffalo Supply", "Player"
++    }
++
++[effect_fruit_supply_size]
++type    = "Size_Adj"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Fruit Supply", "Player"
++    }
++
++[effect_fruit_supply_health]
++type    = "Health_Pct"
++value   = 5
++reqs    =
++    { "type", "name", "range"
++      "Building", "Fruit Supply", "Player"
++    }
++
++[effect_pheasant_supply_size]
++type    = "Size_Adj"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Pheasant Supply", "Player"
++    }
++
++[effect_pheasant_supply_health]
++type    = "Health_Pct"
++value   = 5
++reqs    =
++    { "type", "name", "range"
++      "Building", "Pheasant Supply", "Player"
++    }
++
++[effect_game_supply_size]
++type    = "Size_Adj"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Game Supply", "Player"
++    }
++
++[effect_game_supply_health]
++type    = "Health_Pct"
++value   = 5
++reqs    =
++    { "type", "name", "range"
++      "Building", "Game Supply", "Player"
++    }
++
++[effect_fish_supply_size]
++type    = "Size_Adj"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Fish Supply", "Player"
++    }
++
++[effect_fish_supply_health]
++type    = "Health_Pct"
++value   = 5
++reqs    =
++    { "type", "name", "range"
++      "Building", "Fish Supply", "Player"
++    }
++
++[effect_oasis_supply_size]
++type    = "Size_Adj"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Building", "Oasis Supply", "Player"
++    }
++
++[effect_oasis_supply_health]
++type    = "Health_Pct"
++value   = 5
++reqs    =
++    { "type", "name", "range"
++      "Building", "Oasis Supply", "Player"
++    }
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index e23cb6b..1e513d7 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -1336,3 +1336,73 @@ function fc45_rel_city_destroyed(city, loser, destroyer)
+   fc45_gp_set(fc45_gp_key("fc45_rel_", city.id), nil)
+ end
+ signal.connect("city_destroyed", "fc45_rel_city_destroyed")
++
++-- Resource happiness and health (notes/freeciv45/design/resources.md). Each kind of luxury or food resource
++-- inside a civ's borders puts its "<Resource> Supply" small wonder in the capital; the content, size and
++-- health effects are in effects.ruleset. Recomputed from the map every turn, so nothing is recorded.
++fc45_res_luxury = { "Gold", "Gems", "Silk", "Wine", "Spice", "Furs", "Ivory", "Whales" }
++fc45_res_food = { "Wheat", "Buffalo", "Fruit", "Pheasant", "Game", "Fish", "Oasis" }
++fc45_res_all = {}
++for _, r in ipairs(fc45_res_luxury) do fc45_res_all[#fc45_res_all + 1] = r end
++for _, r in ipairs(fc45_res_food) do fc45_res_all[#fc45_res_all + 1] = r end
++
++-- held[player id][resource] = true for every kind inside that player's borders.
++function fc45_res_held()
++  local held = {}
++  for t in whole_map_iterate() do
++    local o = t.owner
++    if o ~= nil then
++      for _, r in ipairs(fc45_res_all) do
++        if t:has_extra(r) then
++          held[o.id] = held[o.id] or {}
++          held[o.id][r] = true
++        end
++      end
++    end
++  end
++  return held
++end
++
++-- The record fc45_res_<R>_<player id> follows the borders, so gains and losses are told once; the marker
++-- follows the record into the capital, and a civ without one holds no markers until it has one again.
++function fc45_res_place(p, have)
++  local cap = p:primary_capital()
++  for _i, r in ipairs(fc45_res_all) do  -- not _, which would hide _()
++    local b = find.building_type(r .. " Supply")
++    local place = have[r] and cap ~= nil
++    local had = false
++    for c in p:cities_iterate() do
++      if c:has_building(b) then
++        if place and c.id == cap.id then had = true else edit.remove_building(c, b) end
++      end
++    end
++    if place and not had then edit.create_building(cap, b) end
++    local key = fc45_gp_key("fc45_res_" .. r .. "_", p.id)
++    if have[r] and rawget(_G, key) == nil then
++      fc45_gp_set(key, 1)
++      if fc45_res_is_food(r) then
++        notify.event(p, nil, E.SCRIPT, _("Your nation now has %s: every city can grow one size larger and resists plague better."), r)
++      else
++        notify.event(p, nil, E.SCRIPT, _("Your nation now has %s: 1 more content citizen in every city."), r)
++      end
++      log.normal("FC45RES turn %d %s gains %s", game.turn(), p.name, r)
++    elseif not have[r] and rawget(_G, key) ~= nil then
++      fc45_gp_set(key, nil)
++      notify.event(p, nil, E.SCRIPT, _("Your nation has lost its %s."), r)
++      log.normal("FC45RES turn %d %s loses %s", game.turn(), p.name, r)
++    end
++  end
++end
++
++function fc45_res_is_food(r)
++  for _, f in ipairs(fc45_res_food) do if f == r then return true end end
++  return false
++end
++
++function fc45_res_turn(turn, year)
++  local held = fc45_res_held()
++  for p in players_iterate() do
++    if fc45_is_civ(p) then fc45_res_place(p, held[p.id] or {}) end
++  end
++end
++signal.connect("turn_begin", "fc45_res_turn")
+-- 
+2.56.0
+
