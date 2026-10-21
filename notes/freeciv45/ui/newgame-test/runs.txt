@@ -1,5 +1,5 @@
-# Start new game in Freeciv45.app (issues 272 and 290), 2026-10-21: four runs of newgame.txt on one throwaway HOME, the
-# test bundle built from the fork at patch 0055 (0056 for run 4) plus the driver. <app> is the bundle, <home> the HOME. The state
+# Start new game in Freeciv45.app (issues 272, 290, 291), 2026-10-21: five runs of newgame.txt on one throwaway HOME, the
+# test bundle built from the fork at patch 0055 (0056 for run 4, 0057 for run 5) plus the driver. <app> is the bundle, <home> the HOME. The state
 # lines are from drive.log, the process lines from ps about 25 s into each run.
 
 ## Run 1: empty HOME, no options file. The launcher passes -t; the client saves the tileset it loaded.
@@ -31,6 +31,10 @@
 == ingame  turn 1  title "Freeciv45"  tileset amplio2  ruleset "Freeciv45 ruleset"
    ps: <app>/Contents/MacOS/freeciv-qt
    ps: freeciv-server -p 5557 --bind localhost -q 1 -e --saves <home>/.freeciv/saves --scenarios <home>/.freeciv/scenarios -A none --ruleset civ45
+
+## Run 5 (issue 291): run 4 again with patch 0057. The pregame Rules box now names civ45 (pregame-rules.jpg); it
+## said "default" in runs 1-4 (pregame.jpg).
+== pregame  turn 0  title "Freeciv45"  tileset amplio2  ruleset "Freeciv45 ruleset"   Rules box: civ45
 
 ## Options file after run 1
 default_tileset_square_name="freeciv45iso"
