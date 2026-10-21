@@ -1,0 +1,17 @@
+# Game name (issue 271): with FREECIV_GAME_NAME=Freeciv45 the Qt client's window title, chat greeting and start page
+# version line name the game. Run with scripts/ui-drive.sh on a driver build of the fork at patch 0054 (the driver from
+# notes/freeciv45/ui/bar-test/uidrive.diff, which logs the window title and has "page main"):
+#   FREECIV_GAME_NAME=Freeciv45 FREECIV_DRIVE_PREFIX=<prefix> FREECIV_DRIVE_TILESET=freeciv45iso \
+#     FREECIV_DRIVE_TILESETS=<repo>/tilesets scripts/ui-drive.sh notes/freeciv45/ui/name-test/name.txt <outdir>
+# drive.log's state lines carry the title; game.png shows the chat window; start.png the start page.
+pace 1200
+wait 3000
+dismiss
+wait 1000
+state ingame
+shot game
+page main
+wait 2000
+state start
+shot start
+quit

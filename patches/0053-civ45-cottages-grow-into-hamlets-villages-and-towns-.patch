@@ -1,0 +1,263 @@
+From 414708788fabbc93a12d6ede0dd7064682c66ff4 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Wed, 21 Oct 2026 01:43:41 -0500
+Subject: [PATCH 53/53] civ45: cottages grow into hamlets, villages and towns
+ while worked
+
+Issue 275 (notes/freeciv45/design/cottages.md). With Pottery, the
+worker's mine job on grassland or plains builds a Cottage (+1 trade);
+the Mine stays off those two terrains. While a city works the tile the
+cottage grows, by native spontaneous appearance with a "worked"
+requirement, into a Hamlet (10% a turn), a Village (5%) and a Town
+(2.5%), each worth 1 more trade; Printing adds 1 to villages and towns,
+Democracy 1 shield to towns. Pillage takes the top stage only. Cottages
+exclude irrigation, farmland and mines.
+
+The tileset tags are tx.cottage, tx.hamlet, tx.village_stage (the hut
+has tx.village) and tx.town, each falling back to tx.village.
+---
+ data/civ45/effects.ruleset |  57 +++++++++++++++
+ data/civ45/terrain.ruleset | 138 ++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 192 insertions(+), 3 deletions(-)
+
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index b851410..b143a5c 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -6794,3 +6794,60 @@ reqs    =
+     { "type", "name", "range"
+       "Building", "Oasis Supply", "Player"
+     }
++
++; Cottages (notes/freeciv45/design/cottages.md): each stage adds 1 trade, so 1, 2, 3 and 4 in all.
++[effect_cottage_trade]
++type    = "Output_Add_Tile"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Extra", "Cottage", "Tile"
++      "OutputType", "Trade", "Local"
++    }
++
++[effect_hamlet_trade]
++type    = "Output_Add_Tile"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Extra", "Hamlet", "Tile"
++      "OutputType", "Trade", "Local"
++    }
++
++[effect_village_trade]
++type    = "Output_Add_Tile"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Extra", "Village", "Tile"
++      "OutputType", "Trade", "Local"
++    }
++
++[effect_town_trade]
++type    = "Output_Add_Tile"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Extra", "Town", "Tile"
++      "OutputType", "Trade", "Local"
++    }
++
++[effect_village_printing]
++type    = "Output_Add_Tile"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Extra", "Village", "Tile"
++      "Tech", "Printing", "Player"
++      "OutputType", "Trade", "Local"
++    }
++
++[effect_town_democracy_shield]
++type    = "Output_Add_Tile"
++value   = 1
++reqs    =
++    { "type", "name", "range"
++      "Extra", "Town", "Tile"
++      "Gov", "Democracy", "Player"
++      "OutputType", "Shield", "Local"
++    }
+diff --git a/data/civ45/terrain.ruleset b/data/civ45/terrain.ruleset
+index 1723e78..326d507 100644
+--- a/data/civ45/terrain.ruleset
++++ b/data/civ45/terrain.ruleset
+@@ -609,7 +609,7 @@ plant_time           = 15
+ irrigation_food_incr = 1
+ irrigation_time      = 5
+ mining_shield_incr   = 0
+-mining_time          = 0
++mining_time          = 5
+ transform_result     = "Lake"
+ transform_time       = 36
+ placing_time         = 2
+@@ -825,7 +825,7 @@ plant_time           = 10
+ irrigation_food_incr = 1
+ irrigation_time      = 5
+ mining_shield_incr   = 0
+-mining_time          = 0
++mining_time          = 5
+ transform_result     = "Lake"
+ transform_time       = 36
+ placing_time         = 2
+@@ -1322,10 +1322,12 @@ reqs           =
+     { "type", "name", "range", "present", "quiet"
+       "TerrainClass", "Oceanic", "Tile", FALSE, TRUE
+       "UnitClass", "Sea", "Local", FALSE, TRUE
++      "Terrain", "Grassland", "Tile", FALSE, TRUE
++      "Terrain", "Plains", "Tile", FALSE, TRUE
+     }
+ build_time     = 0
+ removal_time   = 0
+-conflicts      = "Irrigation", "Farmland"
++conflicts      = "Irrigation", "Farmland", "Cottage"
+ hidden_by      = "Oil Well"
+ helptext       = _("\
+ Mines can be built on some types of terrain, which increases the \
+@@ -1336,6 +1338,136 @@ production point.\
+ Building a mine on an irrigated tile will destroy the irrigation.\
+ ")
+ 
++[extra_cottage]
++name           = _("Cottage")
++category       = "Infra"
++causes         = "Mine"
++rmcauses       = "Pillage"
++graphic        = "tx.cottage"
++graphic_alt    = "tx.village"
++activity_gfx   = "unit.mine"
++act_gfx_alt    = "-"
++act_gfx_alt2   = "-"
++rmact_gfx      = "None"
++rmact_gfx_alt  = "-"
++rmact_gfx_alt2 = "-"
++reqs           =
++    { "type", "name", "range", "present", "quiet"
++      "TerrainClass", "Land", "Tile", TRUE, TRUE
++      "Tech", "Pottery", "Player", TRUE, FALSE
++      "Terrain", "Hills", "Tile", FALSE, TRUE
++      "Terrain", "Mountains", "Tile", FALSE, TRUE
++      "Terrain", "Desert", "Tile", FALSE, TRUE
++      "Terrain", "Tundra", "Tile", FALSE, TRUE
++      "Terrain", "Glacier", "Tile", FALSE, TRUE
++    }
++rmreqs         =
++    { "type", "name", "range", "present"
++      "Extra", "Hamlet", "Tile", FALSE
++    }
++build_time     = 0
++removal_time   = 0
++conflicts      = "Irrigation", "Farmland", "Mine"
++hidden_by      = "Hamlet", "Village", "Town"
++helptext       = _("\
++A few houses and their gardens, built by workers on grassland or plains \
++with Pottery: +1 trade. While a city works the tile it grows into a \
++Hamlet (about 10 turns), then a Village (about 20 more) and a Town (about \
++40 more). A cottage excludes irrigation and mines; pillaging takes away \
++one stage at a time.\
++")
++
++[extra_hamlet]
++name           = _("Hamlet")
++category       = "Infra"
++causes         = "Appear"
++rmcauses       = "Pillage"
++graphic        = "tx.hamlet"
++graphic_alt    = "tx.village"
++activity_gfx   = "unit.mine"
++act_gfx_alt    = "-"
++act_gfx_alt2   = "-"
++rmact_gfx      = "None"
++rmact_gfx_alt  = "-"
++rmact_gfx_alt2 = "-"
++appearance_reqs =
++    { "type", "name", "range", "present"
++      "Extra", "Cottage", "Tile", TRUE
++      "CityTile", "Worked", "Tile", TRUE
++    }
++appearance_chance = 1000
++rmreqs         =
++    { "type", "name", "range", "present"
++      "Extra", "Village", "Tile", FALSE
++    }
++build_time     = 0
++removal_time   = 0
++conflicts      = "Irrigation", "Farmland", "Mine"
++hidden_by      = "Village", "Town"
++helptext       = _("\
++A cottage that has grown while worked: +2 trade in all. Grows into a \
++Village while the tile stays worked.\
++")
++
++[extra_village]
++name           = _("Village")
++category       = "Infra"
++causes         = "Appear"
++rmcauses       = "Pillage"
++graphic        = "tx.village_stage"
++graphic_alt    = "tx.village"
++activity_gfx   = "unit.mine"
++act_gfx_alt    = "-"
++act_gfx_alt2   = "-"
++rmact_gfx      = "None"
++rmact_gfx_alt  = "-"
++rmact_gfx_alt2 = "-"
++appearance_reqs =
++    { "type", "name", "range", "present"
++      "Extra", "Hamlet", "Tile", TRUE
++      "CityTile", "Worked", "Tile", TRUE
++    }
++appearance_chance = 500
++rmreqs         =
++    { "type", "name", "range", "present"
++      "Extra", "Town", "Tile", FALSE
++    }
++build_time     = 0
++removal_time   = 0
++conflicts      = "Irrigation", "Farmland", "Mine"
++hidden_by      = "Town"
++helptext       = _("\
++A grown hamlet: +3 trade in all, +4 with Printing. Grows into a Town \
++while the tile stays worked.\
++")
++
++[extra_town]
++name           = _("Town")
++category       = "Infra"
++causes         = "Appear"
++rmcauses       = "Pillage"
++graphic        = "tx.town"
++graphic_alt    = "tx.village"
++activity_gfx   = "unit.mine"
++act_gfx_alt    = "-"
++act_gfx_alt2   = "-"
++rmact_gfx      = "None"
++rmact_gfx_alt  = "-"
++rmact_gfx_alt2 = "-"
++appearance_reqs =
++    { "type", "name", "range", "present"
++      "Extra", "Village", "Tile", TRUE
++      "CityTile", "Worked", "Tile", TRUE
++    }
++appearance_chance = 250
++build_time     = 0
++removal_time   = 0
++conflicts      = "Irrigation", "Farmland", "Mine"
++helptext       = _("\
++A fully grown cottage: +4 trade in all, +5 with Printing, and +1 \
++shield under Democracy.\
++")
++
+ [extra_oil_well]
+ name           = _("Oil Well")
+ category       = "Infra"
+-- 
+2.56.0
+
