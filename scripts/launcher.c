@@ -12,7 +12,9 @@
  *
  * A game built on Freeciv (bundle.sh --game) also defines GAME_NAME (set as FREECIV_GAME_NAME for the
  * client's window title), GAME_OPT (its own options file in ~/.freeciv, as FREECIV_OPT, so its settings stay
- * apart from Freeciv's) and GAME_TILESET (passed as -t unless the player gives -t or --tiles).
+ * apart from Freeciv's) and GAME_TILESET (passed as -t until that options file names a tileset, unless the player
+ * gives -t or --tiles: the client saves the tileset it loads as the default, so a tileset the player picks later in
+ * the options is kept).
  *
  * Build: clang -O2 -DCLIENT_BIN='"freeciv-qt"' -DDATASUBDIR='"3.2"' -o Freeciv launcher.c
  */
@@ -65,15 +67,30 @@ static void set_always(const char *name, const char *value)
 }
 
 #ifdef GAME_TILESET
-/* Whether the player chose a tileset on the command line. */
-static int has_tileset_arg(int argc, char **argv)
+/* Whether the game's tileset should be passed: the player chose none on the command line, and the options file
+ * names no tileset for square maps (civ45's iso view is of square tiles). The client writes the tileset it loaded
+ * there, so a missing file or an empty value means a first start, or one that ended before a tileset loaded. */
+static int pass_game_tileset(int argc, char **argv)
 {
+  static const char key[] = "default_tileset_square_name=\"";
+  const char *opt = getenv("FREECIV_OPT");
+  char line[1024];
+  int named = 0;
+  FILE *f;
+
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-t") == 0 || strncmp(argv[i], "--tiles", 7) == 0) {
-      return 1;
+      return 0;
     }
   }
-  return 0;
+  if (opt == NULL || opt[0] == '\0' || (f = fopen(opt, "r")) == NULL) {
+    return 1;
+  }
+  while (!named && fgets(line, sizeof(line), f) != NULL) {
+    named = strncmp(line, key, sizeof(key) - 1) == 0 && line[sizeof(key) - 1] != '"';
+  }
+  fclose(f);
+  return !named;
 }
 #endif
 
@@ -159,7 +176,7 @@ int main(int argc, char **argv)
   join(client, sizeof(client), "%s/%s%s", dir, CLIENT_BIN, "");
   argv[0] = client;
 #ifdef GAME_TILESET
-  if (!has_tileset_arg(argc, argv)) {
+  if (pass_game_tileset(argc, argv)) {
     char **args = calloc((size_t) argc + 3, sizeof(char *));
 
     if (args == NULL) {

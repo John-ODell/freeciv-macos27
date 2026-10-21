@@ -12,8 +12,9 @@
 #   --sign    codesign identity                     (default: "-" = ad-hoc; scripts/sign-app.sh, dmg.sh notarizes)
 #   --game    freeciv45: Freeciv45.app (qt only), the game of its own in notes/freeciv45/standalone.md. Its own
 #             name, bundle id and options file (~/.freeciv/freeciv45-client-rc-<x.y>), the freeciv45iso tileset
-#             inside, started with -t freeciv45iso, so "Start new game" plays civ45 (the tileset's for_ruleset);
-#             the icon is tilesets/freeciv45iso/freeciv45.icns when it exists, else the stock one
+#             inside and passed as -t until the options name a tileset, so "Start new game" plays civ45 (the
+#             tileset's for_ruleset); the icon is tilesets/freeciv45iso/freeciv45.icns when it exists, else the
+#             stock one
 #
 # Layout:  <Name>.app/Contents/MacOS/<Name>        launcher compiled from scripts/launcher.c: sets FREECIV_DATA_PATH /
 #                                                   FREECIV_LOCALE_PATH, cd's next to the binaries (so the client's

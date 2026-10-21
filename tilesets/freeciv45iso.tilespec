@@ -21,7 +21,7 @@ summary = _("Freeciv45 iso tileset: 192x96 diamonds, painted ground for every te
 ; eg, authors, colors, etc.
 
 ; What is the primary ruleset this tileset is meant for.
-;for_ruleset = ""
+for_ruleset = "civ45"
 
 ; Basic tile sizes:
 normal_tile_width = 192
