@@ -11,7 +11,8 @@
  * hardened runtime and notarization apply to it like to every other binary in the app.
  *
  * A game built on Freeciv (bundle.sh --game) also defines GAME_NAME (set as FREECIV_GAME_NAME for the
- * client's window title), GAME_OPT (its own options file in ~/.freeciv, as FREECIV_OPT, so its settings stay
+ * client's window title), GAME_RULESET (set as FREECIV_GAME_RULESET: "Start new game" plays it on a tileset that
+ * names no ruleset), GAME_OPT (its own options file in ~/.freeciv, as FREECIV_OPT, so its settings stay
  * apart from Freeciv's) and GAME_TILESET (passed as -t until that options file names a tileset, unless the player
  * gives -t or --tiles: the client saves the tileset it loads as the default, so a tileset the player picks later in
  * the options is kept).
@@ -141,6 +142,9 @@ int main(int argc, char **argv)
   set_default("FREECIV_LOCALE_PATH", buf);
 #ifdef GAME_NAME
   set_default("FREECIV_GAME_NAME", GAME_NAME);
+#endif
+#ifdef GAME_RULESET
+  set_default("FREECIV_GAME_RULESET", GAME_RULESET);
 #endif
 #ifdef GAME_OPT
   join(buf, sizeof(buf), "%s/.freeciv/%s%s", home, GAME_OPT, "");
