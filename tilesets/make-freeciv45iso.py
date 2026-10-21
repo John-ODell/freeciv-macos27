@@ -49,7 +49,7 @@ Map extras (issue 262): mines, oil wells and platforms, huts, hermits, the trans
 airstrips and airbases, irrigation, farmland, pollution, fallout, roads, rails, rivers and the badges come from the art repo's
 freeciv45/09_map_extras runs 1 to 6 (extras.spec, badges.spec; see EXTRA_RUNS): standing props on the full tile, the forts split
 into back and front halves, the overlays turned like the ground, the road, rail and river pieces painted from seamless bands,
-the counted badges drawn with a number. amplio2's maglev stays until its retake; --no-bk-extras keeps all of amplio2's.
+the counted badges drawn with a number; --no-bk-extras keeps all of amplio2's.
 
 From amplio2 (Freeciv 3.2.6, GPL-2.0-or-later, the artists named in each spec's [info] section, copied verbatim):
 every spec file amplio2.tilespec lists under amplio2/ except the ocean cells the painted ground replaces
@@ -887,13 +887,15 @@ def borders(out_dir, record, ss=4):
 #   feathered, at a set width), one piece from the tile's middle to each neighbour (to an edge's middle, or to a corner for a
 #   diagonal) with a round end at the middle, then turned into the W x H rectangle like the ground (the ends past a corner
 #   overlap the neighbour, as amplio2's do). Rivers: the 16 cardinal forms and the outlets, drawn on the ocean tile from the
-#   river's edge, widening and fading into the water. Maglev stays amplio2's until its retake (art run 7).
+#   river's edge, widening and fading into the water. The maglev is run 7's retake band, painted like the rail (issue 279).
+# - amplio2's airbase and airstrip `_mg` runways (EXTRA_DROPPED) would draw over our `_bg` pads, so they are left out.
 # - Badges (run 6): the activity marks the units art lacks, stacked, loaded, connecting and the two auto modes, occupied and
 #   disorder, and the counted upkeep (1 to 4 symbols, then a symbol and a number) and tile output (a symbol and a number) drawn
 #   by script, at amplio2's places. The numbers are Pillow's built-in Aileron Regular (CC0).
 # civ45 has no animal units, so run 5's animals wait in the art repo.
 EXTRA_RUNS = {"props": "run1/panel1/built_on_tiles.png", "forts": "run2/panel2", "overlays": "run3/panel3", "roads": "run4/panel4",
-              "badges": "run6/panel6"}
+              "badges": "run6/panel6", "maglev": "run7/panel7"}
+EXTRA_DROPPED = {"base.airbase_mg", "base.airstrip_mg"}
 # tag: (cut, width as a share of W, foot y on the full tile, at most this tall)
 EXTRA_PROPS = {"tx.mine": ("mine_1", 0.46, 106, 92), "tx.oil_mine": ("oil_mine_1", 0.40, 106, 92),
                "tx.oil_rig": ("oil_rig_1", 0.50, 108, 100), "tx.village": ("village_1", 0.56, 110, 90),
@@ -909,9 +911,10 @@ FORT_FROM_PROPS = ("outpost_",)          # cuts that come from run 1's panel, no
 EXTRA_OVERLAYS = {"tx.irrigation": ("r1c1", 1.0, True), "tx.farmland": ("r2c2", 0.95, False),
                   "tx.pollution": ("r3c1", 0.9, False), "tx.fallout": ("r4c1", 0.9, False)}
 # kind: (seamless cell of run 4, share of the band's height kept, width in square tile px, feathered share of each edge,
-# colour scale). The road keeps its wheel ruts, darkened a little and soft at the edges, so it reads as a track, not a plank.
+# colour scale[, EXTRA_RUNS key when not run 4]). The road keeps its wheel ruts, darkened a little and soft at the edges, so it
+# reads as a track, not a plank. The maglev deck fills nearly all its band (MAP_EXTRAS.md, run 7: 34.5 px of the cut).
 ROAD_BANDS = {"road": ("r1c1", 0.75, 20, 0.35, 0.85), "rail": ("r2c1", 0.9, 26, 0.15, 1.0),
-              "river": ("r4c1", 0.62, 30, 0.25, 0.92)}
+              "river": ("r4c1", 0.62, 30, 0.25, 0.92), "maglev": ("r4c1", 0.95, 28, 0.12, 1.0, "maglev")}
 ROAD_DIRS = [("n", 0, -1), ("ne", 1, -1), ("e", 1, 0), ("se", 1, 1), ("s", 0, 1), ("sw", -1, 1), ("w", -1, 0), ("nw", -1, -1)]
 # Badges: (tag or tags, cut, cell kind, centre x, centre y, size): the activity marks (56 x 48), the unit badges on a W x H cell,
 # the city ones on the full tile; the places are amplio2's.
@@ -1073,11 +1076,11 @@ def extras(art, out_dir, record):
         flat.append((tag, iso_overlay(sqr, opacity)))
         used.append("%s (overlays %s)" % (tag[3:], cell))
     texs = {}
-    for kind, (cell, keep, width, feather, tone) in ROAD_BANDS.items():
-        texs[kind] = (band(Image.open(os.path.join(art, EXTRA_RUNS["roads"], "post", "seamless", cell + ".png")), keep, feather,
-                           tone), width)
-        used.append("%s band (%s)" % (kind, cell))
-    for kind in ("road", "rail"):
+    for kind, (cell, keep, width, feather, tone, *run) in ROAD_BANDS.items():
+        run = EXTRA_RUNS[run[0] if run else "roads"]
+        texs[kind] = (band(Image.open(os.path.join(art, run, "post", "seamless", cell + ".png")), keep, feather, tone), width)
+        used.append("%s band (%s %s)" % (kind, run.split("/")[0], cell))
+    for kind in ("road", "rail", "maglev"):
         tex, width = texs[kind]
         flat.append(("road.%s_isolated" % kind, road_tile(tex, width, [], pond=True)))
         for name, _, _ in ROAD_DIRS: flat.append(("road.%s_%s" % (kind, name), road_tile(tex, width, [name])))
@@ -1093,16 +1096,16 @@ def extras(art, out_dir, record):
     for i, (_, c) in enumerate(flat): sheet.paste(c, ((i % cols) * W, frows * FH + (i // cols) * H))
     sheet.save(os.path.join(out_dir, "extras.png"), optimize=True)
     write_spec(out_dir, "extras", "Map extras for the Freeciv45 iso tileset: the Freeciv45 art pack's freeciv45/09_map_extras runs 1 to 4\n"
-               "(improvements, forts, airfields, overlays, road, rail and river bands), cut and painted by tilesets/make-%s.py\n"
-               "(see RECORD.md)." % NAME,
+               "and 7 (improvements, forts, airfields, overlays, road, rail, river and maglev bands), cut and painted by\n"
+               "tilesets/make-%s.py (see RECORD.md)." % NAME,
                [("full", 0, W, FH, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(full)]),
                 ("tile", frows * FH, W, H, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(flat)])])
-    record.append("| `%s/extras.spec` | the art pack's map extras (`freeciv45/09_map_extras`, runs 1 to 4): %s | props scaled onto the "
-                  "full tile, forts split into back and front, overlays turned into diamonds, road, rail and river pieces painted "
-                  "from the bands | %dx%d |" % (NAME, ", ".join("`%s`" % u for u in used), *sheet.size))
+    record.append("| `%s/extras.spec` | the art pack's map extras (`freeciv45/09_map_extras`, runs 1 to 4 and 7): %s | props scaled "
+                  "onto the full tile, forts split into back and front, overlays turned into diamonds, road, rail, river and maglev "
+                  "pieces painted from the bands | %dx%d |" % (NAME, ", ".join("`%s`" % u for u in used), *sheet.size))
     tags = {t for t, _ in full + flat}
     btags, bused = badges(art, out_dir, record)
-    return tags | btags, used + bused
+    return tags | btags | EXTRA_DROPPED, used + bused
 
 def badges(art, out_dir, record):
     raw = os.path.join(art, EXTRA_RUNS["badges"], "post", "raw"); got = {}
@@ -1354,23 +1357,24 @@ def main():
                     "the rest of the scaled files): %s.\n" % (len(unit_props), ", ".join("`%s`" % n for n in unit_props), len(city_props),
                                            ", ".join("`%s`" % n for n in city_props), len(mark_props),
                                            ", ".join("`%s`" % n for n in mark_props),
-                                           "the hit point bars, the city size digits, the ruins' and castle2's leftovers and the "
-                                           "maglev" if extra_props else "the maglev, oil mine, oil rig, airstrip, outpost, buoy "
+                                           "the hit point bars, the city size digits and the ruins' and castle2's "
+                                           "leftovers" if extra_props else "the maglev, oil mine, oil rig, airstrip, outpost, buoy "
                                            "and fallout marks, the occupied and disorder badges and the fortress, airbase, "
                                            "castle and outpost bases"))
         if extra_props:
             f.write("\n## Map extras and badges\n\n`extras.spec` and `badges.spec`: the Freeciv45 art pack's map extras (John "
                     "O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder "
-                    "`freeciv45/09_map_extras`, runs 1 to 4 and 6, the picks in its `MAP_EXTRAS.md`; issue 262), in place of "
+                    "`freeciv45/09_map_extras`, runs 1 to 4, 6 and 7, the picks in its `MAP_EXTRAS.md`; issues 262 and 279), in "
+                    "place of "
                     "amplio2's. Standing props are drawn `3Layer` as `_mg` on the %dx%d full tile (the tilespec's `[extras]` "
                     "styles say so for %s, and add `tx.hermit`); Fort (`base.outpost`), Fortress and Castle are split into "
                     "`_bg` and `_fg` along the top of the front walls so a unit stands inside; the airstrip and airbase are "
-                    "`_bg` pads; irrigation, farmland, pollution and fallout are the straight-down seamless squares turned "
-                    "into diamonds; road, rail and river pieces are painted in square tile space from the seamless bands "
+                    "`_bg` pads (amplio2's `_mg` runways are left out); irrigation, farmland, pollution and fallout are the straight-down seamless squares turned "
+                    "into diamonds; road, rail, river and maglev pieces are painted in square tile space from the seamless bands "
                     "and turned the same way. The badges sit where amplio2's do; the counted upkeep (1 to 4 symbols, then "
                     "a symbol and a number) and tile output (a symbol and a number) are drawn by the builder, the numbers "
                     "in Pillow's built-in Aileron Regular (CC0). Used: %s. Nothing else of the art repo ships (no panels, "
-                    "other takes or records). amplio2's maglev stays until its retake. GPL-2.0-or-later, like the rest of "
+                    "other takes or records). GPL-2.0-or-later, like the rest of "
                     "the folder.\n" % (W, FH, ", ".join("`%s`" % t for t in EXTRA_3LAYER),
                                          ", ".join("`%s`" % n for n in extra_props)))
         if not a.no_bk_icons:

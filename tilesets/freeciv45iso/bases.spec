@@ -27,9 +27,7 @@ dx = 192
 dy = 144
 
 tiles = { "row", "column", "tag"
-   0,  0, "base.airbase_mg"
    0,  1, "tx.airbase_full"
-   1,  0, "base.airstrip_mg"
    2,  2, "base.castle2_fg"
    2,  3, "base.castle2_bg"
    0,  6, "cd.city", "cd.city_wall"
