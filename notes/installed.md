@@ -149,3 +149,5 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
   `tilesets/freeciv45iso/freeciv45.icns`. Options go to `~/.freeciv/freeciv45-client-rc-3.2`. Nothing new from
   Homebrew. Git-ignored, safe to delete and regenerate.
 - Checked: a copy (with Qt's offscreen plugin added, the copy only) ran 20 s on the start page with a fresh HOME.
+- Later the same night: `~/freeciv-builds/qt` rebuilt with `scripts/build.sh qt` from fork branch series-0058 (098b172,
+  patch 0058, the unit bar's Settle box), and `Freeciv45.app` rebundled on it from main at 404dae3. No new formulae.
