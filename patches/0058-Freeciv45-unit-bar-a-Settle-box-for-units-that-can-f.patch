@@ -1,0 +1,57 @@
+From 098b1720b7a024f9edaa34cf41136bb4802d63bb Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Wed, 21 Oct 2026 22:24:03 -0500
+Subject: [PATCH] Freeciv45 unit bar: a Settle box for units that can found or
+ join a city here
+
+The bar under the map offered Go to, Fortify, Sentry, Wait and Done, so a
+settler had to use the B key or the Unit menu to found its city. When
+every unit in focus can found (or join) a city on its tile, as
+unit_can_add_or_build_city() says (the old HUD's test), the bar now
+shows a Settle box first, with the theme's home icon, the B hint and the
+menu's Build City tooltip; it runs key_unit_build_city().
+---
+ client/gui-qt/unitbar.cpp | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/client/gui-qt/unitbar.cpp b/client/gui-qt/unitbar.cpp
+index 795f2c5..18a0136 100644
+--- a/client/gui-qt/unitbar.cpp
++++ b/client/gui-qt/unitbar.cpp
+@@ -324,6 +324,9 @@ void unit_action_button::paintEvent(QPaintEvent *event)
+ void unit_action_button::run()
+ {
+   switch (action) {
++  case SC_BUILDCITY:
++    key_unit_build_city();
++    break;
+   case SC_FORTIFY:
+     key_unit_fortify();
+     break;
+@@ -515,8 +518,11 @@ void unit_bar::refresh(struct unit_list *punits)
+   {
+     bool all_fortify = true;
+     bool all_sentry = true;
++    bool all_settle = true;
+ 
+     unit_list_iterate(get_units_in_focus(), pfocus) {
++      all_settle = all_settle
++                   && unit_can_add_or_build_city(&(wld.map), pfocus);
+       all_fortify = all_fortify
+                     && can_unit_do_activity_client(pfocus,
+                                                    ACTIVITY_FORTIFYING);
+@@ -524,6 +530,11 @@ void unit_bar::refresh(struct unit_list *punits)
+                    && can_unit_do_activity_client(pfocus, ACTIVITY_SENTRY);
+     } unit_list_iterate_end;
+ 
++    // Settle first: founding (or joining) a city is a settler's main order
++    if (all_settle) {
++      new_actions.append(new unit_action_button(SC_BUILDCITY, "home",
++                                                this));
++    }
+     new_actions.append(new unit_action_button(SC_GOTO, "goto", this));
+     if (all_fortify) {
+       new_actions.append(new unit_action_button(SC_FORTIFY, "fortify",
+-- 
+2.56.0
+
