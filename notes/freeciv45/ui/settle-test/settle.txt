@@ -1,0 +1,32 @@
+# The unit bar's Settle box (issue 303, patch 0058). Run on a driver build at patch 0058:
+#   FREECIV_DRIVE_PREFIX=<prefix> FREECIV_DRIVE_TILESET=freeciv45iso FREECIV_DRIVE_TILESETS=<repo>/tilesets \
+#     scripts/ui-drive.sh notes/freeciv45/ui/settle-test/settle.txt <outdir>
+# civ45, seed 42: the start stack is two Warriors, a Scout, Workers and Settlers (chip 4).
+pace 1200
+wait 4000
+dismiss
+wait 1000
+state warriors
+click chip 4
+wait 1000
+state settlers
+hover tip Build City
+wait 1500
+shot settlers
+click tip Build City
+wait 2500
+state asked
+shot asked
+# the name box is its own window, which the driver's clicks miss; found the second city without it
+key escape
+wait 1000
+option ask_city_name off
+click chip 4
+wait 1000
+click tip Build City
+wait 3000
+dismiss
+wait 1000
+state founded
+shot founded
+quit
