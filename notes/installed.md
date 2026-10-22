@@ -140,3 +140,12 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
   with no tileset suggestion window and no tileset warning.
 - Not chosen: shipping freeciv45iso with the build at a priority above amplio2's 25. That would change the iso
   default for every player and every ruleset, and it needs patch 0033 in the build. It is John's call.
+
+## 2026-10-21, first Freeciv45.app
+
+- `~/freeciv-builds/apps/Freeciv45.app` (183 MB, self-contained, ad-hoc signed) from `scripts/bundle.sh qt --game
+  freeciv45` on main at d4a9eaa. Its client is `~/freeciv-builds/qt` (patches to 0057, no test driver) and it carries
+  the freeciv45iso tileset with the start picture, icons and UI icons of PRs 297 and 299; its Dock icon is
+  `tilesets/freeciv45iso/freeciv45.icns`. Options go to `~/.freeciv/freeciv45-client-rc-3.2`. Nothing new from
+  Homebrew. Git-ignored, safe to delete and regenerate.
+- Checked: a copy (with Qt's offscreen plugin added, the copy only) ran 20 s on the start page with a fresh HOME.
