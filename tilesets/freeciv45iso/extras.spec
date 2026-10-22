@@ -1,5 +1,5 @@
 ; Map extras for the Freeciv45 iso tileset: the Freeciv45 art pack's freeciv45/09_map_extras runs 1 to 4
-; and 7 (improvements, forts, airfields, overlays, road, rail, river and maglev bands), cut and painted by
+; and 7 and 8 (improvements, forts, airfields, overlays, road, rail, river and maglev bands, cottages), cut and painted by
 ; tilesets/make-freeciv45iso.py (see RECORD.md).
 
 [spec]
@@ -30,14 +30,18 @@ tiles = { "row", "column", "tag"
   0, 4, "tx.hermit_mg"
   0, 5, "extra.transport_hub_mg"
   0, 6, "base.buoy_mg"
-  0, 7, "base.outpost_bg"
-  0, 8, "base.outpost_fg"
-  0, 9, "base.fortress_bg"
-  1, 0, "base.fortress_fg"
-  1, 1, "base.castle_bg"
-  1, 2, "base.castle_fg"
-  1, 3, "base.airstrip_bg"
-  1, 4, "base.airbase_bg"
+  0, 7, "tx.cottage_mg"
+  0, 8, "tx.hamlet_mg"
+  0, 9, "tx.village_stage_mg"
+  1, 0, "tx.town_mg"
+  1, 1, "base.outpost_bg"
+  1, 2, "base.outpost_fg"
+  1, 3, "base.fortress_bg"
+  1, 4, "base.fortress_fg"
+  1, 5, "base.castle_bg"
+  1, 6, "base.castle_fg"
+  1, 7, "base.airstrip_bg"
+  1, 8, "base.airbase_bg"
 }
 
 [grid_tile]

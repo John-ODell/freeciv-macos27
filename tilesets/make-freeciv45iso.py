@@ -785,10 +785,12 @@ TECH_RUNS = ("run1/panel1", "run2/panel2", "run5/panel3", "run6/panel4")      # 
 TECH_PICK = {"the_wheel": "the_wheel_alt", "the_republic": "the_republic_alt"}  # run 6's row 5 retakes of the two weak cells
 TECH_CELL, TECH_FILL = 48, 44
 BUILD_RUNS = ("run1/panel1", "run2/panel2", "run3/panel3", "run4/panel4")
-BUILD_RUNS += ("run5/panel5",)
+BUILD_RUNS += ("run5/panel5", "run6/panel6")    # run 6: the faith houses, holy city and shrine (issue 295)
 BUILD_PICK = {"colossus": "colossus_alt", "pyramids": "pyramids_alt", "georgia_guidestones": "georgia_guidestones_r1",
               "united_nations": "united_nations_r3", "shakespeares_theatre": "shakespeares_theatre_r1",
               "statue_of_liberty": "statue_of_liberty_r1"}      # run 5's wonder retakes (issue 255); its lighthouse row is spares
+FAITHS = ("hearth", "many_hands", "sun_throne", "quiet_way", "star_path", "one_flame", "deep_well")
+BUILD_EXTRA = {"state_faith_" + f: "faith_%s_alt" % f for f in FAITHS}   # a state faith (in the capital) draws the second take
 BUILD_CELL, BUILD_FILL = (64, 48), (62, 46)
 
 def raw_names(base, runs):
@@ -823,9 +825,10 @@ def icons(tech_art, build_art, out_dir, record):
                   ", ".join("`%s`" % n for n in techs), TECH_FILL, TECH_FILL, *size))
     names = [n for n in raw_names(build_art, BUILD_RUNS) if not n.endswith("_alt") and not re.search(r"_r\d$", n)]
     pick = [(n, BUILD_PICK.get(n, n)) for n in names + [n for n in BUILD_PICK if n not in names and BUILD_PICK[n][-3:-1] == "_r"]]
+    pick += sorted(BUILD_EXTRA.items())
     size = icon_sheet(build_art, BUILD_RUNS, pick, BUILD_CELL, BUILD_FILL, out_dir, "building_icons", "b.",
                       "Building and wonder pictures for the Freeciv45 iso tileset: the Freeciv45 art pack's\n"
-                      "freeciv45/07_building_icons runs 1 to 5, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells."
+                      "freeciv45/07_building_icons runs 1 to 6, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells."
                       % (NAME, *BUILD_CELL))
     record.append("| `%s/building_icons.spec` | the art pack's building pictures (`freeciv45/07_building_icons`, %s, `post/raw`), %d of civ45's: %s "
                   "| cleaned (specks, fringe), fitted into %dx%d | %dx%d |" % (NAME, ", ".join("`%s`" % r for r in BUILD_RUNS), len(pick),
@@ -901,7 +904,12 @@ EXTRA_PROPS = {"tx.mine": ("mine_1", 0.46, 106, 92), "tx.oil_mine": ("oil_mine_1
                "tx.oil_rig": ("oil_rig_1", 0.50, 108, 100), "tx.village": ("village_1", 0.56, 110, 90),
                "tx.hermit": ("hermit_1", 0.48, 108, 92), "extra.transport_hub": ("transport_hub_1", 0.62, 114, 80),
                "base.buoy": ("buoy_1", 0.18, 104, 56)}
-EXTRA_3LAYER = ("tx.mine", "tx.oil_mine", "tx.oil_rig", "tx.village", "tx.hermit")
+# Cottages (issue 295): run 8's stages, one take each, from its post/raw cuts; each a size up from the one before.
+COTTAGE_RUN = "run8/panel8"
+COTTAGE_PROPS = {"tx.cottage": ("cottage_1", 0.36, 108, 64), "tx.hamlet": ("hamlet_1", 0.50, 110, 76),
+                 "tx.village_stage": ("village_3", 0.60, 112, 88), "tx.town": ("town_1", 0.70, 114, 96)}
+EXTRA_3LAYER = ("tx.mine", "tx.oil_mine", "tx.oil_rig", "tx.village", "tx.hermit") + tuple(COTTAGE_PROPS)
+EXTRA_ADDED = ("tx.hermit",) + tuple(COTTAGE_PROPS)   # not in amplio2's [extras] styles: added after tx.village
 # tag: (cut, footprint width as a share of W, wall height as a share of the footprint width; 0: a pad, all _bg)
 EXTRA_FORTS = {"base.outpost": ("outpost_2", 0.62, 0.16), "base.fortress": ("fortress_1", 0.86, 0.13),
                "base.castle": ("castle_1", 0.88, 0.19), "base.airstrip": ("airstrip_1", 0.90, 0),
@@ -1065,6 +1073,9 @@ def extras(art, out_dir, record):
     full, flat, used = [], [], []
     for tag, (name, share, foot, top) in EXTRA_PROPS.items():
         full.append((tag + "_mg", stand(props[name], share * W, foot, top))); used.append(name)
+    for tag, (name, share, foot, top) in COTTAGE_PROPS.items():
+        cut = tidy(os.path.join(art, COTTAGE_RUN, "post", "raw", name + ".png"))
+        full.append((tag + "_mg", stand(cut, share * W, foot, top))); used.append(name)
     for tag, (name, share, wall) in EXTRA_FORTS.items():
         bg, fg = fort_halves(fort_cut(name), share, wall); used.append(name)
         full.append((tag + "_bg", bg))
@@ -1096,11 +1107,11 @@ def extras(art, out_dir, record):
     for i, (_, c) in enumerate(flat): sheet.paste(c, ((i % cols) * W, frows * FH + (i // cols) * H))
     sheet.save(os.path.join(out_dir, "extras.png"), optimize=True)
     write_spec(out_dir, "extras", "Map extras for the Freeciv45 iso tileset: the Freeciv45 art pack's freeciv45/09_map_extras runs 1 to 4\n"
-               "and 7 (improvements, forts, airfields, overlays, road, rail, river and maglev bands), cut and painted by\n"
+               "and 7 and 8 (improvements, forts, airfields, overlays, road, rail, river and maglev bands, cottages), cut and painted by\n"
                "tilesets/make-%s.py (see RECORD.md)." % NAME,
                [("full", 0, W, FH, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(full)]),
                 ("tile", frows * FH, W, H, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(flat)])])
-    record.append("| `%s/extras.spec` | the art pack's map extras (`freeciv45/09_map_extras`, runs 1 to 4 and 7): %s | props scaled "
+    record.append("| `%s/extras.spec` | the art pack's map extras (`freeciv45/09_map_extras`, runs 1 to 4, 7 and 8): %s | props scaled "
                   "onto the full tile, forts split into back and front, overlays turned into diamonds, road, rail, river and maglev "
                   "pieces painted from the bands | %dx%d |" % (NAME, ", ".join("`%s`" % u for u in used), *sheet.size))
     tags = {t for t, _ in full + flat}
@@ -1157,13 +1168,15 @@ def badges(art, out_dir, record):
     return {t for _, _, cells in parts for ts, _ in cells for t in ts}, sorted(got)
 
 def extras_styles(path):
-    """The tilespec's [extras] styles: EXTRA_3LAYER's tags drawn 3Layer, and tx.hermit added (amplio2 draws its village)."""
+    """The tilespec's [extras] styles: EXTRA_3LAYER's tags drawn 3Layer, and EXTRA_ADDED's added (amplio2 draws its village
+    for the hermit and has no cottages)."""
     text = open(path).read()
     for tag in EXTRA_3LAYER:
         text, n = re.subn(r'("%s",\s*)"Single1"' % re.escape(tag), r'\1"3Layer"', text)
-        if tag != "tx.hermit": assert n == 1, tag
-    if '"tx.hermit"' not in text:
-        text = re.sub(r'(\n(\s*)"tx.village",[^\n]*)', r'\1\n\2"tx.hermit",     "3Layer"', text, count=1)
+        if tag not in EXTRA_ADDED: assert n == 1, tag
+    for tag in reversed(EXTRA_ADDED):
+        if '"%s"' % tag not in text:
+            text = re.sub(r'(\n(\s*)"tx.village",[^\n]*)', r'\1\n\2%s"3Layer"' % ('"%s",' % tag).ljust(max(17, len(tag) + 4)), text, count=1)
     open(path, "w").write(text)
 
 RECORD_HEAD = """# %(name)s: where every sprite came from
@@ -1364,10 +1377,10 @@ def main():
         if extra_props:
             f.write("\n## Map extras and badges\n\n`extras.spec` and `badges.spec`: the Freeciv45 art pack's map extras (John "
                     "O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder "
-                    "`freeciv45/09_map_extras`, runs 1 to 4, 6 and 7, the picks in its `MAP_EXTRAS.md`; issues 262 and 279), in "
+                    "`freeciv45/09_map_extras`, runs 1 to 4 and 6 to 8, the picks in its `MAP_EXTRAS.md`; issues 262, 279 and 295), in "
                     "place of "
                     "amplio2's. Standing props are drawn `3Layer` as `_mg` on the %dx%d full tile (the tilespec's `[extras]` "
-                    "styles say so for %s, and add `tx.hermit`); Fort (`base.outpost`), Fortress and Castle are split into "
+                    "styles say so for %s, and add those amplio2 lacks: %s); Fort (`base.outpost`), Fortress and Castle are split into "
                     "`_bg` and `_fg` along the top of the front walls so a unit stands inside; the airstrip and airbase are "
                     "`_bg` pads (amplio2's `_mg` runways are left out); irrigation, farmland, pollution and fallout are the straight-down seamless squares turned "
                     "into diamonds; road, rail, river and maglev pieces are painted in square tile space from the seamless bands "
@@ -1375,7 +1388,7 @@ def main():
                     "a symbol and a number) and tile output (a symbol and a number) are drawn by the builder, the numbers "
                     "in Pillow's built-in Aileron Regular (CC0). Used: %s. Nothing else of the art repo ships (no panels, "
                     "other takes or records). GPL-2.0-or-later, like the rest of "
-                    "the folder.\n" % (W, FH, ", ".join("`%s`" % t for t in EXTRA_3LAYER),
+                    "the folder.\n" % (W, FH, ", ".join("`%s`" % t for t in EXTRA_3LAYER), ", ".join("`%s`" % t for t in EXTRA_ADDED),
                                          ", ".join("`%s`" % n for n in extra_props)))
         if not a.no_bk_icons:
             f.write("\n## Tech icons and building pictures\n\n`tech_icons.spec` and `building_icons.spec`: the Freeciv45 art pack's "
@@ -1387,7 +1400,7 @@ def main():
                     "tilespec sets `duplicates_ok` and lists the two specs after `misc/techs.spec` and "
                     "`misc/wonders-large.spec`, so these tags override the stock icons and every other tag keeps its stock "
                     "icon. Techs (%d, runs 1, 2, 5 and 6; `the_wheel` and `the_republic` are run 6's `_alt` takes): %s. "
-                    "Buildings (%d, runs 1 to 5): %s. The picks that are not the first take: %s. Every tech and building the "
+                    "Buildings (%d, runs 1 to 6; each state faith is its faith's second take): %s. The picks that are not the first take: %s. Every tech and building the "
                     "ruleset names has a picture, so no stock icon is left for these tags. GPL-2.0-or-later, like the rest of "
                     "the folder.\n"
                     % (TECH_CELL, TECH_CELL, *BUILD_CELL, len(tech_props), ", ".join("`%s`" % n for n in tech_props),
