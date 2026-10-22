@@ -64,7 +64,7 @@ usage: make-freeciv45iso.py --data ~/freeciv-builds/qt/share/freeciv
                             [--extras-art 09_map_extras] [--no-bk-extras]
 Needs Pillow (python3.14 on this Mac has it).
 """
-import argparse, glob, importlib.util, math, os, random, re, tempfile
+import argparse, glob, importlib.util, math, os, random, re, shutil, subprocess, tempfile
 from PIL import Image, ImageChops, ImageCms, ImageDraw, ImageFilter, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -522,7 +522,7 @@ def relief_sections(ours, canopy=False):
     assert all('layer2_match_with = "%s"' % t in out["tile_" + t] for t in trees)
     return out
 
-def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False, units=False, icons=False):
+def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False, units=False, icons=False, intro=False):
     """amplio2.tilespec with sizes and offsets doubled, pixel_ratio 2, the file list renamed, and freeciv45test's
     layer and terrain sections in place of amplio2's (amplio2's other terrains kept, matched as mountains)."""
     ours = square_sections(data, files)
@@ -554,6 +554,8 @@ def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=Fa
             if icons and key == "options":       # tech_icons.spec and building_icons.spec come after the stock misc/ ones
                 out.append(line.rstrip().rstrip('"') + ' duplicates_ok"'); continue
             if key == "name": out.append('name = "Freeciv45 iso"'); continue
+            if intro and key == "main_intro_file":       # issue 292: our start picture
+                out.append('main_intro_file    = "%s/intro"' % NAME); continue
             if line.startswith(";for_ruleset"):      # issue 272: "Start new game" passes --ruleset civ45
                 out.append('for_ruleset = "civ45"'); continue
             if key == "priority": out.append("priority = 4"); continue
@@ -846,6 +848,56 @@ BORDER_CORE, BORDER_FADE, BORDER_CURVE = 4.0, 10.0, 1.5
 BORDER_EDGES = (("n", (W * 3 // 4, H // 4), (1, -2)), ("s", (W // 4, H * 3 // 4), (-1, 2)),
                 ("w", (W // 4, H // 4), (-1, -2)), ("e", (W * 3 // 4, H * 3 // 4), (1, 2)))   # owner's centre in the cell, inward normal
 BORDER_TAGS = {"grid.borders." + e for e, _, _ in BORDER_EDGES}
+
+# The start picture and the icons (issue 292): the art pack's freeciv45/14_title_art run 1, take B ("the tile") and the
+# keep of its four app icons. The start page draws main_intro_file at its own pixel size with the version text in its
+# bottom corners (gui-qt/pages.cpp create_main_page), so the picture is cropped to the middle 1536 x 900 and scaled to
+# TITLE_SIZE. icon.freeciv is the Qt client's application icon (gui_main.cpp, QApplication::setWindowIcon, which on macOS
+# is also the Dock icon while the game runs), icon.citydlg the city dialog's window icon (citydlg.cpp); freeciv45.icns
+# is Freeciv45.app's own icon (scripts/bundle.sh --game freeciv45).
+TITLE_RUN, TITLE_PICK = "run1", "title_b"
+TITLE_CROP, TITLE_SIZE = (0, 60, 1536, 960), (820, 480)
+ICON_SHEET, ICON_CELL = "app_icon", (0, 1)       # the keep: row 0, column 1 of the 2 x 2 sheet
+ICON_SIZES = {"appicon": (512, 0.86), "cityicon": (32, 0.94)}   # side, share of it the keep fills
+ICNS_SIDES = (16, 32, 128, 256, 512)                            # each also at @2x
+
+def icon_square(keep, side, share):
+    im = keep.copy(); s = share * side / max(im.size)
+    im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
+    out = Image.new("RGBA", (side, side), (0, 0, 0, 0)); out.alpha_composite(im, ((side - im.width) // 2, (side - im.height) // 2))
+    return out
+
+def title(art, out_dir, record):
+    """intro.png, appicon.png, cityicon.png, icons.spec and freeciv45.icns; returns the names used."""
+    run = os.path.join(art, TITLE_RUN)
+    Image.open(os.path.join(run, TITLE_PICK + ".png")).convert("RGB").crop(TITLE_CROP).resize(TITLE_SIZE, Image.LANCZOS) \
+        .save(os.path.join(out_dir, "intro.png"), optimize=True)
+    sheet = Image.open(os.path.join(run, ICON_SHEET + ".png")).convert("RGBA"); side = sheet.width // 2
+    r, c = ICON_CELL
+    keep = defringe(largest(sheet.crop((c * side, r * side, (c + 1) * side, (r + 1) * side))))
+    keep = keep.crop(keep.getchannel("A").point(lambda v: 255 if v >= 16 else 0).getbbox())
+    for name, (px, share) in ICON_SIZES.items():
+        icon_square(keep, px, share).save(os.path.join(out_dir, name + ".png"), optimize=True)
+    with open(os.path.join(out_dir, "icons.spec"), "w") as f:
+        f.write("; The application and city dialog icons for the Freeciv45 iso tileset: the keep of the Freeciv45 art pack's\n"
+                "; freeciv45/14_title_art run 1 app icons, made by tilesets/make-%s.py (see RECORD.md). Listed after\n"
+                "; misc/icons.spec, so these tags override the stock icons.\n\n"
+                '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    John O\'Dell (sheet workflow)\n"\n\n'
+                '[extra]\nsprites =\n\t{\t"tag", "file"\n\t\t"icon.freeciv", "%s/appicon"\n\t\t"icon.citydlg", "%s/cityicon"\n\t}\n'
+                % (NAME, NAME, NAME))
+    with tempfile.TemporaryDirectory() as tmp:
+        iconset = os.path.join(tmp, "freeciv45.iconset"); os.mkdir(iconset)
+        for n in ICNS_SIDES:
+            for k, suffix in ((1, ""), (2, "@2x")):
+                icon_square(keep, n * k, 0.86).save(os.path.join(iconset, "icon_%dx%d%s.png" % (n, n, suffix)))
+        subprocess.run(["iconutil", "-c", "icns", iconset, "-o", os.path.join(out_dir, "freeciv45.icns")], check=True)
+    record.append("| `%s/icons.spec`, `intro.png`, `freeciv45.icns` | the art pack's title art (`freeciv45/14_title_art`, `%s`): "
+                  "`%s` and the keep of `%s` | the picture cropped to %s and scaled to %dx%d; the keep's largest piece, "
+                  "defringed, centred on transparent squares (%s; the .icns at %s px and their @2x) | `intro.png`, %s |"
+                  % (NAME, TITLE_RUN, TITLE_PICK, ICON_SHEET, "x".join(map(str, TITLE_CROP)), *TITLE_SIZE,
+                     ", ".join("%s %d px" % (n, v[0]) for n, v in ICON_SIZES.items()), ", ".join(map(str, ICNS_SIDES)),
+                     ", ".join("`%s.png`" % n for n in ICON_SIZES)))
+    return [TITLE_PICK, ICON_SHEET + " (keep)"]
 
 def border_alpha(d):
     """The band's coverage at distance d from the edge into the owner's tile."""
@@ -1239,6 +1291,8 @@ def main():
     ap.add_argument("--no-bk-units", action="store_true", help="keep amplio2's units, cities and marks")
     ap.add_argument("--extras-art", help="the art repo's freeciv45/09_map_extras (default: next to --art)")
     ap.add_argument("--no-bk-extras", action="store_true", help="keep amplio2's improvements, bases, roads, rivers and badges")
+    ap.add_argument("--title-art", help="the art repo's freeciv45/14_title_art (default: next to --art)")
+    ap.add_argument("--no-title", action="store_true", help="keep the stock start picture and icons")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
@@ -1285,6 +1339,10 @@ def main():
         new, extra_props = extras(a.extras_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "09_map_extras"),
                                   out_dir, painted_record)
         own |= new
+    title_props = []
+    if not a.no_title:
+        title_props = title(a.title_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "14_title_art"),
+                            out_dir, painted_record)
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -1330,7 +1388,9 @@ def main():
             files.append(rel)
             if not a.no_bk_icons and rel == "misc/techs.spec": files.append("%s/tech_icons.spec" % NAME)
             if not a.no_bk_icons and rel == "misc/wonders-large.spec": files.append("%s/building_icons.spec" % NAME)
-    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku, icons=not a.no_bk_icons)
+            if not a.no_title and rel == "misc/icons.spec": files.append("%s/icons.spec" % NAME)
+    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku,
+             icons=not (a.no_bk_icons and a.no_title), intro=not a.no_title)
     if not a.no_bk_extras: extras_styles(os.path.join(a.out, NAME + ".tilespec"))
     with open(os.path.join(out_dir, "RECORD.md"), "w") as f:
         f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED if not (canopy and s in CANOPY)),
@@ -1406,6 +1466,13 @@ def main():
                     % (TECH_CELL, TECH_CELL, *BUILD_CELL, len(tech_props), ", ".join("`%s`" % n for n in tech_props),
                        len(building_props), ", ".join("`%s`" % n for n in building_props),
                        ", ".join("`%s` (`%s`)" % kv for kv in sorted({**TECH_PICK, **BUILD_PICK}.items()))))
+        if title_props:
+            f.write("\n## Start picture and icons\n\n`intro.png` (the tilespec's `main_intro_file`), `icons.spec` (`icon.freeciv`, "
+                    "the application icon, and `icon.citydlg`, the city dialog's) and `freeciv45.icns` (Freeciv45.app's icon, "
+                    "copied in by `scripts/bundle.sh --game freeciv45`): the Freeciv45 art pack's title art (John O'Dell's "
+                    "sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/14_title_art`, "
+                    "run 1, issue 292). Used: %s; take A and the other three app icons stay in the art repo. "
+                    "GPL-2.0-or-later, like the rest of the folder.\n" % ", ".join("`%s`" % n for n in title_props))
     print("\n".join(amplio_record + painted_record))
 
 if __name__ == "__main__":

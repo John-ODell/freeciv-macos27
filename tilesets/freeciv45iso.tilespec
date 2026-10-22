@@ -143,7 +143,7 @@ tilelabel_offset_y = 30
 ;  "InfraWork"   ; Icons for the extras being placed.
 
 ; This is special because it gets freed and reloaded as required:
-main_intro_file    = "misc/intro"
+main_intro_file    = "freeciv45iso/intro"
 
 ; Below, the graphics spec files; must be somewhere (anywhere) in
 ; the data path. Order may be important for color allocation on
@@ -187,7 +187,8 @@ files =
   "freeciv45iso/citybar.spec",
   "misc/shields-large.spec",
   "misc/editor.spec",
-  "misc/icons.spec"
+  "misc/icons.spec",
+  "freeciv45iso/icons.spec"
 
 files_svg =
   "misc/flags.spec"

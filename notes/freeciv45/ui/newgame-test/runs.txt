@@ -1,4 +1,4 @@
-# Start new game in Freeciv45.app (issues 272, 290, 291), 2026-10-21: five runs of newgame.txt on one throwaway
+# Start new game in Freeciv45.app (issues 272, 290, 291), 2026-10-21: runs 1 to 5 of newgame.txt on one throwaway
 # HOME. The test bundle is built from the fork at patch 0055 (0056 for run 4, 0057 for run 5) plus the driver.
 # <app> is the bundle, <home> the HOME. The state lines are from drive.log, the process lines from ps about 25 s
 # into each run.
@@ -36,6 +36,14 @@
 ## Run 5 (issue 291): run 4 again with patch 0057. The pregame Rules box now names civ45 (pregame-rules.jpg); it
 ## said "default" in runs 1-4 (pregame.jpg).
 == pregame  turn 0  title "Freeciv45"  tileset amplio2  ruleset "Freeciv45 ruleset"   Rules box: civ45
+
+## Run 6 (issue 292): a fresh HOME, a bundle of this branch's tileset on the 0057 driver build. The start page shows
+## our picture (freeciv45iso/intro.png, main-title.jpg) with the version text in its bottom right corner; main.jpg
+## is the stock picture from run 1. The app's Resources/freeciv-client.icns is tilesets/freeciv45iso/freeciv45.icns.
+== main  turn 0  title "Freeciv45"  tileset freeciv45iso  ruleset ""
+== pregame  turn 0  title "Freeciv45"  tileset freeciv45iso  ruleset "Freeciv45 ruleset"
+== ingame  turn 1  title "Freeciv45"  tileset freeciv45iso  ruleset "Freeciv45 ruleset"
+   The window and Dock icon (icon.freeciv) is not visible offscreen; the tileset loaded with icons.spec listed.
 
 ## Options file after run 1
 default_tileset_square_name="freeciv45iso"
