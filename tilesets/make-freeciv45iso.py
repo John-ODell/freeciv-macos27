@@ -899,6 +899,68 @@ def title(art, out_dir, record):
                      ", ".join("`%s.png`" % n for n in ICON_SIZES)))
     return [TITLE_PICK, ICON_SHEET + " (keep)"]
 
+# Citizens, specialists, rates and governments (issue 298): the art pack's freeciv45/13_ui_icons run 1 (post/raw). The
+# client draws them at their own pixel size, 15 x 20 like the stock misc/small, specialists and governments specs, so
+# each cut is tidied and fitted into UI_CELL. Citizens come per era: civ45's styles.ruleset names ancient, industrial,
+# electricage and modern as citizens_graphic, and the client looks for citizen.<era>.<mood>_<n> before citizen.<mood>_<n>
+# (client/tilespec.c tileset_setup_citizen_types); the plain tags, every style's fallback, are the ancient ones, and
+# postmodern draws the modern ones.
+# The bulb, sun and flake have 8 levels each (s.science_bulb_0 to 7): level 0 grey and dim, level 7 the art as cut.
+UI_RUN, UI_CELL, UI_FILL = "run1", (15, 20), (15, 20)
+UI_ERAS, UI_MOODS = ("ancient", "industrial", "electricage", "modern"), ("content", "happy", "unhappy", "angry")
+UI_ERA_ALIAS = {"postmodern": "modern"}     # civ45's last style (Superconductors) has no people of its own: the modern ones
+UI_SPECIALISTS = ("entertainer", "scientist", "taxman")
+UI_GOVS = ("anarchy", "tribal", "despotism", "monarchy", "communism", "fundamentalism", "federation", "republic", "democracy")
+UI_RATES = ("tax_gold", "tax_luxury", "tax_science")
+UI_LEVELS = ("science_bulb", "warming_sun", "cooling_flake")
+UI_COLS = 16
+
+def ui_level(im, k, top=7):
+    """Level k of top: the cut faded towards a dim grey, all the way at 0 and not at all at top."""
+    t = k / top; grey = ImageChops.multiply(im.convert("LA").convert("RGBA"), Image.new("RGBA", im.size, (110, 110, 110, 255)))
+    out = Image.blend(grey, im, 0.25 + 0.75 * t) if k < top else im.copy()
+    out.putalpha(im.getchannel("A")); return out
+
+def ui_icons(art, out_dir, record):
+    """ui_icons.png and .spec; returns the cut names used."""
+    run = os.path.join(art, UI_RUN); cuts = {}
+    for path in glob.glob(os.path.join(run, "panel*", "post", "raw", "*.png")):
+        cuts[os.path.splitext(os.path.basename(path))[0]] = path
+    def fit(name):
+        im = tidy(cuts[name]); return scaled(im, min(UI_FILL[0] / im.width, UI_FILL[1] / im.height))
+    plan = []        # (tags, image)
+    for era in UI_ERAS:
+        for mood in UI_MOODS:
+            for n in (0, 1):
+                tags = (["citizen.%s.%s_%d" % (e, mood, n) for e in [era] + [k for k, v in UI_ERA_ALIAS.items() if v == era]]
+                        + (["citizen.%s_%d" % (mood, n)] if era == UI_ERAS[0] else []))
+                plan.append((tags, fit("%s_%s_%d" % (era, mood, n))))
+    for sp in UI_SPECIALISTS:
+        for n in (0, 1): plan.append((["specialist.%s_%d" % (sp, n)], fit("%s_%d" % (sp, n))))
+    for gov in UI_GOVS: plan.append((["gov." + gov], fit(gov)))
+    for rate in UI_RATES: plan.append((["s." + rate], fit(rate)))
+    for name in UI_LEVELS:
+        im = fit(name)
+        for k in range(8): plan.append((["s.%s_%d" % (name, k)], ui_level(im, k)))
+    cw, ch = UI_CELL; rows = (len(plan) + UI_COLS - 1) // UI_COLS
+    sheet = Image.new("RGBA", (UI_COLS * cw, rows * ch), (0, 0, 0, 0)); cells = []
+    for i, (tags, im) in enumerate(plan):
+        x, y = (i % UI_COLS) * cw, (i // UI_COLS) * ch
+        sheet.alpha_composite(im, (x + (cw - im.width) // 2, y + ch - im.height if tags[0].startswith(("citizen", "specialist"))
+                                   else y + (ch - im.height) // 2))
+        cells.append((i // UI_COLS, i % UI_COLS, tags))
+    sheet.save(os.path.join(out_dir, "ui_icons.png"), optimize=True)
+    write_spec(out_dir, "ui_icons", "Citizens, specialists, rate and government icons for the Freeciv45 iso tileset: the Freeciv45 art\n"
+               "pack's freeciv45/13_ui_icons run 1, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells.\n"
+               "Listed after misc/specialists.spec, so these tags override the stock icons." % (NAME, cw, ch),
+               [("main", 0, cw, ch, cells)])
+    used = (["%s_%s_%d" % (e, m, n) for e in UI_ERAS for m in UI_MOODS for n in (0, 1)]
+            + ["%s_%d" % (sp, n) for sp in UI_SPECIALISTS for n in (0, 1)] + list(UI_GOVS + UI_RATES + UI_LEVELS))
+    record.append("| `%s/ui_icons.spec` | the art pack's UI icons (`freeciv45/13_ui_icons`, `%s`, panels 1 to 4, `post/raw`), %d cuts | "
+                  "tidied, fitted into %dx%d cells (people standing on the cell's foot); the bulb, sun and flake in 8 levels, "
+                  "grey to full colour | %dx%d |" % (NAME, UI_RUN, len(used), cw, ch, *sheet.size))
+    return used
+
 def border_alpha(d):
     """The band's coverage at distance d from the edge into the owner's tile."""
     if d < 0: return 0.0
@@ -1293,6 +1355,8 @@ def main():
     ap.add_argument("--no-bk-extras", action="store_true", help="keep amplio2's improvements, bases, roads, rivers and badges")
     ap.add_argument("--title-art", help="the art repo's freeciv45/14_title_art (default: next to --art)")
     ap.add_argument("--no-title", action="store_true", help="keep the stock start picture and icons")
+    ap.add_argument("--ui-art", help="the art repo's freeciv45/13_ui_icons (default: next to --art)")
+    ap.add_argument("--no-ui-icons", action="store_true", help="keep the stock citizens, specialists, rate and government icons")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
@@ -1343,6 +1407,10 @@ def main():
     if not a.no_title:
         title_props = title(a.title_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "14_title_art"),
                             out_dir, painted_record)
+    ui_props = []
+    if not a.no_ui_icons:
+        ui_props = ui_icons(a.ui_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "13_ui_icons"),
+                            out_dir, painted_record)
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -1389,8 +1457,9 @@ def main():
             if not a.no_bk_icons and rel == "misc/techs.spec": files.append("%s/tech_icons.spec" % NAME)
             if not a.no_bk_icons and rel == "misc/wonders-large.spec": files.append("%s/building_icons.spec" % NAME)
             if not a.no_title and rel == "misc/icons.spec": files.append("%s/icons.spec" % NAME)
+            if not a.no_ui_icons and rel == "misc/specialists.spec": files.append("%s/ui_icons.spec" % NAME)
     tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku,
-             icons=not (a.no_bk_icons and a.no_title), intro=not a.no_title)
+             icons=not (a.no_bk_icons and a.no_title and a.no_ui_icons), intro=not a.no_title)
     if not a.no_bk_extras: extras_styles(os.path.join(a.out, NAME + ".tilespec"))
     with open(os.path.join(out_dir, "RECORD.md"), "w") as f:
         f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED if not (canopy and s in CANOPY)),
@@ -1466,6 +1535,15 @@ def main():
                     % (TECH_CELL, TECH_CELL, *BUILD_CELL, len(tech_props), ", ".join("`%s`" % n for n in tech_props),
                        len(building_props), ", ".join("`%s`" % n for n in building_props),
                        ", ".join("`%s` (`%s`)" % kv for kv in sorted({**TECH_PICK, **BUILD_PICK}.items()))))
+        if ui_props:
+            f.write("\n## Citizens, specialists, rates and governments\n\n`ui_icons.spec`: the Freeciv45 art pack's UI icons (John "
+                    "O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/13_ui_icons`, "
+                    "run 1, issue 298), cleaned and fitted into %dx%d cells, the size the client draws them at. Citizens per "
+                    "era (`citizen.<era>.<mood>_<n>` for civ45's `citizens_graphic` eras, postmodern drawing the modern ones; "
+                    "the plain `citizen.<mood>_<n>` are the ancient ones), the three specialists, the nine governments, the tax, luxury and science icons, "
+                    "and the research bulb, warming sun and cooling flake in 8 levels each (grey at 0, the art at 7). Used: "
+                    "%s; the second takes stay in the art repo. GPL-2.0-or-later, like the rest of the folder.\n"
+                    % (*UI_CELL, ", ".join("`%s`" % n for n in ui_props)))
         if title_props:
             f.write("\n## Start picture and icons\n\n`intro.png` (the tilespec's `main_intro_file`), `icons.spec` (`icon.freeciv`, "
                     "the application icon, and `icon.citydlg`, the city dialog's) and `freeciv45.icns` (Freeciv45.app's icon, "
