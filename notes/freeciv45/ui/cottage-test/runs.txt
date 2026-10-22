@@ -1,0 +1,15 @@
+Cottage stages and faith pictures in freeciv45iso (issue 295)
+Driver build at patch 0057, civ45, seed 42, size 2, tileset freeciv45iso from this branch.
+
+Run 1: the start tile sat on a small coastal tip; the Lua placed nothing within 3 tiles
+(chat: "FC45LOOK done true nil"). Lua output from "/lua cmd" goes to the caller's chat,
+not server.log (server/scripting/script_server.c script_server_cmd_reply).
+
+Run 2: Hearthstead founded on the free land tile within 6 of the start with the most land
+within 2. Chat: "FC45LOOK done true nil placed 4".
+- map.jpg: cottage (one house), hamlet (three), village (cluster with a windmill) and town
+  (houses with a market stall) on the four grassland tiles around the city. Each stage reads
+  as larger than the one before.
+- city.jpg: the Buildings list shows Temple, Shrine, Holy City and the Hearth, One Flame and
+  Deep Well faith houses, each with its own picture. Hearth State Faith draws the Hearth
+  faith's second take, which at list size looks close to the first.

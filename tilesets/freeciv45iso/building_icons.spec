@@ -1,5 +1,5 @@
 ; Building and wonder pictures for the Freeciv45 iso tileset: the Freeciv45 art pack's
-; freeciv45/07_building_icons runs 1 to 5, fitted by tilesets/make-freeciv45iso.py (see RECORD.md) into 64x48 cells.
+; freeciv45/07_building_icons runs 1 to 6, fitted by tilesets/make-freeciv45iso.py (see RECORD.md) into 64x48 cells.
 
 [spec]
 
@@ -116,5 +116,21 @@ tiles = { "row", "column", "tag"
   9, 1, "b.treuga_dei"
   9, 2, "b.united_nations"
   9, 3, "b.womens_suffrage"
+  9, 4, "b.faith_deep_well"
+  9, 5, "b.faith_hearth"
+  9, 6, "b.faith_many_hands"
+  9, 7, "b.faith_one_flame"
+  9, 8, "b.faith_quiet_way"
+  9, 9, "b.faith_star_path"
+  10, 0, "b.faith_sun_throne"
+  10, 1, "b.holy_city"
+  10, 2, "b.shrine"
+  10, 3, "b.state_faith_deep_well"
+  10, 4, "b.state_faith_hearth"
+  10, 5, "b.state_faith_many_hands"
+  10, 6, "b.state_faith_one_flame"
+  10, 7, "b.state_faith_quiet_way"
+  10, 8, "b.state_faith_star_path"
+  10, 9, "b.state_faith_sun_throne"
 }
 
