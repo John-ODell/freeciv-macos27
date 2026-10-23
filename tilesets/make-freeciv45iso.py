@@ -961,6 +961,40 @@ def ui_icons(art, out_dir, record):
                   "grey to full colour | %dx%d |" % (NAME, UI_RUN, len(used), cw, ch, *sheet.size))
     return used
 
+# Buttons (issue 307): the art pack's freeciv45/13_ui_icons run 2 (post/raw), so the Qt client's right-edge buttons and
+# unit-bar actions each have a colour and shape of their own instead of the theme's look-alike blue icons. Patch 0059
+# makes the client look for ui.edge.<name> and ui.action.<name> and keep the theme icon when a tileset has none. The
+# client draws them at BUTTON_PX and ACTION_PX points, so they are cut at twice that for a Retina screen. Only the ones
+# the client draws ship: run 2's messages, end turn, road, irrigate and mine wait in the art repo for buttons of their own.
+BUTTON_RUN, BUTTON_SCALE = "run2", 2
+BUTTON_PX, ACTION_PX = 38, 24       # client/gui-qt/edgebar.cpp BUTTON_ICON, unitbar.cpp ACTION_ICON
+BUTTON_EDGE = ("map", "research", "nations", "cities", "units", "economy", "more")
+BUTTON_ACTIONS = ("settle", "goto", "fortify", "sentry", "wait", "done")
+
+def buttons(art, out_dir, record):
+    """ui_buttons.png and .spec: the edge plates in a row of square cells, the actions in a row under them; returns
+    the cut names used."""
+    run = os.path.join(art, BUTTON_RUN)
+    def fit(panel, name, px):
+        # The plates drop the next row's scraps; an action is kept whole, as Go to's footprints are pieces of their own
+        im = tidy(os.path.join(run, panel, "post", "raw", name + ".png"), whole=panel != "panel1")
+        im = scaled(im, px / max(im.size)); cell = Image.new("RGBA", (px, px), (0, 0, 0, 0))
+        cell.alpha_composite(im, ((px - im.width) // 2, (px - im.height) // 2)); return cell
+    ep, ap = BUTTON_PX * BUTTON_SCALE, ACTION_PX * BUTTON_SCALE
+    sheet = Image.new("RGBA", (max(ep * len(BUTTON_EDGE), ap * len(BUTTON_ACTIONS)), ep + ap), (0, 0, 0, 0))
+    for k, name in enumerate(BUTTON_EDGE): sheet.alpha_composite(fit("panel1", name, ep), (k * ep, 0))
+    for k, name in enumerate(BUTTON_ACTIONS): sheet.alpha_composite(fit("panel2", name, ap), (k * ap, ep))
+    sheet.save(os.path.join(out_dir, "ui_buttons.png"), optimize=True)
+    write_spec(out_dir, "ui_buttons", "The Qt client's right-edge buttons and unit-bar actions for the Freeciv45 iso tileset: the\n"
+               "Freeciv45 art pack's freeciv45/13_ui_icons run 2, fitted by tilesets/make-%s.py (see RECORD.md)\n"
+               "at twice the size the client draws them." % NAME,
+               [("edge", 0, ep, ep, [(0, k, ["ui.edge." + n]) for k, n in enumerate(BUTTON_EDGE)]),
+                ("action", ep, ap, ap, [(0, k, ["ui.action." + n]) for k, n in enumerate(BUTTON_ACTIONS)])])
+    record.append("| `%s/ui_buttons.spec` | the art pack's buttons (`freeciv45/13_ui_icons`, `%s`, panels 1 and 2, `post/raw`), "
+                  "%d cuts | tidied, fitted into %dx%d (edge) and %dx%d (actions) cells, twice the client's size | %dx%d |"
+                  % (NAME, BUTTON_RUN, len(BUTTON_EDGE) + len(BUTTON_ACTIONS), ep, ep, ap, ap, *sheet.size))
+    return list(BUTTON_EDGE + BUTTON_ACTIONS)
+
 def border_alpha(d):
     """The band's coverage at distance d from the edge into the owner's tile."""
     if d < 0: return 0.0
@@ -1357,6 +1391,7 @@ def main():
     ap.add_argument("--no-title", action="store_true", help="keep the stock start picture and icons")
     ap.add_argument("--ui-art", help="the art repo's freeciv45/13_ui_icons (default: next to --art)")
     ap.add_argument("--no-ui-icons", action="store_true", help="keep the stock citizens, specialists, rate and government icons")
+    ap.add_argument("--no-buttons", action="store_true", help="no ui.edge and ui.action buttons: the client keeps its theme icons")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
@@ -1411,6 +1446,10 @@ def main():
     if not a.no_ui_icons:
         ui_props = ui_icons(a.ui_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "13_ui_icons"),
                             out_dir, painted_record)
+    button_props = []
+    if not a.no_buttons:
+        button_props = buttons(a.ui_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "13_ui_icons"),
+                               out_dir, painted_record)
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -1458,6 +1497,7 @@ def main():
             if not a.no_bk_icons and rel == "misc/wonders-large.spec": files.append("%s/building_icons.spec" % NAME)
             if not a.no_title and rel == "misc/icons.spec": files.append("%s/icons.spec" % NAME)
             if not a.no_ui_icons and rel == "misc/specialists.spec": files.append("%s/ui_icons.spec" % NAME)
+            if not a.no_buttons and rel == "misc/specialists.spec": files.append("%s/ui_buttons.spec" % NAME)
     tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku,
              icons=not (a.no_bk_icons and a.no_title and a.no_ui_icons), intro=not a.no_title)
     if not a.no_bk_extras: extras_styles(os.path.join(a.out, NAME + ".tilespec"))
@@ -1544,6 +1584,14 @@ def main():
                     "and the research bulb, warming sun and cooling flake in 8 levels each (grey at 0, the art at 7). Used: "
                     "%s; the second takes stay in the art repo. GPL-2.0-or-later, like the rest of the folder.\n"
                     % (*UI_CELL, ", ".join("`%s`" % n for n in ui_props)))
+        if button_props:
+            f.write("\n## Buttons\n\n`ui_buttons.spec`: the Qt client's right-edge buttons (`ui.edge.<name>`) and unit-bar "
+                    "actions (`ui.action.<name>`), which patch 0059 draws in place of the theme's icons: the Freeciv45 art pack's "
+                    "buttons (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder "
+                    "`freeciv45/13_ui_icons`, run 2, issue 307), cleaned and fitted at twice the %d and %d points the client "
+                    "draws them at. Each has a colour and shape of its own. Used: %s; run 2's messages, end turn, road, irrigate "
+                    "and mine stay in the art repo until the client has buttons for them. GPL-2.0-or-later, like the rest of "
+                    "the folder.\n" % (BUTTON_PX, ACTION_PX, ", ".join("`%s`" % n for n in button_props)))
         if title_props:
             f.write("\n## Start picture and icons\n\n`intro.png` (the tilespec's `main_intro_file`), `icons.spec` (`icon.freeciv`, "
                     "the application icon, and `icon.citydlg`, the city dialog's) and `freeciv45.icns` (Freeciv45.app's icon, "
