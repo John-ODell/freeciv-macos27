@@ -157,3 +157,4 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - `~/freeciv-builds/qt` was rebuilt with `scripts/build.sh qt` from fork branch series-0059 (7ac05c8). Patch 0059 makes the right-edge buttons and unit-bar actions take the tileset's pictures. The build had 0 compiler warnings.
 - `Freeciv45.app` was rebundled on it from main at c99ea1a (184 MB). It carries `freeciv45iso/ui_buttons.spec`.
 - No new formulae. Git-ignored, safe to delete and regenerate.
+- Later the same night: `~/freeciv-builds/qt` was rebuilt from fork branch series-0060 (d5d63ae). Patch 0060 adds the unit bar's Road, Irrigate and Mine boxes. The build had 0 compiler warnings. `Freeciv45.app` was rebundled on it from main at 97da34f (184 MB), and its `ui_buttons.spec` has the nine actions. No new formulae.
