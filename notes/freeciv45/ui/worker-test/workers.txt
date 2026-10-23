@@ -1,0 +1,37 @@
+# The unit bar's Road, Irrigate and Mine boxes (issue 311, patch 0060). Run on a driver build at patch 0060:
+#   FREECIV_DRIVE_PREFIX=<prefix> FREECIV_DRIVE_TILESET=freeciv45iso FREECIV_DRIVE_TILESETS=<repo>/tilesets \
+#     scripts/ui-drive.sh notes/freeciv45/ui/worker-test/workers.txt <outdir>
+# civ45, seed 42: the start stack is Warriors (chip 1), a Scout (2), Workers (3) and Settlers (4).
+pace 1200
+wait 4000
+dismiss
+wait 1000
+click chip 1
+wait 800
+state warriors
+click chip 3
+wait 800
+state workers
+# Irrigation needs Agriculture
+chat /lua cmd for p in players_iterate() do if p:is_human() then edit.give_tech(p, find.tech_type("Agriculture"), -1, false, "test") end end
+wait 2000
+click chip 1
+wait 800
+click chip 3
+wait 800
+state agriculture
+hover tip Build Irrigation
+wait 1500
+shot workers
+# a click on a chip would wake the unit, so the state is read straight after the box (the chip's tooltip names
+# the activity)
+click tip Build Road
+wait 1500
+state road
+hover chip 3
+wait 1500
+shot road
+click chip 4
+wait 800
+state settlers
+quit

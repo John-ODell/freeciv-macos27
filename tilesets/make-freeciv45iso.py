@@ -965,11 +965,12 @@ def ui_icons(art, out_dir, record):
 # unit-bar actions each have a colour and shape of their own instead of the theme's look-alike blue icons. Patch 0059
 # makes the client look for ui.edge.<name> and ui.action.<name> and keep the theme icon when a tileset has none. The
 # client draws them at BUTTON_PX and ACTION_PX points, so they are cut at twice that for a Retina screen. Only the ones
-# the client draws ship: run 2's messages, end turn, road, irrigate and mine wait in the art repo for buttons of their own.
+# the client draws ship: run 2's messages and end turn wait in the art repo for buttons of their own. Road, irrigate
+# and mine are the Workers' boxes of patch 0060 (issue 311).
 BUTTON_RUN, BUTTON_SCALE = "run2", 2
 BUTTON_PX, ACTION_PX = 38, 24       # client/gui-qt/edgebar.cpp BUTTON_ICON, unitbar.cpp ACTION_ICON
 BUTTON_EDGE = ("map", "research", "nations", "cities", "units", "economy", "more")
-BUTTON_ACTIONS = ("settle", "goto", "fortify", "sentry", "wait", "done")
+BUTTON_ACTIONS = ("settle", "road", "irrigate", "mine", "goto", "fortify", "sentry", "wait", "done")
 
 def buttons(art, out_dir, record):
     """ui_buttons.png and .spec: the edge plates in a row of square cells, the actions in a row under them; returns
@@ -1586,11 +1587,11 @@ def main():
                     % (*UI_CELL, ", ".join("`%s`" % n for n in ui_props)))
         if button_props:
             f.write("\n## Buttons\n\n`ui_buttons.spec`: the Qt client's right-edge buttons (`ui.edge.<name>`) and unit-bar "
-                    "actions (`ui.action.<name>`), which patch 0059 draws in place of the theme's icons: the Freeciv45 art pack's "
+                    "actions (`ui.action.<name>`), which patches 0059 and 0060 draw in place of the theme's icons: the Freeciv45 art pack's "
                     "buttons (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder "
                     "`freeciv45/13_ui_icons`, run 2, issue 307), cleaned and fitted at twice the %d and %d points the client "
-                    "draws them at. Each has a colour and shape of its own. Used: %s; run 2's messages, end turn, road, irrigate "
-                    "and mine stay in the art repo until the client has buttons for them. GPL-2.0-or-later, like the rest of "
+                    "draws them at. Each has a colour and shape of its own. Used: %s; run 2's messages and end turn stay in the "
+                    "art repo until the client has buttons for them. GPL-2.0-or-later, like the rest of "
                     "the folder.\n" % (BUTTON_PX, ACTION_PX, ", ".join("`%s`" % n for n in button_props)))
         if title_props:
             f.write("\n## Start picture and icons\n\n`intro.png` (the tilespec's `main_intro_file`), `icons.spec` (`icon.freeciv`, "

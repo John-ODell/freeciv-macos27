@@ -41,10 +41,13 @@ dy = 48
 
 tiles = { "row", "column", "tag"
   0, 0, "ui.action.settle"
-  0, 1, "ui.action.goto"
-  0, 2, "ui.action.fortify"
-  0, 3, "ui.action.sentry"
-  0, 4, "ui.action.wait"
-  0, 5, "ui.action.done"
+  0, 1, "ui.action.road"
+  0, 2, "ui.action.irrigate"
+  0, 3, "ui.action.mine"
+  0, 4, "ui.action.goto"
+  0, 5, "ui.action.fortify"
+  0, 6, "ui.action.sentry"
+  0, 7, "ui.action.wait"
+  0, 8, "ui.action.done"
 }
 
