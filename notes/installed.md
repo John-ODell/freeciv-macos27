@@ -151,3 +151,9 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - Checked: a copy (with Qt's offscreen plugin added, the copy only) ran 20 s on the start page with a fresh HOME.
 - Later the same night: `~/freeciv-builds/qt` rebuilt with `scripts/build.sh qt` from fork branch series-0058 (098b172,
   patch 0058, the unit bar's Settle box), and `Freeciv45.app` rebundled on it from main at 404dae3. No new formulae.
+
+## 2026-10-22, the client and Freeciv45.app at patch 0059
+
+- `~/freeciv-builds/qt` was rebuilt with `scripts/build.sh qt` from fork branch series-0059 (7ac05c8). Patch 0059 makes the right-edge buttons and unit-bar actions take the tileset's pictures. The build had 0 compiler warnings.
+- `Freeciv45.app` was rebundled on it from main at c99ea1a (184 MB). It carries `freeciv45iso/ui_buttons.spec`.
+- No new formulae. Git-ignored, safe to delete and regenerate.
