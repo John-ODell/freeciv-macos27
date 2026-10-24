@@ -58,7 +58,7 @@ The ranges at the end leave out the one or two civs that were nearly wiped out (
 
 - At 30,000 points the bar falls between T300 and T400 on every seed. A leader with a steady lead won as early
   as T306.
-- At 50,000 the leaders reach it near T400 (seed 7 at T402, seed 42 at about T410 but without the lead) or not at
+- At 50,000 the leaders reach it near T400 (seed 7 at T402; seed 42 between T410 and T415, but with a 12 % lead) or not at
   all (seed 13). A dominant culture still wins, but only around the time the late eras arrive, which is the target
   in #284.
 - Seed 7's world culture at T300 is 120,225 here, against 65,594 in the 0053 game (cottages.md section 6); seed
@@ -67,7 +67,7 @@ The ranges at the end leave out the one or two civs that were nearly wiped out (
 
 ## 4. World totals
 
-From `scripts`-style sums over the score sections (techs minus "None" per civ; trade is `bnp`).
+Sums over each save's `[scoreN]` sections (techs minus "None" per civ; trade is `bnp`).
 
 | Game, turn | Techs | Trade | Unhappy | Cities | Culture |
 |---|---|---|---|---|---|
