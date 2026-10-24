@@ -17,6 +17,23 @@
    page is that source, and `SOURCE.txt` in the bundle points to it.
 6. `gh release create v<ver>-mac<N>` on John-ODell/freeciv-macos27 with the DMG, both sha256 files and the tarball.
    Release assets are not commits, so the "no binaries in git" rule from the brief holds.
+7. Release notes (`gh release create ... --notes-file`) start and end with these lines, so players reach the
+   install guide and the Freeciv project from the release page:
+
+       The easiest way to install: https://northbridgelandmark.com/builds/freeciv/, with a one-click download and step-by-step install.
+
+       ...
+
+       Original Freeciv: https://www.freeciv.org
+
+   The site's Download buttons find each game's DMG through the GitHub API by its asset name, so keep
+   `Freeciv-<ver>-arm64.dmg` on every Freeciv for Mac release.
+8. Freeciv45 releases use the same steps with `scripts/bundle.sh qt --game freeciv45`, which makes
+   `Freeciv45.app`, so `dmg.sh` writes `Freeciv45-<ver>-arm64.dmg`. Tag them `freeciv45-<N>`, name the tarball
+   `freeciv45-<N>-src.tar.gz` (the same `git archive`, with the whole patch series applied), and create them with
+   `gh release create ... --latest=false`, so the repo's "Latest" badge and anything that reads `releases/latest`
+   keep pointing at Freeciv for Mac. The notes open with the same install line and say it is a game built on
+   Freeciv, not a Freeciv project release.
 
 Nothing is notarized unless `dmg.sh --sign <Developer ID> --notarize-profile <profile>` is used, which needs an
 Apple Developer Program membership (99 USD/year, observed on developer.apple.com pricing as of 2026, unverified
