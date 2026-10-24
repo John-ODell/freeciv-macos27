@@ -1,0 +1,331 @@
+From e7b12b365277278f4b17b27a23fd2f3219b293be Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 24 Oct 2026 12:56:47 -0500
+Subject: [PATCH] civ45: civics as four policy sliders
+
+Replace the two sliders civ45 inherited from civ54 (Personal Freedom,
+Polluting Productivity) with four civics sliders of four steps each:
+
+- Labour (Bronze Working): +5% shields per step, one fewer content
+  citizen per two steps.
+- Trade (Currency): -5% waste of shields and trade per step, -5% gold.
+- Faith (Mysticism): one more content citizen per two steps in cities
+  that follow the state faith, -5% science per step.
+- Service (Feudalism): one more unit per city free of shield and gold
+  upkeep per two steps, one more unhappy citizen per aggressive unit
+  per two steps, -5% luxury per step.
+
+Every slider has factor 50, so "per two steps" effects use value 1 and
+percentage effects carry twice their per-step value. No minimum_turns:
+the server restores a slider to its default whenever it cannot be
+changed, and that includes the minimum_turns lockout.
+
+The three training-duration sliders stay.
+---
+ data/civ45/README.civ45        |   9 +-
+ data/civ45/effects.ruleset     | 155 +++++++++++++++++++++++++++++----
+ data/civ45/governments.ruleset |  76 +++++++++++++---
+ 3 files changed, 207 insertions(+), 33 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 87f1cc8..d4e95f3 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -284,9 +284,12 @@ routes, and can get revenue even when a trade route exists
+ ('Enter Marketplace'), as in older versions of civ2civ3; however,
+ this latter action really requires a Marketplace building in the city.
+ 
+-Custom policy "Personal Freedom":
+-You can trade off a science bonus against extra unhappiness from your
+-aggressive military units.
++Civics:
++Four policy sliders, each from 0 to 4. Labour (Bronze Working) trades
++shields for content citizens; Trade (Currency) trades less waste for
++less gold; Faith (Mysticism) trades science for content citizens in
++state-faith cities; Service (Feudalism) trades free unit upkeep for
++luxury and military unhappiness. Set them from the Policies dialog.
+ 
+ Castle fortress add on
+ A castle allows a fortress to claim territory and to see cardinally
+diff --git a/data/civ45/effects.ruleset b/data/civ45/effects.ruleset
+index b143a5c..3c5f43f 100644
+--- a/data/civ45/effects.ruleset
++++ b/data/civ45/effects.ruleset
+@@ -975,38 +975,157 @@ reqs    =
+       "Gov", "Democracy", "Player"
+     }
+ 
+-[effect_personal_freedom_unit_unhappiness]
+-type    = "Unhappy_Factor"
+-value   = 1
+-multiplier = "Personal Freedom"
+-reqs   =
++; Civics sliders (governments.ruleset); every multiplier has factor 50.
++[effect_civic_labour_shields]
++type    = "Output_Bonus"
++value   = 10
++multiplier = "Labour"
++reqs    =
+     { "type", "name", "range"
++      "OutputType", "Shield", "Local"
+     }
+ 
+-[effect_personal_freedom_science_bonus]
+-type    = "Output_Bonus_2"
++[effect_civic_labour_content]
++type    = "City_Unhappy_Size"
++value   = -1
++multiplier = "Labour"
++
++[effect_civic_trade_waste_shields]
++type    = "Output_Waste_Pct"
+ value   = 10
+-multiplier = "Personal Freedom"
+-reqs   =
++multiplier = "Trade"
++reqs    =
++    { "type", "name", "range"
++      "OutputType", "Shield", "Local"
++    }
++
++[effect_civic_trade_waste_trade]
++type    = "Output_Waste_Pct"
++value   = 10
++multiplier = "Trade"
++reqs    =
++    { "type", "name", "range"
++      "OutputType", "Trade", "Local"
++    }
++
++[effect_civic_trade_gold]
++type    = "Output_Bonus"
++value   = -10
++multiplier = "Trade"
++reqs    =
++    { "type", "name", "range"
++      "OutputType", "Gold", "Local"
++    }
++
++[effect_civic_faith_hearth_content]
++type    = "Make_Content"
++value   = 1
++multiplier = "Faith"
++reqs    =
++    { "type", "name", "range"
++      "Building", "Hearth Faith", "City"
++      "Building", "Hearth State Faith", "Player"
++    }
++
++[effect_civic_faith_many_hands_content]
++type    = "Make_Content"
++value   = 1
++multiplier = "Faith"
++reqs    =
++    { "type", "name", "range"
++      "Building", "Many Hands Faith", "City"
++      "Building", "Many Hands State Faith", "Player"
++    }
++
++[effect_civic_faith_sun_throne_content]
++type    = "Make_Content"
++value   = 1
++multiplier = "Faith"
++reqs    =
++    { "type", "name", "range"
++      "Building", "Sun Throne Faith", "City"
++      "Building", "Sun Throne State Faith", "Player"
++    }
++
++[effect_civic_faith_quiet_way_content]
++type    = "Make_Content"
++value   = 1
++multiplier = "Faith"
++reqs    =
++    { "type", "name", "range"
++      "Building", "Quiet Way Faith", "City"
++      "Building", "Quiet Way State Faith", "Player"
++    }
++
++[effect_civic_faith_star_path_content]
++type    = "Make_Content"
++value   = 1
++multiplier = "Faith"
++reqs    =
++    { "type", "name", "range"
++      "Building", "Star Path Faith", "City"
++      "Building", "Star Path State Faith", "Player"
++    }
++
++[effect_civic_faith_one_flame_content]
++type    = "Make_Content"
++value   = 1
++multiplier = "Faith"
++reqs    =
++    { "type", "name", "range"
++      "Building", "One Flame Faith", "City"
++      "Building", "One Flame State Faith", "Player"
++    }
++
++[effect_civic_faith_deep_well_content]
++type    = "Make_Content"
++value   = 1
++multiplier = "Faith"
++reqs    =
++    { "type", "name", "range"
++      "Building", "Deep Well Faith", "City"
++      "Building", "Deep Well State Faith", "Player"
++    }
++
++[effect_civic_faith_science]
++type    = "Output_Bonus"
++value   = -10
++multiplier = "Faith"
++reqs    =
+     { "type", "name", "range"
+       "OutputType", "Science", "Local"
+     }
+ 
+-[effect_polluting_productivity_prod]
+-type    = "Output_Bonus_2"
++[effect_civic_service_upkeep]
++type    = "Unit_Upkeep_Free_Per_City"
+ value   = 1
+-multiplier = "Polluting Productivity"
+-reqs   =
++multiplier = "Service"
++reqs    =
+     { "type", "name", "range"
+       "OutputType", "Shield", "Local"
+     }
+ 
+-[effect_polluting_productivity_pol]
+-type    = "Pollu_Prod_Pct"
+-value   = 5
+-multiplier = "Polluting Productivity"
+-reqs   =
++[effect_civic_service_upkeep_gold]
++type    = "Unit_Upkeep_Free_Per_City"
++value   = 1
++multiplier = "Service"
++reqs    =
++    { "type", "name", "range"
++      "OutputType", "Gold", "Local"
++    }
++
++[effect_civic_service_unhappy]
++type    = "Unhappy_Factor"
++value   = 1
++multiplier = "Service"
++
++[effect_civic_service_luxury]
++type    = "Output_Bonus"
++value   = -10
++multiplier = "Service"
++reqs    =
+     { "type", "name", "range"
++      "OutputType", "Luxury", "Local"
+     }
+ 
+ [effect_military_training_duration_cost]
+diff --git a/data/civ45/governments.ruleset b/data/civ45/governments.ruleset
+index 62f5af4..0bbb53e 100644
+--- a/data/civ45/governments.ruleset
++++ b/data/civ45/governments.ruleset
+@@ -467,30 +467,82 @@ _("\
+ ;
+ ; */ <-- avoid gettext warnings
+ 
+-[multiplier_personal_freedom]
+-name      = _("Personal Freedom")
++; Civics (notes/freeciv45/design/civics.md, option A): four sliders of four steps.
++; factor = 50 halves every effect value, so "per two steps" effects use value 1
++; and percentage effects carry twice their per-step value.
++
++[multiplier_labour]
++name      = _("Labour")
++start     = 0
++stop      = 4
++step      = 1
++default   = 0
++factor    = 50
++reqs      =
++    { "type", "name", "range"
++      "Tech", "Bronze Working", "Player"
++    }
++; /* xgettext:no-c-format */
++helptext  = _("\
++From free labour (0) to bonded labour (4). Each step adds 5% to the \
++shields of every city; every two steps make one fewer citizen content \
++in every city, so large cities feel it first.\
++")
++
++[multiplier_trade]
++name      = _("Trade")
++start     = 0
++stop      = 4
++step      = 1
++default   = 0
++factor    = 50
++reqs      =
++    { "type", "name", "range"
++      "Tech", "Currency", "Player"
++    }
++; /* xgettext:no-c-format */
++helptext  = _("\
++From open trade (0) to guarded trade (4). Each step cuts the shields \
++and trade lost to waste and corruption by 5%, and takes 5% from the \
++gold of every city.\
++")
++
++[multiplier_faith]
++name      = _("Faith")
+ start     = 0
+-stop      = 5
++stop      = 4
+ step      = 1
+ default   = 0
++factor    = 50
++reqs      =
++    { "type", "name", "range"
++      "Tech", "Mysticism", "Player"
++    }
+ ; /* xgettext:no-c-format */
+ helptext  = _("\
+-Each step of personal freedom you allow your citizens yields a 10% \
+-increase in science output, but makes an additional citizen unhappy \
+-for every aggressively deployed military unit.\
++From secular (0) to devout (4). Every two steps make one more citizen \
++content in each city that follows your state faith; each step takes \
++5% from the science of every city.\
+ ")
+ 
+-[multiplier_polluting_productivity]
+-name      = _("Polluting Productivity")
++[multiplier_service]
++name      = _("Service")
+ start     = 0
+-stop      = 10
++stop      = 4
+ step      = 1
+ default   = 0
++factor    = 50
++reqs      =
++    { "type", "name", "range"
++      "Tech", "Feudalism", "Player"
++    }
+ ; /* xgettext:no-c-format */
+ helptext  = _("\
+-Each step of polluting productivity increases a cities shield \
+-production by 1%, but also increases all pollution related to \
+-shields by 5%.\
++From volunteer armies (0) to levied armies (4). Every two steps let \
++each city support one more unit free of upkeep (shields or gold, \
++whichever your government charges) and make each \
++aggressively deployed military unit cause one more unhappy citizen; \
++each step takes 5% from the luxury of every city.\
+ ")
+ 
+ [multiplier_military_training_duration]
+-- 
+2.56.0
+
