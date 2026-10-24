@@ -162,7 +162,7 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 ## 2026-10-24, the client and Freeciv45.app at patch 0062
 
 - `~/freeciv-builds/qt` was rebuilt with `scripts/build.sh qt --no-install-deps` from fork branch series-0062 (e7b12b3, worktree `port/s61`). That adds patch 0061 (Settlers only found or join cities) and patch 0062 (civics as four policy sliders). `build.sh`'s new patch check passed: the tree has every subject in `patches/`.
-- This was a full build in a fresh tree. It reports 48 compiler warnings, all on upstream lines: 31 in the vendored Lua 5.4, 4 linker alignment notes, and the rest in upstream C (none on a line any patch changed; `git blame` on the two in patched files shows upstream commit 3636c3a). The earlier "0 warnings" builds reused build trees.
+- This was a full build in a fresh tree. It reports 48 compiler warnings, all on upstream lines: 34 in the vendored Lua 5.4, 4 linker alignment notes, and 10 in upstream C (none on a line any patch changed; `git blame` on the two in patched files shows upstream commit 3636c3a). The earlier "0 warnings" builds reused build trees.
 - `Freeciv45.app` was rebundled on it with `FREECIV_SRC=port/s61 scripts/bundle.sh qt --game freeciv45`, from main at f3523aa (184 MB, ad-hoc signed, `codesign -v` passes). Its civ45 rules carry the Labour, Trade, Faith and Service sliders.
 - Checked: a 5-turn civ45 autogame on `~/freeciv-builds/qt` passes. No new formulae. Git-ignored, safe to delete and regenerate.
 
