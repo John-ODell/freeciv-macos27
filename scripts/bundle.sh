@@ -4,11 +4,17 @@
 # made by scripts/build.sh.
 #
 # Usage: scripts/bundle.sh <qt|gtk4|gtk3.22|sdl2> [--prefix DIR] [--out DIR] [--name NAME] [--sign IDENTITY]
+#                          [--game freeciv45]
 #
 #   --prefix  install prefix to bundle              (default: ~/freeciv-builds/<qt|gtk|sdl2>)
 #   --out     directory to write the .app into      (default: ~/freeciv-builds/apps)
 #   --name    app name                              (default: Freeciv for qt, Freeciv-<CLIENT> otherwise; no spaces)
 #   --sign    codesign identity                     (default: "-" = ad-hoc; scripts/sign-app.sh, dmg.sh notarizes)
+#   --game    freeciv45: Freeciv45.app (qt only), the game of its own in notes/freeciv45/standalone.md. Its own
+#             name, bundle id and options file (~/.freeciv/freeciv45-client-rc-<x.y>), the freeciv45iso tileset
+#             inside and passed as -t until the options name a tileset; "Start new game" plays civ45 (the
+#             tileset's for_ruleset, or FREECIV_GAME_RULESET on a tileset that names none); the icon is
+#             tilesets/freeciv45iso/freeciv45.icns when it exists, else the stock one
 #
 # Layout:  <Name>.app/Contents/MacOS/<Name>        launcher compiled from scripts/launcher.c: sets FREECIV_DATA_PATH /
 #                                                   FREECIV_LOCALE_PATH, cd's next to the binaries (so the client's
@@ -24,15 +30,24 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 [ $# -ge 1 ] || { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 CLIENT="$1"; shift
 case "$CLIENT" in qt) SUB=qt;; gtk4|gtk3.22) SUB=gtk;; sdl2) SUB=sdl2;; *) echo "client must be qt, gtk4, gtk3.22 or sdl2"; exit 1;; esac
-PREFIX="$HOME/freeciv-builds/$SUB"; OUT="$HOME/freeciv-builds/apps"; NAME=""; SIGN="-"
+PREFIX="$HOME/freeciv-builds/$SUB"; OUT="$HOME/freeciv-builds/apps"; NAME=""; SIGN="-"; GAME=""
 while [ $# -gt 0 ]; do case "$1" in
   --prefix) PREFIX="$2"; shift;; --out) OUT="$2"; shift;; --name) NAME="$2"; shift;; --sign) SIGN="$2"; shift;;
+  --game) GAME="$2"; shift;;
   *) echo "unknown option $1"; exit 1;; esac; shift; done
+case "$GAME:$CLIENT" in :*|freeciv45:qt) ;; freeciv45:*) echo "--game freeciv45 needs the qt client"; exit 1;;
+  *) echo "--game must be freeciv45"; exit 1;; esac
 # bundle names without spaces (paths in scripts, lsof, codesign output stay unambiguous); the display name has one
 case "$CLIENT" in qt) : "${NAME:=Freeciv}"; DISPLAY_NAME="Freeciv"; BID=org.freeciv.qt;;
   gtk4) : "${NAME:=Freeciv-GTK4}"; DISPLAY_NAME="Freeciv GTK4"; BID=org.freeciv.gtk4;;
   gtk3.22) : "${NAME:=Freeciv-GTK3}"; DISPLAY_NAME="Freeciv GTK3"; BID=org.freeciv.gtk3;;
   sdl2) : "${NAME:=Freeciv-SDL2}"; DISPLAY_NAME="Freeciv SDL2"; BID=org.freeciv.sdl2;; esac
+# A game built on Freeciv: its own name and bundle id (not org.freeciv.*: it is not the Freeciv project's app)
+GAME_NAME="Freeciv"
+if [ "$GAME" = freeciv45 ]; then
+  [ "$NAME" = Freeciv ] && NAME=Freeciv45
+  GAME_NAME="Freeciv45"; DISPLAY_NAME="Freeciv45"; BID=io.github.john-odell.freeciv45
+fi
 SRC="${FREECIV_SRC:-$ROOT/port/freeciv}"
 BIN="$PREFIX/bin/freeciv-$CLIENT"
 [ -x "$BIN" ] || { echo "no $BIN; run scripts/build.sh $SUB first"; exit 1; }
@@ -58,10 +73,18 @@ done
 # data + locale
 cp -R "$PREFIX/share/freeciv" "$C/Resources/share/freeciv"
 [ -d "$PREFIX/share/locale" ] && cp -R "$PREFIX/share/locale" "$C/Resources/share/locale"
-cp "$SRC/data/freeciv-client.icns" "$C/Resources/freeciv-client.icns"
+ICNS="$SRC/data/freeciv-client.icns"
+if [ "$GAME" = freeciv45 ]; then
+  # the tileset is ours (tilesets/), not in the install; its for_ruleset makes local games civ45
+  cp -R "$ROOT/tilesets/freeciv45iso" "$ROOT/tilesets/freeciv45iso.tilespec" "$C/Resources/share/freeciv/"
+  if [ -f "$ROOT/tilesets/freeciv45iso/freeciv45.icns" ]; then ICNS="$ROOT/tilesets/freeciv45iso/freeciv45.icns"
+  else echo "note: no tilesets/freeciv45iso/freeciv45.icns yet, using the stock icon"; fi
+fi
+cp "$ICNS" "$C/Resources/freeciv-client.icns"
 # licence and source pointer (GPL: a binary distribution must say where the matching source is)
 cp "$SRC/COPYING" "$C/Resources/COPYING"
 {
+  [ "$GAME_NAME" = Freeciv ] || echo "$GAME_NAME, a game built on Freeciv"
   echo "Freeciv $VER, macOS build of the $CLIENT client"
   echo "Licence: GNU GPL v2 or later, see COPYING next to this file"
   echo "Upstream source: https://github.com/freeciv/freeciv (branch S3_2)"
@@ -82,9 +105,16 @@ done
 # Header padding: fix-dylibs.py adds rpaths to every executable in Contents/MacOS, this one included.
 clang -O2 -Wall -Wextra -Werror -mmacosx-version-min=11.0 -Wl,-headerpad_max_install_names \
   -DCLIENT_BIN="\"freeciv-$CLIENT\"" -DDATASUBDIR="\"$DATASUBDIR\"" \
+  ${GAME:+-DGAME_NAME="\"$GAME_NAME\"" -DGAME_TILESET="\"freeciv45iso\"" -DGAME_RULESET="\"civ45\"" -DGAME_OPT="\"freeciv45-client-rc-$DATASUBDIR\""} \
   -o "$C/MacOS/$LAUNCHER" "$ROOT/scripts/launcher.c"
 
 # Info.plist
+INFO="Freeciv $VERLABEL ($CLIENT client), GPL-2.0-or-later, https://www.freeciv.org"
+COPYRIGHT="Copyright (C) 1996-2026 The Freeciv Project. GNU GPL v2 or later."
+if [ "$GAME_NAME" != Freeciv ]; then
+  INFO="$GAME_NAME, built on Freeciv $VERLABEL, GPL-2.0-or-later"
+  COPYRIGHT="Copyright (C) 1996-2026 The Freeciv Project and the $GAME_NAME contributors. GNU GPL v2 or later."
+fi
 cat > "$C/Info.plist" <<EOP
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -100,8 +130,8 @@ cat > "$C/Info.plist" <<EOP
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VER</string>
   <key>CFBundleVersion</key><string>$VERLABEL</string>
-  <key>CFBundleGetInfoString</key><string>Freeciv $VERLABEL ($CLIENT client), GPL-2.0-or-later, https://www.freeciv.org</string>
-  <key>NSHumanReadableCopyright</key><string>Copyright (C) 1996-2026 The Freeciv Project. GNU GPL v2 or later.</string>
+  <key>CFBundleGetInfoString</key><string>$INFO</string>
+  <key>NSHumanReadableCopyright</key><string>$COPYRIGHT</string>
   <key>LSMinimumSystemVersion</key><string>@MINOS@</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.strategy-games</string>
   <key>NSHighResolutionCapable</key><true/>

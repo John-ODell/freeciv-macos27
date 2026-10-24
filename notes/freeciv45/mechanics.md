@@ -476,7 +476,7 @@ Built from `notes/freeciv45/design/victory.md` (PR 77) as issue 92. Line numbers
 |---|---|---|
 | Conquest | Every rival dead or surrendered: the server's own rule, nothing set | `server/srv_main.c:524-546` |
 | Domination | Hold 60 % of the land tiles and 50 % of all citizens for 3 turns running, checked from turn 100; Lua on `turn_begin` walks the map and the cities and calls `edit.player_victory` | `data/civ45/script.lua`, `fc45_domination_check` (the constants `FC45_DOM_*` at its top) |
-| Culture | `victory_min_points` 8000 and `victory_lead_pct` 50 (sandbox 20000 and 100, which no player reached, design note 2.3) | `data/civ45/game.ruleset:390-397` |
+| Culture | `victory_min_points` 30000 and `victory_lead_pct` 25 (sandbox 20000 and 100, which no player reached, design note 2.3; 8000 and 50 until issue 165) | `data/civ45/game.ruleset:390-397` |
 | Space | `victories` keeps SPACERACE and `endspaceship` is written out as ENABLED: the ship must arrive | `game.ruleset:930-932` |
 | Alliance | `victories` keeps ALLIED: the last alliance standing wins together (a vote waits for later slices, design note 2.5) | `game.ruleset:930` |
 | Score | `endturn` 475; at the start of that turn Lua names the living civ with the highest `civilization_score` the winner, so the game ends with "Scenario victory to the X" instead of the turn-limit notice. The first civ found wins a tie | `game.ruleset:932`; `script.lua`, `fc45_score_winner` |
@@ -521,7 +521,8 @@ Logs: `logs/test-qt-20261017-155025` and `logs/test-qt-20261017-155028` (final s
 - The design note's five questions for John, built here with its recommended values: the domination thresholds
   (60 % land, 50 % citizens, 3 turns) against the spec's "about 65 % plus a population lead"; whether allies should
   win domination jointly (needs an engine getter or the `DiplRel` trick); `endturn` 475 as the shipped default;
-  culture 8000 and a 50 % lead now, before the culture slice changes the pace; and whether the score winner should be
+  culture 8000 and a 50 % lead now, before the culture slice changes the pace (30000 and a quarter since issue 165);
+  and whether the score winner should be
   announced through Lua at all.
 - Culture and domination numbers are untuned (see the autogame); re-tune with roadmap row 8 and after slice 10.
 
@@ -770,7 +771,7 @@ design session specified. Line numbers are the fork's at the slice's commit (ups
 |---|---|---|
 | Seven kinds | Unit types Great Sage, Builder, Magnate, Virtuoso, Oracle, Commander, Spymaster: class Land, cost 240, `pop_cost` 1, strength 0, 10 hit points, 2 moves, no upkeep, no reqs, flags `NonMil`, `NoVeteran`, `NoBuild`, `Unbribable`, `AddToCity`, `GreatPerson` (the Builder adds `HelpWonder`, the Spymaster `Diplomat`); art borrowed from Diplomat, Engineers, Caravan, Leader and Spy until `u.great_*` are drawn | `units.ruleset:65` (the flag, 36 of 50 used), `:3687-3952` |
 | Points | `User_Effect_3` per building at `City` range: 1 for Temple, Library, Marketplace, Colosseum (shown as Amphitheater), Courthouse; 2 for University, Bank, Cathedral, Factory, Police Station; 3 for Research Lab, Stock Exchange, Mfg. Plant; 2 for each of 29 wonders and each Resident. `User_Effect_4` 100 under a golden age. `scripts/gp-points-check.py` diffs the 49 rows with `script.lua`'s table | `effects.ruleset:5742-6133` |
-| Pool and birth | Each turn every city adds its points times (100 + percent) / 100 to `fc45_gp_pool_<city id>`; at 150 + 75 × the player's births so far, one great person is born on the city tile, its kind drawn in proportion to the city's sources, and the pool resets. The first player to research Philosophy, Theology, Economics or Electricity gets a Sage, Oracle, Magnate or Builder in the capital | `script.lua:635-792`, `:879-892` |
+| Pool and birth | Each turn every city adds its points times (100 + percent) / 100 to `fc45_gp_pool_<city id>`; at 150 + 200 × the player's births so far (75 until issue 166), one great person is born on the city tile, its kind drawn in proportion to the city's sources, and the pool resets. The first player to research Philosophy, Theology, Economics or Electricity gets a Sage, Oracle, Magnate or Builder in the capital | `script.lua:635-792`, `:879-892` |
 | Settling | "Join City" by a great person needs no Resident of its kind in the city (seven enablers with a `target_reqs` row; the stock enabler excludes `GreatPerson`); the `pop_cost` citizen is the server's, the Resident building Lua's | `actions.ruleset:1391-1491`; `script.lua:800-809` |
 | Residents | Seven `Improvement` buildings with `MinYear 9999 World` so nobody builds them (`edit.create_building` ignores reqs): Sage +25 % science, Builder +3 shields on the centre, Magnate +3 trade on the centre and +25 % gold, Virtuoso `History` 3 and +25 % luxury, Oracle `Make_Content` 2, Commander `Veteran_Build` 1, Spymaster `Spy_Resistant` 50 and `Incite_Cost_Pct` 100; each gives 2 points | `buildings.ruleset:2504-2664`; `effects.ruleset:6134-6220` |
 | Deeds | "User Action 3" (Great Deed, target Self, consumes the actor): Sage `edit.give_tech(owner, nil, 0, true, ...)` (the cheapest tech, `free_tech_method`); Magnate 100 + 30 × city size gold, doubled in a foreign city; Virtuoso `edit.add_city_history(city, 400)`; Oracle founds the Sanctum (`SmallWonder`, `Make_Content` 1 at Player range, `History` 3), moved from any city that had it; Commander `Unit:transform(type, -1)` on every own unit on the tile, one level up. Enablers: Sage, Virtuoso and Oracle in a city whose tile is not foreign (`DiplRelTile`), the Magnate in any city, the Commander anywhere. Builders use the native "Help Wonder" (240 shields), Spymasters the diplomat actions (the `UnitFlag Diplomat` embassy enabler already exists at `actions.ruleset:651`, so the design's extra row was not needed). Great people are kept out of "Disband Unit Recover" | `actions.ruleset:496-506`, `:1150`, `:1163`, `:3075-3113`; `effects.ruleset:6221-6236` (the Sanctum); `script.lua:811-857` |
@@ -852,7 +853,7 @@ native diplomat actions as its deed). The rest changed the fork at commit 9c9b25
 | Archery in era I | `class = "Ancient"`; Archers stay in the era I roster table, Horse Bowmen keep era II (they need Horseback Riding too) | `civ45/techs.ruleset:186` |
 | Horses gate the mounted units now | `[extra_horses]` and `[resource_horses]` (shield 1, trade 1) on Grassland and Plains; `"Extra", "Horses", "City"` on Horsemen, Horse Bowmen, Chariot, Zealots, Knights, Dragoons and Cavalry, as Iron and Oil already were | `terrain.ruleset:599,815,1114,2164`; `units.ruleset:1671-1965` |
 | Keep the three techs, 95 in all | Labor Union (Communism + Mobile Warfare, Modern), Nanomaterials (Plastics + Computers, Information), Ruler Apotheosis (Polytheism + Mysticism, Classical); the Altar needs Ruler Apotheosis, the Space Elevator and its Tether Nanomaterials, Women's Suffrage Labor Union (it was at Conscription); Mechanized Infantry stays at Robotics, which the checker's re-homed table had already settled | `techs.ruleset:545,720,906`; `buildings.ruleset:1260,1520,2307,2478` |
-| The steep curve | `cost_pct` 100, 150, 175, 200, 225, 250, 275 by era (the first build: 100, 100, 110, 120, 130, 140, 150) | `techs.ruleset:49-75` |
+| The steep curve | `cost_pct` 100, 150, 175, 200, 225, 250, 275 by era (the first build: 100, 100, 110, 120, 130, 140, 150); eras V to VII lowered to 200 on 2026-10-18 (issue 167, tech-tree.md section 1) | `techs.ruleset:49-75` |
 | Themed unlocks | Physics: Siege Workshop (`Veteran_Build` 1 for `UnitFlag Siege`); Medicine: Apothecary (`Health_Pct` 30, `HP_Regen` 10 for Land units in the city); Electricity: Telegraph Office (`Max_Trade_Routes` 1) | `buildings.ruleset:2504-2572`; `effects.ruleset:6272-6306` |
 | Alpine Troops and Crusaders back, nation-neutral | Alpine Troops at Tactics: strength 14, cost 100, move 1, `IgTer`, `Gun`, obsolete by Infantry (civ45's 7/4 under one strength). Zealots at Monotheism: strength 8, cost 50, move 2, `Mounted`, `Withdraws`, Horses and no Iron, obsolete by Knights (civ45's Crusaders under a name that belongs to no faith) | `units.ruleset:1197,1834` |
 | Transport cargo 4 | `transport_cap = 4` | `units.ruleset:3149` |
@@ -963,6 +964,12 @@ turn, as the reference behaviour in the "Production, whipping and drafting" para
 unhappy face for 10 turns per whip, three per draft, 1 to 5 drafts a turn by map size). Lines are the fork's at
 the patch.
 
+Changed 2026-10-18 (issue 157): the three unrest buildings now carry `City_Unrest` 1, 2 and 4, a Freeciv45 engine
+effect (fork `common/city.c`, `citizen_base_mood`) that turns that many of the city's base content citizens
+unhappy before buildings count, instead of `Make_Content` -1, -2 and -4. The old form could only cancel content
+from temples and the like, so a city with no content buildings felt nothing. The rules test founds a size-1 city
+with no buildings and sees it fall into disorder with one face and calm again without it.
+
 ### What the ruleset says now
 
 | Rule | Built | Where |
@@ -971,7 +978,7 @@ the patch.
 | How a face is held | Three hidden buildings, Draft Unrest 1, 2 and 4 (genus Improvement, `MinYear 9999`, cost 1, no upkeep, sabotage 0), with `Make_Content` -1, -2 and -4; Lua keeps the set that sums to the faces. Each city's record is a scalar global `fc45_unrest_<city id>` = `"<expiry turn>:<faces>;..."`, so it survives a save | `buildings.ruleset`, `effects.ruleset` (end), `script.lua` `fc45_unrest_apply` |
 | Expiry | `turn_begin` drops the expired entries of every recorded city and sets its buildings to match | `fc45_unrest_turn` |
 | No escape by selling | Improvements can be sold (`common/improvement.c:1114`, `is_building_sellable` is genus Improvement); `building_lost` (emitted for a sale, `server/citytools.c:3000-3006`, and for disasters) puts an unrest building back at once. `edit.remove_building` emits nothing (`api_server_edit.c:769-786`), so Lua's own removals do not loop | `fc45_unrest_lost` |
-| The draft limit | One draft a turn per 400 land tiles of the map, 1 to 5 (`fc45_draft_limit`, counted once and saved as `fc45_draft_limit_n`; the default map of 10 to 12 players at `tilesperplayer` 100 gives 3). The draft that reaches the limit gives the player the hidden "Draft Quota" small wonder in its capital, which Militia and Conscripts require to be absent (`"Building", "Draft Quota", "Player", FALSE` in their `reqs`), so no other city of that player completes one in the same turn's end; `turn_begin` removes it. The Levy has no quota: whipping is limited by citizens, not by the empire | `units.ruleset` (Militia, Conscripts), `script.lua` `fc45_draft_counted` |
+| The draft limit | One draft a turn per 400 land tiles of the map, 1 to 5 (`fc45_draft_limit`, counted once and saved as `fc45_draft_limit_n`; the default map of 10 to 12 players at `tilesperplayer` 110 gives 3, as 100 did). The draft that reaches the limit gives the player the hidden "Draft Quota" small wonder in its capital, which Militia and Conscripts require to be absent (`"Building", "Draft Quota", "Player", FALSE` in their `reqs`), so no other city of that player completes one in the same turn's end; `turn_begin` removes it. The Levy has no quota: whipping is limited by citizens, not by the empire | `units.ruleset` (Militia, Conscripts), `script.lua` `fc45_draft_counted` |
 | Logged | `FC45UNREST turn T <city> of <player> +F by <unit>, now N` and `FC45DRAFTS turn T <unit> of <player> is draft n of L this turn` in the server log | `script.lua` |
 
 ### The limit of the unrest
@@ -1014,9 +1021,9 @@ turns: the default AI rarely drafts more than once a turn.
 
 ### Open
 
-- A full malus on base content needs an engine change (filed).
-- "The city keeps at least 5 citizens" for a draft and "at most half the population" for a whip are not built
-  (filed); they are a design call because they would end most of the AI's drafting.
+- The full malus on base content is built as the `City_Unrest` effect (issue 157, 2026-10-18).
+- Draft sizes, built for balance report 2 (issue 158, 2026-10-18, units-and-upgrades.md, John to confirm): a Levy
+  needs a city of size 3, Militia and Conscripts size 4; there is no cap on how much of a city may be whipped.
 - The AI does not weigh the unrest when it drafts.
 - A captured city keeps its unrest under its new owner (the record is the city's, and a building lost in the
   capture is put back).

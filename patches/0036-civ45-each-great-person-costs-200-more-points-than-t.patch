@@ -1,0 +1,45 @@
+From 8ca75dd7558afa293cd641aa63dddb49b59f8674 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 13:05:39 -0500
+Subject: [PATCH 36/41] civ45: each great person costs 200 more points than the
+ last, not 75
+
+Issue 166: with a step of 75 an AI civ had up to 26 great people in 475
+turns (7 to 22 each in balance report 1), and the design
+(great-people.md) wants 3 to 12. A step of 200 gives 2 to 15 in a
+ten-AI game (75 in all instead of 175); 300 gave 1 to 10 but slowed
+the tree, since Great Sages and golden ages feed research.
+---
+ data/civ45/README.civ45 | 2 +-
+ data/civ45/script.lua   | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index dad53fb..4518f00 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -103,7 +103,7 @@ Differences from sandbox
+ - Great people (notes/freeciv45/design/great-people.md): every city
+   collects great-person points from its temples, libraries, markets,
+   theatres, courts and their successors (1 to 3 a turn), from wonders
+-  and settled great people (2); at 150 points, plus 75 for every great
++  and settled great people (2); at 150 points, plus 200 for every great
+   person the player had before, one of seven kinds is born (Great Sage,
+   Builder, Magnate, Virtuoso, Oracle, Commander, Spymaster), drawn by the
+   city's sources. Each settles (Join City founds a Resident building:
+diff --git a/data/civ45/script.lua b/data/civ45/script.lua
+index f503900..a75ecbe 100644
+--- a/data/civ45/script.lua
++++ b/data/civ45/script.lua
+@@ -641,7 +641,7 @@ signal.connect("turn_begin", "fc45_victory_turn_begin")
+ -- these actions, so fc45_gp_ai() spends its great people through the same enablers each turn. Every counter
+ -- is a scalar global named by a city, player or unit id, so it survives a save (only scalars do).
+ FC45_GP_BASE = 150
+-FC45_GP_STEP = 75
++FC45_GP_STEP = 200 -- 75 until issue 166: up to 26 great people per AI civ in 475 turns, the design wants 3 to 12
+ FC45_GOLDEN_TURNS = 10
+ 
+ -- Building rule name -> kind, points a turn. Must match the User_Effect_3 rows in effects.ruleset
+-- 
+2.56.0
+

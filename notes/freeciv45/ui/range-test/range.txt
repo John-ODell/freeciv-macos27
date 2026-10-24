@@ -1,0 +1,86 @@
+# A selected unit's movement range (issue 232), on freeciv45iso at 2x: the tiles the focus unit reaches this turn are
+# lit, the range follows moves and focus changes, a click on the unit hides and shows it, a click on the unit while a
+# goto is being given cancels it and keeps the unit selected, and the end of the turn and no focus clear it.
+# Run with QT_SCALE_FACTOR=2 on the 1728 x 1030 pt screen.
+pace 1000
+wait 4000
+dismiss
+wait 1000
+state start
+shot 01-warriors-range
+# the units after it, a Warriors and then a Scout with two moves
+key w
+wait 1000
+state next-warriors
+key w
+wait 1000
+state scout
+shot 02-scout-range
+# move it one tile by a drag: the range shrinks with the move spent
+drag unit 0 96
+wait 2500
+state scout-moved
+shot 03-scout-moved
+# a click on the unit: the range goes, the unit stays selected
+drag unit 0 0
+wait 1000
+state click-hides
+shot 04-click-hides
+# and again: back
+drag unit 0 0
+wait 1000
+state click-shows
+# goto mode, then a click on the unit: the goto is cancelled, no order, the range hidden
+key g
+wait 800
+state goto-mode
+drag unit 0 0
+wait 1000
+state goto-cancelled
+shot 05-goto-cancelled
+# the next unit shows its range again
+key w
+wait 1000
+state next-unit-2
+# a city made with Lua under the Workers and the other units at the start; a click on the unit there still opens the city, as before
+chat /lua cmd edit.create_city(find.unit(nil, 112).owner, find.unit(nil, 112).tile, "Testburg")
+wait 2500
+dismiss
+# the new city opens on its own; close it, so the click below is what opens it
+key escape
+wait 1000
+state in-city
+drag unit 0 0
+wait 1500
+state click-in-city
+shot 06-click-in-city
+key escape
+wait 1000
+state city-closed
+key w
+wait 1000
+state next-unit
+# done with every unit: no focus, no range
+key space
+wait 600
+key space
+wait 600
+key space
+wait 600
+key space
+wait 600
+key space
+wait 600
+key space
+wait 1000
+state no-focus
+shot 07-no-focus
+# end the turn: a new turn gives a focus unit and its range back
+endturn
+wait 300
+state turn-done
+wait 6000
+dismiss
+state new-turn
+shot 08-new-turn
+quit

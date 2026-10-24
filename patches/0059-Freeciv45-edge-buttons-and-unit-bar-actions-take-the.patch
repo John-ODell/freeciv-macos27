@@ -1,0 +1,210 @@
+From 7ac05c8fb7bc87889a4837a73aff5afba8f5c246 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Thu, 22 Oct 2026 22:29:15 -0500
+Subject: [PATCH] Freeciv45: edge buttons and unit-bar actions take the
+ tileset's pictures
+
+The right-edge column's buttons and the unit bar's action boxes used the
+Qt theme's icons, which in NightStalker are blue orbs that look alike, so
+the player had to hover each one to find it.  A tileset can now give
+each its own picture: ui.edge.<name> (map, research, nations, cities,
+units, economy, more) and ui.action.<name> (settle, goto, fortify,
+sentry, wait, done).  When the tileset has none the theme icon stays.
+The edge column reloads its pictures when the tileset changes.
+---
+ client/gui-qt/edgebar.cpp | 54 ++++++++++++++++++++++++++++++++++++++-
+ client/gui-qt/edgebar.h   |  5 ++++
+ client/gui-qt/mapview.cpp |  3 +++
+ client/gui-qt/unitbar.cpp | 18 ++++++++-----
+ 4 files changed, 73 insertions(+), 7 deletions(-)
+
+diff --git a/client/gui-qt/edgebar.cpp b/client/gui-qt/edgebar.cpp
+index 64e497a..26eb789 100644
+--- a/client/gui-qt/edgebar.cpp
++++ b/client/gui-qt/edgebar.cpp
+@@ -53,6 +53,7 @@
+ #include "messagewin_common.h"
+ #include "options.h"
+ #include "text.h"
++#include "tilespec.h"
+ 
+ // gui-qt
+ #include "cityoverlay.h"
+@@ -389,13 +390,33 @@ void top_strip::set_turn_done_attention(bool attention)
+   set_attention(end_turn_btn, attention);
+ }
+ 
++/************************************************************************//**
++  The tileset's picture for a button, "ui.<group>.<name>" (ui.edge.map,
++  ui.action.settle); a null pixmap when the tileset has none
++****************************************************************************/
++QPixmap ui_button_pixmap(const char *group, const QString &name)
++{
++  QByteArray tag = QString("ui.%1.%2").arg(group, name).toUtf8();
++  struct sprite *spr;
++
++  if (tileset == nullptr) {
++    return QPixmap();
++  }
++  spr = tiles_lookup_sprite_tag_alt(tileset, LOG_DEBUG, tag.constData(),
++                                    tag.constData(), nullptr, "button",
++                                    tag.constData(), false);
++
++  return (spr != nullptr ? *spr->pm : QPixmap());
++}
++
+ /************************************************************************//**
+   A round button; resource.qss draws the circle
+ ****************************************************************************/
+ edge_button::edge_button(const QString &icon, const QString &tip,
+                          QWidget *parent) : QToolButton(parent)
+ {
+-  setIcon(fc_icons::instance()->get_icon(icon));
++  theme_icon = icon;
++  reload_icon();
+   setIconSize(QSize(BUTTON_ICON, BUTTON_ICON));
+   setFixedSize(BUTTON_SIZE, BUTTON_SIZE);
+   setToolTip(tip);
+@@ -407,6 +428,26 @@ edge_button::edge_button(const QString &icon, const QString &tip,
+   wheel_delta = 0;
+ }
+ 
++/************************************************************************//**
++  The tileset's plate for the button (ui.edge.<name>, so each button has
++  its own colour), else the theme's icon
++****************************************************************************/
++void edge_button::reload_icon()
++{
++  QString name = theme_icon;
++  QPixmap pm;
++
++  // Two theme names differ from the tileset's
++  if (name == "view") {
++    name = "map";
++  } else if (name == "list-add") {
++    name = "more";
++  }
++  pm = ui_button_pixmap("edge", name);
++  setIcon(pm.isNull() ? fc_icons::instance()->get_icon(theme_icon)
++                      : QIcon(pm));
++}
++
+ /************************************************************************//**
+   A line of the tooltip for each extra
+ ****************************************************************************/
+@@ -783,6 +824,17 @@ edge_button *edge_column::add_button(const QString &icon,
+   return btn;
+ }
+ 
++/************************************************************************//**
++  The tileset changed: its button plates too
++****************************************************************************/
++void edge_column::reload_icons()
++{
++  for (edge_button *btn : buttons) {
++    btn->reload_icon();
++  }
++  more_btn->reload_icon();
++}
++
+ /************************************************************************//**
+   The column's button with this icon, for its extras; nullptr if none
+ ****************************************************************************/
+diff --git a/client/gui-qt/edgebar.h b/client/gui-qt/edgebar.h
+index 139eb2d..8c3b76c 100644
+--- a/client/gui-qt/edgebar.h
++++ b/client/gui-qt/edgebar.h
+@@ -65,6 +65,8 @@ private:
+   QPushButton *end_turn_btn;
+ };
+ 
++QPixmap ui_button_pixmap(const char *group, const QString &name);
++
+ /****************************************************************************
+   One round button on the right-edge column
+ ****************************************************************************/
+@@ -73,6 +75,7 @@ class edge_button : public QToolButton
+   Q_OBJECT
+ public:
+   edge_button(const QString &icon, const QString &tip, QWidget *parent);
++  void reload_icon();
+   void set_right_click(void (*func)(void), const QString &hint);
+   void set_wheel(void (*up)(void), void (*down)(void),
+                  const QString &hint);
+@@ -82,6 +85,7 @@ protected:
+   void wheelEvent(QWheelEvent *event) override;
+ private:
+   void add_hint(const QString &hint);
++  QString theme_icon;
+   void (*right_click)(void);
+   void (*wheel_up)(void);
+   void (*wheel_down)(void);
+@@ -114,6 +118,7 @@ class edge_column : public QFrame
+ public:
+   edge_column(QWidget *parent);
+   void update_badges();
++  void reload_icons();
+   edge_button *button(const QString &icon) const;
+ protected:
+   void resizeEvent(QResizeEvent *event) override;
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index be0d8d0..4e910da 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -1405,6 +1405,9 @@ void tileset_changed(void)
+     sci_rep->update_report();
+     sci_rep->repaint();
+   }
++  if (gui()->edgecolumn_wdg != nullptr) {
++    gui()->edgecolumn_wdg->reload_icons();
++  }
+ }
+ 
+ /**********************************************************************//**
+diff --git a/client/gui-qt/unitbar.cpp b/client/gui-qt/unitbar.cpp
+index 18a0136..a5853b3 100644
+--- a/client/gui-qt/unitbar.cpp
++++ b/client/gui-qt/unitbar.cpp
+@@ -53,6 +53,7 @@ extern "C" {
+ // gui-qt
+ #include "canvas.h"
+ #include "cityoverlay.h"
++#include "edgebar.h"
+ #include "fc_client.h"
+ #include "fonts.h"
+ #include "menu.h"
+@@ -268,20 +269,25 @@ void unit_chip::mousePressEvent(QMouseEvent *event)
+ }
+ 
+ /************************************************************************//**
+-  Action button: theme icon, key hint from the shortcut table, tooltip
+-  from the menu.
++  Action button: the tileset's picture (ui.action.<name>) or else the
++  theme icon, key hint from the shortcut table, tooltip from the menu.
+ ****************************************************************************/
+ unit_action_button::unit_action_button(shortcut_id sid, const QString &icon,
+                                        QWidget *parent)
+   : QAbstractButton(parent)
+ {
+-  QPixmap *pm = fc_icons::instance()->get_pixmap(icon);
+   fc_shortcut *sc = fc_shortcuts::sc()->get_shortcut(sid);
+ 
+   action = sid;
+-  if (pm != nullptr) {
+-    icon_pix = *pm;
+-    delete pm;
++  // The theme calls Settle's icon "home"
++  icon_pix = ui_button_pixmap("action", icon == "home" ? "settle" : icon);
++  if (icon_pix.isNull()) {
++    QPixmap *pm = fc_icons::instance()->get_pixmap(icon);
++
++    if (pm != nullptr) {
++      icon_pix = *pm;
++      delete pm;
++    }
+   }
+   hint = shortcut_to_string(sc);
+   setFixedSize(ACTION_SIZE, ACTION_SIZE);
+-- 
+2.56.0
+

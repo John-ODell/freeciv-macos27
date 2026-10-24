@@ -15,8 +15,9 @@ below; --art names that folder): grassland run 15, plains run 6 (row 5, the damp
 run 8, jungle run 17, hills run 16, mountains run 7 (without r4c3, whose ridges share one diagonal with its
 neighbours), desert, tundra and rocky desert run 12, glacier, swamp and sea ice run 13, the plains and desert
 banks and the tundra shore run 14, shallow ocean and lake run 10, deep ocean and inaccessible run 11. Run 9's
-pine row gives t.l0.pine1..3 (cool c1-c3, not drawn yet: the tilespec cannot pick a forest variant by
-neighbouring terrain, issue 127) and, with --olive-pine, two warm olive forest variants. Each cell goes through
+pine row gives t.l0.forest_tundra1..3 (cool c1-c3), the forest drawn on a tile with tundra or glacier among its eight
+neighbours (issue 127: forest gets layer0_match_with = "tundra", which the fork's patch 0030 reads as a second
+variant set; glacier's layer 0 match type is tundra too) and, with --olive-pine, two warm olive forest variants. Each cell goes through
 the art repo's seamless cutter as `seamless.py --size 192 --inset 3 --level` does it (192 px LANCZOS master,
 straight light gradient removed, edges wrapped), giving t.l0.<terrain>1..N; the client picks a variant per tile
 from the tile index. Because the client puts any two variants side by side, the masters of each terrain are first
@@ -24,8 +25,11 @@ matched in tone (match_tone): in CIE Lab every cell is moved to the terrain's me
 contrast to the terrain's mean contrast, so the texture stays and only the cell's overall level changes.
 --no-tone-match skips it, --no-level the gradient removal.
 
-Water (ocean, lake, deep ocean) gets painted layer 0 only: trident's coast pieces on layers 1 and 2 still draw
-the shore over it until the coastline builder exists (issue 81).
+Water (ocean, lake, deep ocean, inaccessible) gets painted layer 0, and the coastline builder (coastline, issue 184,
+part of 81) draws the shore: layer 1 of every water and land tile becomes corner cells, four quarter tiles each
+picked by the three neighbours around that corner, with run 14's beach on both sides of every coast; layer 2 of the
+water tiles draws run 13's glacier as an ice edge next to glacier. The water depths blend into each
+other like the land terrains (fork patch 0031 keeps land and water from blending into each other).
 
 Neighbouring land terrains fade into each other at the tile edge: they get blend_layer = 1, and blend.spec holds
 t.blend_mask, a generated 3 x 3 tile alpha mask that says how strongly a terrain shows in each tile around it
@@ -89,7 +93,8 @@ def parse_spec(path):
 OVERRIDDEN = {"t.l0.grassland1", "t.l0.inaccessible1"}    # terrain45.spec provides these; dropping them here avoids a duplicate-tag warning
 
 # Blending between terrains (patch 0019 in the fork): which terrains take part, and the shape of the fade.
-BLEND_TERRAINS = ("arctic", "desert", "forest", "grassland", "hills", "jungle", "mountains", "plains", "swamp", "tundra")
+BLEND_TERRAINS = ("arctic", "desert", "forest", "grassland", "hills", "jungle", "mountains", "plains", "swamp", "tundra",
+                  "coast", "floor", "lake", "inaccessible")    # water blends only with water (fork patch 0031)
 BLEND_DEPTH = 48      # px into the neighbouring tile where the fade reaches nothing (a quarter tile; set_tile)
 BLEND_PEAK = 0.5      # opacity at the shared edge; both sides blend, so the edge itself is half and half
 # The band wanders (issue 148): BLEND_MASKS masks, the client picking one per edge (fork patch 0028). Along each edge
@@ -117,6 +122,7 @@ def recut(data, spec_rel, out_dir, record, scale=None):
     for g in grids:
         g["cells"] = [(r, c, [t for t in tags if t not in OVERRIDDEN]) for r, c, tags in g["cells"]]
         g["cells"] = [cell for cell in g["cells"] if cell[2]]
+    grids = [g for g in grids if g["cells"]]          # a grid whose every tag is overridden is left out
     gfx = next(re.search(r'gfx\s*=\s*"([^"]+)"', h).group(1) for h in header if re.search(r'gfx\s*=\s*"', h))
     src = Image.open(os.path.join(data, gfx + ".png")).convert("RGBA")
     base = os.path.basename(spec_rel)[:-5]
@@ -162,42 +168,74 @@ PANELS = {
     "run12": "run12/panel2/desert_and_tundra.png", "run13": "run13/panel3/glacier_and_swamp.png",
     "run14": "run14/panel8/shores_and_banks.png", "run15": "run15/panel1/grassland_and_plains.png",
     "run16": "run16/panel5/hills_and_mountains.png", "run17": "run17/panel4/forest_and_jungle.png",
+    "run18": "run18/panel3/glacier_and_swamp.png", "run19": "run19/panel2/desert_and_tundra.png",
+    "run20": "run20/panel8/shores_and_banks.png",
 }
 
 def row(r, cols=range(1, 6)):
     return ["r%dc%d" % (r, c) for c in cols]
 
 # Painted ground, in sheet order: (tag, panel key, panel cells). Each tag's cells become t.l0.<tag>1..N and start on
-# a new sheet row, five to a row. The tags are the ruleset's graphic names (terrain.ruleset); pine is not one yet.
-# Not cut: run 14 rows 1-2 (beach, rocky shore: for the coastline builder, issue 81) and run 11 row 5 (ice on deep
-# water: as a deep ocean variant it would sit on every ocean).
+# a new sheet row, five to a row. The tags are the ruleset's graphic names (terrain.ruleset), and forest_tundra is
+# forest next to tundra (PAIRED).
+# Not cut as ground: run 14 rows 1-2 (beach, rocky shore: SHORES, the coastline builder) and run 11 row 5 (ice on
+# deep water: as a deep ocean variant it would sit on every ocean; run 21 row 5, its retake, is not cut either).
 PLAN = [
     ("grassland", "run15", row(1) + row(2)),
     ("plains", "run6", row(3) + row(4)),
-    ("plains", "run14", row(3)),                                   # plains bank
+    ("plains", "run20", row(3)),                                   # plains bank
     ("forest", "run8", row(1) + row(2)),
     ("jungle", "run17", row(3) + row(4)),
     ("hills", "run16", row(1) + row(2) + row(3)),
     ("mountains", "run7", ["r4c1", "r4c2", "r4c4", "r4c5"] + row(5)),
-    ("desert", "run12", row(1) + row(2) + row(5)),                 # dunes, then rocky desert
+    ("desert", "run12", row(1) + row(2)),                          # dunes
+    ("desert", "run19", row(5)),                                   # rocky desert
     ("desert", "run14", row(4)),                                   # desert bank
-    ("tundra", "run12", row(3) + row(4)),
+    ("tundra", "run19", row(3) + row(4)),
     ("tundra", "run14", row(5)),                                   # tundra shore
     ("arctic", "run13", row(1) + row(2) + row(5)),                 # glacier, then sea ice
-    ("swamp", "run13", row(3) + row(4)),
+    ("swamp", "run18", row(3) + row(4)),
     ("coast", "run10", row(1) + row(2) + row(3)),
     ("lake", "run10", row(4) + row(5)),
     ("floor", "run11", row(1) + row(2) + row(3)),
     ("inaccessible", "run11", row(4)),
-    ("pine", "run9", row(5, (1, 2, 3))),                           # cool pine, issue 127
+    ("forest_tundra", "run9", row(5, (1, 2, 3))),                  # cool pine, issue 127
 ]
 OLIVE_PINE = ("forest", "run9", row(5, (4, 5)))   # run 9's warm olive pine; --olive-pine adds it
 # Tile sections drawn from the painted variants instead of trident's matched sprites (grassland already is).
 PAINTED = ("plains", "forest", "jungle", "hills", "mountains", "desert", "tundra", "arctic", "swamp", "coast", "lake",
            "floor", "inaccessible")
 # Painted terrains whose trident layers 1 and 2 would cover the painted ground: trident's glacier draws its whole ice
-# cap on layer 1, so the tile keeps layer 0 only (the shore against water is drawn by the water tiles).
+# cap on layer 1, so the tile keeps its layers' match types (water on layer 1, so no beach by the ice; arctic on layer
+# 2, so the water tiles draw the ice edge) but no sprites on them (the shore is drawn by the water tiles).
 LAYER0_ONLY = ("arctic",)
+# Painted terrains with a second variant set, t.l0.<terrain>_<type>1..N, drawn where one of the eight neighbours has
+# layer 0 match type <type> (fork patch 0030; an unpatched client draws no ground for these terrains).
+PAIRED = {"forest": "tundra"}
+
+# The coastline builder (issue 184). Layer 1 draws the beach where land meets water, on both sides of the edge:
+# water tiles (WATER) and land tiles (LAND) get corner cells matched as a pair (water against land), so the sand runs
+# across the tile edge without a seam. Glacier is neither (its layer 1 match type is "ice"), so it gets no beach.
+# Layer 2 draws the ice edge on water next to glacier (matched as before: water against anything else on layer 2,
+# where only glacier differs). Each look is (panel, cell, look name).
+WATER = ("coast", "floor", "lake", "inaccessible")
+LAND = ("desert", "forest", "grassland", "hills", "jungle", "mountains", "plains", "swamp", "tundra")
+BEACH = ("run14", "r1c3", "beach")      # run 14's rocky shore (row 2) stays unused: a lake's shore meets land cells too
+ICE = ("run13", "r1c1", "ice")
+# Shape of the shore, as shares of the tile: on the water side the solid band (sand, then wet sand) reaches
+# SHORE_DEPTH into the tile, give or take SHORE_WAVE of it (smooth noise that repeats every tile, so neighbouring
+# tiles join), then the sand shows through shallow water for SHORE_SHALLOW more; on the land side the sand reaches
+# LAND_DEPTH, give or take LAND_WAVE, thinning out into the ground. Ice: ICE_DEPTH, ICE_WAVE and ICE_FADE. Every band
+# with its fade stays inside half a tile, so each quarter cell needs only its own three neighbours.
+SHORE_DEPTH, SHORE_WAVE, SHORE_SHALLOW = 0.13, 0.4, 0.12
+LAND_DEPTH, LAND_WAVE = 0.16, 0.5
+ICE_DEPTH, ICE_WAVE, ICE_FADE = 0.28, 0.25, 0.10
+SHORE_ROUND = 0.03       # the inner corner of a bay is rounded over this share of the tile (a soft minimum)
+# The quarter cells of a tile in the client's order (u d r l: the north, south, east and west corners of the tile
+# in its direction4 order), each with its top left in the tile and its three neighbours as (dx, dy), in the order of
+# the tag's three digits or letters.
+QUARTERS = (("u", (0, 0), ((-1, 0), (-1, -1), (0, -1))), ("d", (1, 1), ((1, 0), (1, 1), (0, 1))),
+            ("r", (1, 0), ((0, -1), (1, -1), (1, 0))), ("l", (0, 1), ((0, 1), (-1, 1), (-1, 0))))
 
 CONTRAST_CLAMP = (0.75, 1.33)    # how far match_tone may scale a cell's contrast, so each cell keeps its own texture
 
@@ -231,10 +269,22 @@ def luma_range(tiles):
     means = [ImageStat.Stat(t.convert("L")).mean[0] for t in tiles]
     return min(means), max(means)
 
+def load_cutter(cutter):
+    spec = importlib.util.spec_from_file_location("seamless", cutter); seamless = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seamless); return seamless
+
+def cut_master(seamless, image, box, level=True):
+    """One panel cell as seamless.py --size MASTER --inset 3 [--level] cuts it: the MASTER px seamless master."""
+    x0, y0, x1, y1 = box; inset = 3
+    cell = image.crop((x0 + inset, y0 + inset, x1 - inset, y1 - inset))
+    side = min(cell.size)
+    master = cell.crop((0, 0, side, side)).resize((MASTER, MASTER), Image.LANCZOS)
+    if level: master = seamless.level(master)          # as seamless.py --level: before the edges wrap
+    return seamless.make_seamless(master)
+
 def painted(panels, cutter, out_dir, record, plan, tone_match=True, level=True):
     """Cut the planned panel cells into TILE px seamless ground variants; write terrain45.png and terrain45.spec."""
-    spec = importlib.util.spec_from_file_location("seamless", cutter); seamless = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(seamless)
+    seamless = load_cutter(cutter)
     panels = {key: path for key, path in panels.items() if any(k == key for _, k, _ in plan)}
     images = {key: Image.open(path).convert("RGB") for key, path in panels.items()}
     boxes = {key: seamless.cells(im) for key, im in images.items()}
@@ -244,12 +294,7 @@ def painted(panels, cutter, out_dir, record, plan, tone_match=True, level=True):
             n = count.get(terrain, 0); count[terrain] = n + 1
             if terrain != prev or n % 5 == 0: srow += 1
             prev = terrain
-            x0, y0, x1, y1 = boxes[key][name]; inset = 3
-            cell = images[key].crop((x0 + inset, y0 + inset, x1 - inset, y1 - inset))
-            side = min(cell.size)
-            master = cell.crop((0, 0, side, side)).resize((MASTER, MASTER), Image.LANCZOS)
-            if level: master = seamless.level(master)          # as seamless.py --level: before the edges wrap
-            master = seamless.make_seamless(master)
+            master = cut_master(seamless, images[key], boxes[key][name], level)
             placed.append([master, n % 5, srow, terrain])
             lines.append('  %d, %d, "t.l0.%s%d"   ; %s %s' % (srow, n % 5, terrain, n + 1, key, name))
     tones = []
@@ -360,6 +405,100 @@ def blend_mask(out_dir, record):
                   % (NAME, BLEND_MASKS, BLEND_PEAK, BLEND_SWAY, BLEND_DEPTH, round(100 * BLEND_WANDER), BLEND_CLUMPS,
                      SAME_DEPTH, side * len(masks), side))
 
+def shore_cell(tex, look, quarter, land, noise, grain=None):
+    """One quarter cell (TILE/2 px, RGBA) of a shore. quarter is a QUARTERS entry, land the three neighbours' flags in
+    its order (the other side of the shore: land for a water tile, water for a land tile); tex the TILE px texture,
+    sampled at the pixel's place in the tile, so cells side by side and tiles side by side join. The distance to the
+    other side (a soft minimum over the flagged neighbours, each a whole tile) against the band's depth there gives
+    the shape. Looks: "beach" and "ice" on the water side, "sand" on the land side (grain thins its inner edge)."""
+    half = TILE // 2; (qx, qy), near = quarter[1], quarter[2]
+    out = Image.new("RGBA", (half, half), (0, 0, 0, 0)); px, tx = out.load(), tex.load()
+    boxes = [(dx * TILE, dy * TILE) for (dx, dy), on in zip(near, land) if on]
+    if not boxes: return out
+    if look == "ice": depth, wave, fade = ICE_DEPTH * TILE, ICE_WAVE, ICE_FADE * TILE
+    elif look == "sand": depth, wave, fade = LAND_DEPTH * TILE, LAND_WAVE, 0
+    else: depth, wave, fade = SHORE_DEPTH * TILE, SHORE_WAVE, SHORE_SHALLOW * TILE
+    k = SHORE_ROUND * TILE
+    foam_strength = {"beach": 0.55, "ice": 0.0, "sand": 0.0}[look]
+    for y in range(half):
+        for x in range(half):
+            X, Y = qx * half + x + 0.5, qy * half + y + 0.5
+            ds = [math.hypot(max(bx - X, 0, X - bx - TILE), max(by - Y, 0, Y - by - TILE)) for bx, by in boxes]
+            d = min(ds) if len(ds) == 1 else -k * math.log(sum(math.exp(-v / k) for v in ds))
+            band = depth * (1 + wave * noise(X, Y))
+            u = d / band
+            r, g, b = tx[int(X) % TILE, int(Y) % TILE]
+            if look == "sand":
+                # solid at the edge, then thinning out in grains into the land's own ground
+                a = smoothstep_fade(max(u - 0.35, 0) / 0.65 + 0.35 * grain(X, Y) * min(u / 0.35, 1), 1.0)
+                if a > 0.004: px[x, y] = (r, g, b, round(255 * a))
+                continue
+            if look == "ice":
+                rim = math.exp(-((u - 0.92) / 0.07) ** 2)                 # a bright lip at the ice front
+                r, g, b = (min(255, c * (1 + 0.18 * rim)) for c in (r, g, b))
+                if u <= 1: a = 1.0
+                else:
+                    a = 0.55 * smoothstep_fade(d - band, fade)           # ice under the water, fading out
+                    r, g, b = (0.6 * c + 0.4 * w for c, w in zip((r, g, b), (175, 212, 232)))
+            else:
+                wet = 1 - 0.28 * min(max((u - 0.55) / 0.45, 0), 1) ** 2   # sand darkens towards the water
+                r, g, b = r * wet, g * wet, b * wet
+                a = 1.0 if u <= 1 else 0.6 * smoothstep_fade(d - band, fade)
+                foam = foam_strength * math.exp(-((u - 1.0) / 0.06) ** 2)
+                if foam > 0.01:
+                    na = max(a, foam)
+                    mix = foam / na
+                    r, g, b = (c * (1 - mix) + f * mix for c, f in zip((r, g, b), (236, 240, 234)))
+                    a = na
+            if a > 0.004: px[x, y] = (round(r), round(g), round(b), round(255 * min(a, 1.0)))
+    return out
+
+def pair_tag(layer, terrain, q, flags, own, other):
+    """A corner cell tag of a layer matched as a pair: the neighbours' match types by first letter."""
+    return "t.l%d.%s_cell_%s_%s" % (layer, terrain, q, "_".join(other if f else own for f in flags))
+
+def coastline(panels, cutter, out_dir, record, level=True):
+    """Write coast.png and coast.spec, three rows of 32 quarter cells (QUARTERS, three neighbour flags each): the
+    beach on water tiles (t.l1.<water>_cell_<q>_<w|l>_<w|l>_<w|l>), the sand on land tiles
+    (t.l1.<land>_cell_<q>_<l|w>_...), both cut from BEACH, and the ice edge on water tiles from ICE
+    (t.l2.<water>_cell_<q><abc>, a MATCH_SAME layer: digit 1 where the neighbour is glacier)."""
+    seamless = load_cutter(cutter)
+    rows = [(BEACH, "beach", [(lambda q, f, w=w: pair_tag(1, w, q, f, "w", "l")) for w in WATER],
+             "water tiles next to land, layer 1"),
+            (BEACH, "sand", [(lambda q, f, t=t: pair_tag(1, t, q, f, "l", "w")) for t in LAND],
+             "land tiles next to water, layer 1"),
+            (ICE, "ice", [(lambda q, f, w=w: "t.l2.%s_cell_%s%d%d%d" % (w, q, *f)) for w in WATER],
+             "water tiles next to glacier, layer 2")]
+    images, masters = {}, {}
+    half = TILE // 2; tag_lines = []
+    sheet = Image.new("RGBA", (half * 32, half * len(rows)), (0, 0, 0, 0))
+    for row_no, ((key, name, _), look, tags, what) in enumerate(rows):
+        if key not in images: images[key] = Image.open(panels[key]).convert("RGB")
+        if (key, name) not in masters:
+            master = cut_master(seamless, images[key], seamless.cells(images[key])[name], level)
+            masters[key, name] = master.resize((TILE, TILE), Image.LANCZOS) if master.size != (TILE, TILE) else master
+        noise = clump_noise(random.Random(184 if look != "ice" else 185))   # beach and sand share it: they meet
+        grain = clump_noise(random.Random(186))
+        fine = lambda x, y: grain(x * 4, y * 4)       # four times finer, still repeating every tile
+        col = 0
+        for q in QUARTERS:
+            for value in range(8):
+                flags = [(value >> i) & 1 for i in range(3)]
+                sheet.paste(shore_cell(masters[key, name], look, q, flags, noise, fine), (col * half, row_no * half))
+                tag_lines.extend('  %d, %d, "%s"' % (row_no, col, tag(q[0], flags)) for tag in tags)
+                col += 1
+        record.append("| `%s/coast.spec` | `%s` %s (%s), through `%s`: %s cells for %s | generated, %d px quarter cells "
+                      "| %dx%d |" % (NAME, key, name, os.path.basename(panels[key]), os.path.basename(cutter), look, what,
+                                     half, half * 32, half * len(rows)))
+    sheet.save(os.path.join(out_dir, "coast.png"), optimize=True)
+    with open(os.path.join(out_dir, "coast.spec"), "w") as f:
+        f.write("; Shore cells for the Freeciv45 test tileset, generated by tilesets/make-%s.py (coastline) from\n"
+                "; painted cells: quarter tiles of beach on both sides of a coast (layer 1) and of ice on water next\n"
+                "; to glacier (layer 2).\n\n"
+                '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    John O\'Dell (sheet workflow)\n"\n\n'
+                '[file]\ngfx = "%s/coast"\n\n[grid_main]\n\nx_top_left = 0\ny_top_left = 0\ndx = %d\ndy = %d\n\n'
+                'tiles = { "row", "column", "tag"\n%s\n}\n' % (NAME, NAME, half, half, "\n".join(tag_lines)))
+
 def tilespec(data, out_root, files, blend=True):
     """trident.tilespec with sizes, offsets, name and file list changed; the PAINTED terrains as plain variants;
     with blend, blend_layer 1 for BLEND_TERRAINS."""
@@ -393,9 +532,20 @@ def tilespec(data, out_root, files, blend=True):
         if key == "summary": out.append('summary = _("Freeciv45 test tileset: %d px overhead squares, painted ground for every terrain, scaled trident placeholders.")' % TILE); continue
         if section and section[5:] in PAINTED and key in ("layer0_match_with", "layer0_sprite_type"):
             continue    # <terrain>1..N variants from terrain45.spec, no edge or corner matching
+        if section and section[5:] in PAIRED and key == "layer0_match_type":
+            out.append(line)
+            out.append('layer0_match_with = "%s"' % PAIRED[section[5:]]); continue    # the second variant set
+        if section == "layer1" and key == "match_types":
+            out.append('match_types = "water", "land", "ice"'); continue         # ice: glacier, which gets no beach
         if section and section[5:] in LAYER0_ONLY:
-            if key == "num_layers": out.append("num_layers = 1"); continue
-            if key and re.match(r"layer[12]_", key): continue
+            if key and re.match(r"layer[12]_(match_with|sprite_type)", key): continue    # match types only, no sprites
+            if key == "layer1_match_type": out.append('layer1_match_type = "ice"'); continue
+        if section and section[5:] in WATER:                                     # coast.spec: beach and ice cells
+            if key == "layer1_match_with": out.append('layer1_match_with = "land"'); continue
+            if key == "layer2_match_with":
+                out.append(line); out.append('layer1_sprite_type = "corner"\nlayer2_sprite_type = "corner"'); continue
+        if section and section[5:] in LAND and key == "layer1_match_type":    # coast.spec: sand cells
+            out.append(line); out.append('layer1_match_with = "water"\nlayer1_sprite_type = "corner"'); continue
         if blend and key == "blend_layer" and section and section[5:] in BLEND_TERRAINS:
             out.append("blend_layer = 1"); continue     # neighbours fade in after layer 0, under the coast cells
         out.append(line)
@@ -427,6 +577,7 @@ def main():
             files.append("%s/%s" % (NAME, os.path.basename(rel)))
             if rel == "trident/tiles.spec":
                 files.append("%s/terrain45.spec" % NAME)
+                files.append("%s/coast.spec" % NAME)
                 if not a.no_blend: files.append("%s/blend.spec" % NAME)
         elif map_misc_scale(rel) and map_misc_scale(rel) != 1:
             recut(a.data, rel, out_dir, record, scale=map_misc_scale(rel))
@@ -437,6 +588,8 @@ def main():
     cutter = a.cutter or os.path.join(os.path.dirname(os.path.abspath(a.art)), "tools", "seamless.py")
     painted({key: os.path.join(a.art, rel) for key, rel in PANELS.items()}, cutter, out_dir, record, plan,
             tone_match=not a.no_tone_match, level=not a.no_level)
+    coastline({key: os.path.join(a.art, rel) for key, rel in PANELS.items()}, cutter, out_dir, record,
+              level=not a.no_level)
     if not a.no_blend: blend_mask(out_dir, record)
     tilespec(a.data, a.out, files, blend=not a.no_blend)
     print("| spec | source | scaling | sheet |\n|---|---|---|---|\n" + "\n".join(record))

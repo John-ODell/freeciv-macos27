@@ -71,6 +71,8 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - freeciv (main, 3.3.90-dev, commit 3f0038d8), freeciv-S3_2 (3.2.6+, commit 44e6898c),
   freeciv-web, freeciv-environments, freeciv-website, all from https://github.com/freeciv/.
 - github-cleanhub (John-ODell) cloned to /tmp/cleanhub-ref for the GitHub workflow rules.
+- fcw.org-server (FCW, the Freeciv-web fork behind freecivweb.com), from https://github.com/Lexxie9952/fcw.org-server,
+  commit e27cac3, 603 MB, cloned 2026-10-18 at John's request for study (notes/freeciv45/fcw/).
 
 ## Not touched
 
@@ -118,3 +120,41 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
   circular padding), far from the painted-realism target, so John dropped it. `~/freeciv-builds/art-venv`,
   `~/freeciv-builds/hf-cache` and `~/freeciv-builds/art` were deleted (7.7 GB freed). Nothing remains installed from it;
   terrain art continues through the ChatGPT requests in ~/Desktop/asset_generator/freeciv45/.
+
+## 2026-10-18, angled tileset as John's default (issue 195)
+
+- `~/.freeciv/3.2/freeciv45iso.tilespec` and `~/.freeciv/3.2/freeciv45iso`: symlinks to the main checkout's
+  `~/Desktop/freeciv-port/tilesets/` (issue 190, PR 193), made the same way as the freeciv45test links above. Delete
+  the two links to uninstall.
+- `~/.freeciv/freeciv-client-rc-3.2`, line 34: `default_tileset_square_name` changed from `"freeciv45test"` to
+  `"freeciv45iso"`. That name covers both overhead and iso square tilesets, so civ45 (topology ISO since patch 0032)
+  and any other square-tile game now open on freeciv45iso when no `-t` is given. The file before the change is kept at
+  `~/freeciv-night/freeciv-client-rc-3.2.before-195`. To undo, set the line back to `"freeciv45test"` (overhead) or
+  `"amplio2"`. A Qt client that is open while the file is edited writes its own options back when it quits, so edit
+  it only with the client closed.
+- `~/Desktop/freeciv-port` (main checkout): fast-forwarded to origin/main for the links' target.
+- `~/freeciv-builds/qt`: rebuilt from `macos27-port` at 563ce2a (patches 0032 and 0033) with `scripts/build.sh qt`.
+  Without 0033 the client still loads freeciv45iso but blends only through amplio2's thin dither tile.
+- Checked offscreen: a driver client with a copy of these options, no `-t` and `~/.freeciv/3.2` on its data path
+  opened the civ45 ISO game on freeciv45iso (the map area is pixel-identical to a run forced with `-t freeciv45iso`),
+  with no tileset suggestion window and no tileset warning.
+- Not chosen: shipping freeciv45iso with the build at a priority above amplio2's 25. That would change the iso
+  default for every player and every ruleset, and it needs patch 0033 in the build. It is John's call.
+
+## 2026-10-21, first Freeciv45.app
+
+- `~/freeciv-builds/apps/Freeciv45.app` (183 MB, self-contained, ad-hoc signed) from `scripts/bundle.sh qt --game
+  freeciv45` on main at d4a9eaa. Its client is `~/freeciv-builds/qt` (patches to 0057, no test driver) and it carries
+  the freeciv45iso tileset with the start picture, icons and UI icons of PRs 297 and 299; its Dock icon is
+  `tilesets/freeciv45iso/freeciv45.icns`. Options go to `~/.freeciv/freeciv45-client-rc-3.2`. Nothing new from
+  Homebrew. Git-ignored, safe to delete and regenerate.
+- Checked: a copy (with Qt's offscreen plugin added, the copy only) ran 20 s on the start page with a fresh HOME.
+- Later the same night: `~/freeciv-builds/qt` rebuilt with `scripts/build.sh qt` from fork branch series-0058 (098b172,
+  patch 0058, the unit bar's Settle box), and `Freeciv45.app` rebundled on it from main at 404dae3. No new formulae.
+
+## 2026-10-22, the client and Freeciv45.app at patch 0059
+
+- `~/freeciv-builds/qt` was rebuilt with `scripts/build.sh qt` from fork branch series-0059 (7ac05c8). Patch 0059 makes the right-edge buttons and unit-bar actions take the tileset's pictures. The build had 0 compiler warnings.
+- `Freeciv45.app` was rebundled on it from main at c99ea1a (184 MB). It carries `freeciv45iso/ui_buttons.spec`.
+- No new formulae. Git-ignored, safe to delete and regenerate.
+- Later the same night: `~/freeciv-builds/qt` was rebuilt from fork branch series-0060 (d5d63ae). Patch 0060 adds the unit bar's Road, Irrigate and Mine boxes. The build had 0 compiler warnings. `Freeciv45.app` was rebundled on it from main at 97da34f (184 MB), and its `ui_buttons.spec` has the nine actions. No new formulae.

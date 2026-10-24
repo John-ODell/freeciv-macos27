@@ -63,7 +63,7 @@ $NAME $VER for macOS (Apple Silicon)
 
 Drag $NAME.app to the Applications folder.
 
-Freeciv is free software under the GNU GPL v2 or later: https://www.freeciv.org
+$( [ "$NAME" = Freeciv ] && echo "Freeciv is" || echo "$NAME is built on Freeciv. Both are") free software under the GNU GPL v2 or later: https://www.freeciv.org
 Licence text: $NAME.app/Contents/Resources/COPYING. Exact source commit and patches: Contents/Resources/SOURCE.txt.
 Bundled third-party libraries, their licences and sources: Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt.
 Source tarball, packaging scripts and patches: https://github.com/John-ODell/freeciv-macos27/releases

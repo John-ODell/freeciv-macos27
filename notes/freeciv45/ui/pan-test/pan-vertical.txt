@@ -1,0 +1,24 @@
+# Drag the map to pan it (issue 231), the vertical half: on a taller map (mapsize XYSIZE, 40 x 120) there is room above and below.
+# Run with QT_SCALE_FACTOR=2 on the 1728 x 1030 pt screen.
+pace 1000
+wait 4000
+dismiss
+wait 1000
+state start
+drag 400 300 0 -200
+wait 1000
+state drag-up
+drag 400 300 0 200
+wait 1000
+state drag-down
+drag 400 300 160 -100
+wait 1000
+state drag-diagonal
+shot 05-vertical-diagonal
+mapwheel 0 -120
+wait 800
+state trackpad-up
+mapwheel 0 120
+wait 800
+state trackpad-down
+quit

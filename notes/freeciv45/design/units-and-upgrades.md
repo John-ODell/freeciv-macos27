@@ -14,6 +14,7 @@ strength), 2.7 (experience), 2.8 (roster shape). Feasibility: `notes/freeciv45/i
 | One strength S per unit | `attack = S`, `defense = S` in every `[unit_*]`; the strength share decides each round (`unit_versus_unit()`) | `up/server/unittools.c:288-340`; decision 7 |
 | Defence-only units | `attack = 0`, the one exception to the rule (Machine Gunners, Air Defence Infantry, Radar Plane, transports) | `civ45/units.ruleset:2399` (Carrier today) |
 | Hit points | 10 for eras I-III, 20 for IV-VI, 30 for armour, capital ships and era VII; `firepower = 1` throughout. Each round the loser loses the winner's firepower in hit points, so hit points set how long a fight lasts, not who wins | `up/server/unittools.c:330-340`; civ45 already uses 10/20/30 |
+| City defenders for the AI | Only land units carry `DefendGood` or `DefendOk`. The AI garrisons cities with the best-rated unit of those roles (hp × firepower × strength, `ai/default/daimilitary.c`); with firepower 1 throughout, its BadCityDefender discount no longer bites, so a warship with a defend role outrates every land unit. Ship of the Line, Cruiser, Missile Cruiser, Battleship and Carrier lost theirs on 2026-10-18 (issue 187) | `civ45/units.ruleset` `roles` |
 | Fights to the death, fast units break off | `Combat_Rounds` 0 base and a cap for the `Withdraws` flag (slice 2, issue 75) | `up/doc/README.effects:324-326` |
 | Siege wounds stacks | `Collateral` flag and `bombard_rate` (slice 2) | `up/doc/README.actions:774-828` |
 | Counter "+N% against class Y" on unit X | Two `bonuses` rows, both on X and both keyed on Y's flag: `"<Y flag>", "DefenseMultiplierPct", N` (when Y attacks X: the defender's rows are read against the attacker's flags) and `"<Y flag>", "DefenseDividerPct", N` (when X attacks Y: the attacker's rows are read against the defender's flags, `up/common/combat.c:681-684`). Corrected 2026-10-17 (issue 111): the first draft put the divider row on every Y unit keyed on an X flag, which the server reads the other way round, so it cancelled the multiplier; the rules test caught it (Pikemen won 8 of 20 fights against War Elephants instead of about 16). No counter flags are needed, only the eight class flags | `up/common/unittype.h:451-463`; `up/common/combat.c:645-690`, `up/common/unittype.c:2821-2824`; `civ45/units.ruleset:345-366` (the type list) |
@@ -255,6 +256,14 @@ Answered by John 2026-10-17 (plan decision 11): three draft units as built; hit 
 Cruiser and Ship of the Line stay; Alpine Troops come back as they were and Crusaders come back as Zealots, both
 nation-neutral until the unique-unit pass; Transport cargo 4. Horses gate the mounted units from this build on
 (the resource exists on grassland and plains), not from slice 4.
+
+Draft sizes (issue 158, built for balance report 2 on 2026-10-18, John to confirm): a draft leaves the city at
+least 3 citizens and a whip at least 2, so Militia and Conscripts need a city of size 4 (`"MinSize", "4", "City"`)
+and the Levy, the unit a whip is made of, size 3. Freeciv45's own reasoning: a city of 1 or 2 works only its best
+tiles and regrows slowly, so taking a citizen from it costs most of its output for many turns, which is what the AI
+did (4 of 9 drafts left a size-2 city in a Normal-AI game, balance-2.md). There is no cap on how much of a city may
+be whipped in one go: each Levy costs one citizen, a city builds one unit a turn, and every whip adds a face of
+unrest for ten turns (mechanics.md section 13), so repeated whipping already has a price.
 
 ## Implementation order
 

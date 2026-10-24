@@ -1,0 +1,322 @@
+From d802042d314faf9c150c53c9ff6c803a7542333b Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 12:26:58 -0500
+Subject: [PATCH] Tilespec: whole-tile terrain with two match types picks a
+ second variant set next to the second type
+
+A whole-tile layer with layer<n>_match_with naming one other match type
+(MATCH_PAIR) was "Not yet defined" and asserted. It now loads two
+variant sets: t.l<n>.<tag>1 and up as before, and t.l<n>.<tag>_<type>1
+and up, drawn on a tile that has a tile of the second match type among
+its eight neighbours (whole_variant()). Freeciv45 uses it for cool pine
+on forest next to tundra and glacier.
+
+In overhead view such a terrain also fades into its neighbours from the
+pair set where it is drawn with it (blend_pair), and the variant fades of
+patch 0028 treat the two sets as one list of variants.
+---
+ client/tilespec.c | 170 ++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 148 insertions(+), 22 deletions(-)
+
+diff --git a/client/tilespec.c b/client/tilespec.c
+index 2c14579..f9f602b 100644
+--- a/client/tilespec.c
++++ b/client/tilespec.c
+@@ -188,6 +188,8 @@ struct drawing_data {
+     enum sprite_type sprite_type;
+ 
+     struct sprite_vector base;
++    int pair_first; /* Whole tiles with MATCH_PAIR: base from here on are the
++                     * variants for a tile next to the second match type */
+     struct sprite *match[MAX_INDEX_CARDINAL];
+     struct sprite **cells;
+ 
+@@ -206,6 +208,10 @@ struct drawing_data {
+   /* Overhead view: blend[] through t.blend_mask_2 and up, edges only
+    * (indexed by a direction8; the corners are always blend[]). */
+   struct sprite *blend_more[MAX_BLEND_MASKS - 1][8];
++  /* Overhead view, a blending layer with MATCH_PAIR: blend[] and
++   * blend_more[] cut from the first pair variant instead, for a tile drawn
++   * with the pair set; [0] through t.blend_mask, [k] through mask k + 1. */
++  struct sprite *blend_pair[MAX_BLEND_MASKS][8];
+   /* Overhead view with t.blend_mask_same: each variant of the blending
+    * layer as it fades into a neighbour with another variant of the same
+    * terrain, made when first drawn; blend_variants * 8, by direction8. */
+@@ -698,6 +704,11 @@ static void drawing_data_destroy(struct drawing_data *draw)
+         free_sprite(draw->blend_more[k][i]);
+       }
+     }
++    for (k = 0; k < MAX_BLEND_MASKS; k++) {
++      if (draw->blend_pair[k][i]) {
++        free_sprite(draw->blend_pair[k][i]);
++      }
++    }
+   }
+   if (draw->blend_variant != NULL) {
+     for (i = 0; i < draw->blend_variants * 8; i++) {
+@@ -4352,6 +4363,7 @@ void tileset_setup_tile_type(struct tileset *t,
+     case CELL_WHOLE:
+       switch (dlp->match_style) {
+       case MATCH_NONE:
++      case MATCH_PAIR:
+         /* Load whole sprites for this tile. */
+         for (i = 0; ; i++) {
+           fc_snprintf(buffer, sizeof(buffer), "t.l%d.%s%d",
+@@ -4369,6 +4381,32 @@ void tileset_setup_tile_type(struct tileset *t,
+           tileset_error(LOG_FATAL, tileset_name_get(t),
+                         _("Missing base sprite for tag \"%s\"."), buffer);
+         }
++        dlp->pair_first = i;
++        if (dlp->match_style == MATCH_PAIR) {
++          /* Freeciv45: a second set of whole sprites, t.l<n>.<tag>_<type>1
++           * and up, for a tile that has the layer's second match type
++           * among its eight neighbours (cool pine for forest next to
++           * tundra). */
++          const char *pair = tslp->match_types[dlp->match_index[1]];
++          int j;
++
++          for (j = 0; ; j++) {
++            fc_snprintf(buffer, sizeof(buffer), "t.l%d.%s_%s%d",
++                        l, draw->name, pair, j + 1);
++            sprite = load_sprite(t, buffer, TRUE, FALSE, FALSE);
++            if (!sprite) {
++              break;
++            }
++            sprite_vector_reserve(&dlp->base, i + j + 1);
++            dlp->base.p[i + j] = sprite;
++          }
++          if (0 == j) {
++            log_error("Tileset \"%s\": no sprite \"t.l%d.%s_%s1\" for "
++                      "terrain \"%s\" next to \"%s\"; it draws its usual "
++                      "sprites there.", tileset_name_get(t), l, draw->name,
++                      pair, terrain_rule_name(pterrain), pair);
++          }
++        }
+         break;
+       case MATCH_SAME:
+         /* Load 16 cardinally-matched sprites. */
+@@ -4381,7 +4419,6 @@ void tileset_setup_tile_type(struct tileset *t,
+                                           terrain_rule_name(pterrain), TRUE);
+         }
+         break;
+-      case MATCH_PAIR:
+       case MATCH_FULL:
+         fc_assert(FALSE); /* Not yet defined */
+         break;
+@@ -4583,6 +4620,26 @@ void tileset_setup_tile_type(struct tileset *t,
+                         dir, FALSE);
+       }
+     }
++    if (0 < draw->blending) {
++      const struct drawing_layer *dlp = &draw->layer[draw->blending - 1];
++
++      if (dlp->sprite_type == CELL_WHOLE && dlp->match_style == MATCH_PAIR
++          && dlp->pair_first < sprite_vector_size(&dlp->base)) {
++        struct sprite *pair = dlp->base.p[dlp->pair_first];
++
++        for (dir = 0; dir < DIR8_MAGIC_MAX; dir++) {
++          int k;
++
++          draw->blend_pair[0][dir]
++            = blend_piece(t, t->sprites.blend_mask, pair, dir, FALSE);
++          for (k = 1; k < t->num_blend_masks && is_cardinal_dir(dir); k++) {
++            draw->blend_pair[k][dir]
++              = blend_piece(t, t->sprites.blend_mask_more[k - 1], pair, dir,
++                            FALSE);
++          }
++        }
++      }
++    }
+   } else if (NULL != draw->blender) {
+     /* Set up blending sprites. This only works in iso-view! */
+     const int W = t->normal_tile_width;
+@@ -5344,6 +5401,50 @@ static int fill_city_overlays_sprite_array(const struct tileset *t,
+   return sprs - saved_sprs;
+ }
+ 
++/************************************************************************//**
++  The index in dlp->base of the sprite drawn on ptile for whole-tile layer l
++  drawn from variants, or -1 when there is none. A pseudo-random
++  reproducible pick by tile index (modulo, to keep the number in
++  [0..32000)). With MATCH_PAIR the pick is among the pair variants when one
++  of the eight neighbours has the layer's second match type, and among the
++  others when none has.
++****************************************************************************/
++static int whole_variant(const struct tileset *t,
++                         const struct drawing_layer *dlp, int l,
++                         const struct tile *ptile)
++{
++  int first = 0, count = sprite_vector_size(&dlp->base);
++
++  if (dlp->match_style == MATCH_PAIR && dlp->pair_first < count) {
++    bool near = FALSE;
++    enum direction8 dir;
++
++    for (dir = 0; dir < DIR8_MAGIC_MAX && !near; dir++) {
++      struct tile *adjc = mapstep(&(wld.map), ptile, dir);
++      const struct drawing_data *odraw;
++
++      if (adjc == NULL || client_tile_get_known(adjc) == TILE_UNKNOWN
++          || tile_terrain(adjc) == NULL) {
++        continue;
++      }
++      odraw = t->sprites.drawing[terrain_index(tile_terrain(adjc))];
++      near = (odraw != NULL && odraw->num_layers > l
++              && odraw->layer[l].match_indices > 0
++              && odraw->layer[l].match_index[0] == dlp->match_index[1]);
++    }
++    if (near) {
++      first = dlp->pair_first;
++    } else {
++      count = dlp->pair_first;
++    }
++  }
++  if (count - first <= 0) {
++    return -1;
++  }
++
++  return first + fc_randomly(tile_index(ptile) % 32000, count - first);
++}
++
+ /************************************************************************//**
+   Overhead blending: which of the tileset's blend masks the edge between
+   ptile and its cardinal neighbour tile1 uses. Both tiles of an edge get the
+@@ -5365,21 +5466,44 @@ static int blend_edge_mask(const struct tile *ptile, const struct tile *tile1,
+ 
+ /************************************************************************//**
+   The variant of a terrain's blending layer drawn on ptile (as
+-  fill_terrain_sprite_array() picks it), or -1 when the layer has no plain
+-  variants.
++  fill_terrain_sprite_array() picks it, whole_variant()), or -1 when the
++  layer has no plain variants.
+ ****************************************************************************/
+-static int blend_variant_of(const struct drawing_data *draw,
++static int blend_variant_of(const struct tileset *t,
++                            const struct drawing_data *draw,
+                             const struct tile *ptile)
+ {
+   const struct drawing_layer *dlp = &draw->layer[draw->blending - 1];
+-  int count = sprite_vector_size(&dlp->base);
+ 
+-  if (dlp->sprite_type != CELL_WHOLE || dlp->match_style != MATCH_NONE
+-      || dlp->is_tall || count < 2) {
++  if (dlp->sprite_type != CELL_WHOLE
++      || (dlp->match_style != MATCH_NONE && dlp->match_style != MATCH_PAIR)
++      || dlp->is_tall || sprite_vector_size(&dlp->base) < 2) {
+     return -1;
+   }
+ 
+-  return fc_randomly(tile_index(ptile) % 32000, count);
++  return whole_variant(t, dlp, draw->blending - 1, ptile);
++}
++
++/************************************************************************//**
++  Whether a terrain whose blending layer has MATCH_PAIR is drawn on ptile
++  with its pair set, so that it fades into its neighbours from there
++  (blend_pair) rather than from its usual variants.
++****************************************************************************/
++static bool blend_from_pair(const struct tileset *t,
++                            const struct drawing_data *draw,
++                            const struct tile *ptile)
++{
++  const struct drawing_layer *dlp;
++
++  if (draw->blending <= 0) {
++    return FALSE;
++  }
++  dlp = &draw->layer[draw->blending - 1];
++
++  return (dlp->sprite_type == CELL_WHOLE && dlp->match_style == MATCH_PAIR
++          && dlp->pair_first < sprite_vector_size(&dlp->base)
++          && whole_variant(t, dlp, draw->blending - 1, ptile)
++             >= dlp->pair_first);
+ }
+ 
+ /************************************************************************//**
+@@ -5404,8 +5528,8 @@ static int fill_blend_variant(const struct tileset *t,
+   if (NULL == t->sprites.blend_mask_same || draw->blending <= 0) {
+     return 0;
+   }
+-  v = blend_variant_of(draw, ptile);
+-  v1 = blend_variant_of(draw, tile1);
++  v = blend_variant_of(t, draw, ptile);
++  v1 = blend_variant_of(t, draw, tile1);
+   if (v < 0 || v1 == v) {
+     return 0;
+   }
+@@ -5417,7 +5541,7 @@ static int fill_blend_variant(const struct tileset *t,
+       struct tile *beside = mapstep(&(wld.map), ptile, side[i]);
+ 
+       if (beside != NULL && tile_terrain(beside) == pterrain
+-          && blend_variant_of(draw, beside) == v1) {
++          && blend_variant_of(t, draw, beside) == v1) {
+         return 0;
+       }
+     }
+@@ -5470,6 +5594,7 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
+       struct tile *tile1 = mapstep(&(wld.map), ptile, dir8);
+       struct terrain *other = tterrain_near[dir8];
+       struct drawing_data *odraw;
++      bool pair;
+ 
+       if (!tile1
+           || client_tile_get_known(tile1) == TILE_UNKNOWN
+@@ -5490,15 +5615,20 @@ static int fill_terrain_sprite_blending(const struct tileset *t,
+               || tterrain_near[dir_ccw(dir8)] == other)) {
+         continue;
+       }
++      pair = blend_from_pair(t, odraw, tile1);
+       if (is_cardinal_dir(dir8) && t->num_blend_masks > 1) {
+         int k = blend_edge_mask(ptile, tile1, dir8, t->num_blend_masks);
++        struct sprite *piece = (pair ? odraw->blend_pair[k][dir8]
++                                : 0 < k ? odraw->blend_more[k - 1][dir8]
++                                : NULL);
+ 
+-        if (k > 0 && NULL != odraw->blend_more[k - 1][dir8]) {
+-          ADD_SPRITE_FULL(odraw->blend_more[k - 1][dir8]);
++        if (NULL != piece) {
++          ADD_SPRITE_FULL(piece);
+           continue;
+         }
+       }
+-      ADD_SPRITE_FULL(odraw->blend[dir8]);
++      ADD_SPRITE_FULL(pair && NULL != odraw->blend_pair[0][dir8]
++                      ? odraw->blend_pair[0][dir8] : odraw->blend[dir8]);
+     }
+ 
+     return sprs - saved_sprs;
+@@ -5611,19 +5741,16 @@ static int fill_terrain_sprite_array(struct tileset *t,
+     {
+       switch (dlp->match_style) {
+       case MATCH_NONE:
++      case MATCH_PAIR:
+         {
+-          int count = sprite_vector_size(&dlp->base);
+-
+-          if (count > 0) {
+-            /* Pseudo-random reproducible algorithm to pick a sprite. Use modulo
+-             * to limit the number to a handleable size [0..32000). */
+-            count = fc_randomly(tile_index(ptile) % 32000, count);
++          int v = whole_variant(t, dlp, l, ptile);
+ 
++          if (v >= 0) {
+             if (dlp->is_tall) {
+               ox += FULL_TILE_X_OFFSET;
+               oy += FULL_TILE_Y_OFFSET;
+             }
+-            ADD_SPRITE(dlp->base.p[count], TRUE, ox, oy);
++            ADD_SPRITE(dlp->base.p[v], TRUE, ox, oy);
+           }
+           break;
+         }
+@@ -5646,7 +5773,6 @@ static int fill_terrain_sprite_array(struct tileset *t,
+           ADD_SPRITE(dlp->match[tileno], TRUE, ox, oy);
+           break;
+         }
+-      case MATCH_PAIR:
+       case MATCH_FULL:
+         fc_assert(FALSE); /* Not yet defined */
+         break;
+-- 
+2.56.0
+

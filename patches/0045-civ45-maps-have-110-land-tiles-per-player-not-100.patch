@@ -1,0 +1,33 @@
+From c445c3d2884dfc43a5d86c8b4b3b4158b935a18d Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 20:49:45 -0500
+Subject: [PATCH] civ45: maps have 110 land tiles per player, not 100
+
+---
+ data/civ45/game.ruleset | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index 749228f..77b3a80 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -926,6 +926,7 @@ colorlist =
+ ; spaceship arrives, and it ends after turn 475 (the year 2050) on score (script.lua names the winner).
+ ; AIs play at Normal, not the server's Easy, at which they allied into one bloc that never fought (issue 159);
+ ; the fork's server also gives this level to the AIs that aifill made before the ruleset loaded.
++; Maps have 110 land tiles per player (John, 2026-10-18, issue 211), a little more room than the 100 before.
+ ;
+ set =
+     { "name", "value", "lock"
+@@ -939,7 +940,7 @@ set =
+       "wrap", "WRAPX", FALSE
+       "killstack", "DISABLED", FALSE
+       "mapsize", "PLAYER", FALSE
+-      "tilesperplayer", 100, FALSE
++      "tilesperplayer", 110, FALSE
+       "tinyisles", "ENABLED", FALSE
+       "startunits", "cwx", FALSE
+       "citymindist", 3, FALSE
+-- 
+2.56.0
+

@@ -1,0 +1,18 @@
+The unit bar's Road, Irrigate and Mine boxes (issue 311, patch 0060), 2026-10-22
+Driver build at patch 0060 (the 0059 driver build with patch 0060 applied), civ45, seed 42, freeciv45iso.
+Run 3 of workers.txt. The state lines are from drive.log.
+
+Warriors (chip 1): no work boxes.
+   actions [Go to Tile (G) | Fortify Unit (F) | Sentry (S) | Wait (W) | Done (Space)]
+Workers (chip 3) before Agriculture: Road and Mine.
+   actions [Build Road (R) | Build Mine (M) | Go to Tile (G) | Sentry (S) | Wait (W) | Done (Space)]
+After /lua gives Agriculture (civ45's Irrigation needs it): Irrigate too, seven boxes on one row (workers.jpg).
+   actions [Build Road (R) | Build Irrigation (I) | Build Mine (M) | Go to Tile (G) | Sentry (S) | Wait (W) | Done (Space)]
+Clicking Build Road: the Workers' chip reads "Workers HP:10/10 Road" and the focus moves on to the next unit (road.jpg).
+Settlers (chip 4): civ45 Settlers can work the land too, so eight boxes, one row.
+   actions [Build City (B) | Build Road (R) | Build Irrigation (I) | Build Mine (M) | Go to Tile (G) | Sentry (S) | Wait (W) | Done (Space)]
+
+The bar's cap went from six boxes a row to eight (barsize-slice.md: six was set when no unit had more than five).
+Run 1 clicked the Workers' chip after the Road box, which woke them to Idle; reading the chip's tooltip instead
+(runs 2 and 3) shows the order took.
+Not run: Irrigate and Mine clicks (they call key_unit_irrigate and key_unit_mine, as the I and M keys do).

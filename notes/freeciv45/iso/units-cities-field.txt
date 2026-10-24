@@ -1,0 +1,33 @@
+# Cities and units on the angled map (issue 245): a 15 x 9 tile field of grassland over three rows of ocean, around the tile 3 east
+# and 3 south of the start stack (as field.txt). Ten cities on a grid, one per owner in turn, the back row open and the front row
+# walled. Units: stacks and single units on land and at sea, three veteran levels, and a few units inside cities.
+# City sizes: Join City stops at size 8 without an Aqueduct, and the art has five sizes (index 0..4 at sizes 1, 5, 9, 13, 17). So the
+# run uses a copy of civ45 called civ45t whose City_Image effects start at sizes 3, 5, 7 and 8, and the cities grow to 1, 3, 5, 7, 8:
+#   cp -R <prefix>/share/freeciv/civ45 ts-rules/civ45t   (then edit effect_city_image_1..4 MinSize to 3, 5, 7, 8)
+#   FREECIV_DATA_PATH=ts-rules:<prefix>/share/freeciv SERV=$'rulesetdir civ45t\nset timeout 0\nset minp 1\nset revealmap START\n
+#     set dispersion 0\nset fogofwar DISABLED\nset diplomacy DISABLED\nset aifill 8\nset size 4\nset mapseed 21\nset gameseed 21\n
+#     set startunits cwx\nset borders ENABLED' drive.sh units-cities-field.txt <outdir> <port> <tilesets dir> <prefix>
+# (rulesetdir resets the settings above it, so the sets come after it.) Run with QT_SCALE_FACTOR=2 on a 3680 x 2284 screen; SCALE=1
+# on the 1728 x 1030 screen gives the 1x shot.
+pace 1200
+wait 4000
+dismiss
+wait 1000
+chat /lua cmd T = {}; local u0; for p in players_iterate() do if p:is_human() then H = p; for u in p:units_iterate() do u0 = u.tile; break end end end; for t in whole_map_iterate() do local dx, dy = math.floor(t.x - u0.x - 3), math.floor(t.y - u0.y - 3); if dx >= -7 and dx <= 7 and dy >= -4 and dy <= 4 then T[dx .. "," .. dy] = t; edit.change_terrain(t, find.terrain(dy >= 2 and "Ocean" or "Grassland")) end end
+wait 2000
+chat /lua cmd P = {}; for p in players_iterate() do if p.is_alive then table.insert(P, p) end end; C = {}; local k = 0; for _, dy in ipairs({-3, 0}) do for _, dx in ipairs({-6, -3, 0, 3, 6}) do k = k + 1; edit.create_city(P[(k - 1) % #P + 1], T[dx .. "," .. dy], "City" .. k) end end
+wait 2000
+chat /lua cmd C = {}; for p in players_iterate() do for _, t in ipairs({"Masonry"}) do pcall(function() edit.give_tech(p, find.tech_type(t), -1, false, "cheat") end) end; for c in p:cities_iterate() do C[tonumber(string.sub(c.name, 5))] = c end end; local sizes = {1, 3, 5, 7, 8, 1, 3, 5, 7, 8}; local m = find.unit_type("Migrants"); local act = find.action("Join City"); local ms = ""; for k, c in pairs(C) do for i = 2, sizes[k] do local u = edit.create_unit(c.owner, c.tile, m, 0, nil, 1); if u then edit.perform_action(u, act, c) end end; ms = ms .. k .. ":" .. tostring(c.size) .. " " end; log.error(ms); for k = 6, 10 do if C[k] then edit.create_building(C[k], find.building_type("City Walls")) end end
+wait 1500
+shot sizes
+wait 3000
+chat /lua cmd local function mk(o, n, name, v) edit.create_unit(o, T[n], find.unit_type(name), v or 0, nil, 1) end; for _, n in ipairs({"Warriors", "Phalanx", "Horsemen", "Catapult", "Knights"}) do mk(H, "-4,-2", n) end; for _, n in ipairs({"Musketeers", "Cannon", "Dragoons"}) do mk(H, "4,-2", n) end; mk(H, "-1,-1", "Riflemen", 1); mk(H, "1,-1", "Riflemen", 2); mk(H, "2,-2", "Riflemen", 3); mk(H, "-2,-2", "Settlers"); mk(H, "6,-1", "Armor")
+wait 1500
+chat /lua cmd local function mk(o, n, name) edit.create_unit(o, T[n], find.unit_type(name), 0, nil, 1) end; for _, n in ipairs({"Trireme", "Galleon"}) do mk(H, "-5,3", n) end; for _, n in ipairs({"Destroyer", "Battleship", "Carrier", "Transport"}) do mk(H, "0,3", n) end; for _, n in ipairs({"Submarine", "Frigate"}) do mk(H, "5,3", n) end; for k, n, t in ipairs({}) do end; local function own(k, n, t) if C[k] then mk(C[k].owner, n, t) end end; own(2, "-3,-3", "Warriors"); own(4, "3,-3", "Horsemen"); own(8, "0,0", "Phalanx"); own(6, "-6,0", "Musketeers")
+wait 5000
+key escape
+wait 1000
+dismiss
+state all
+shot field
+quit

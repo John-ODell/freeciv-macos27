@@ -156,13 +156,14 @@ pixels:
 
 Run 9's pine row is two colour families: cool blue-green c1-c3 and warm olive c4-c5.
 
-- **Cool pine is left out.** It belongs on forest next to tundra or glacier, and Freeciv 3.2's tilespec cannot pick
-  a whole-tile cell set by neighbour terrain: a whole-tile layer either picks a numbered variant by tile index or
-  one of 16 sprites by whether each neighbour has the *same* match type, and whole-tile `MATCH_PAIR`/`MATCH_FULL`
-  are "Not yet defined" (`fc_assert(FALSE)` in `client/tilespec.c`, loader and drawing). Corner cells with
-  `MATCH_PAIR` do see neighbours, but only as quarter-tile overlays, and glacier is a `water` match on layer 1.
-  The hooks that would work (a client patch for neighbour-chosen variant sets, a Boreal Forest terrain in the
-  ruleset, or a latitude rule) are written up in issue 127.
+- **Cool pine is left out** (drawn since issue 127, "Cool pine next to tundra and glacier" below). It belongs on
+  forest next to tundra or glacier, and Freeciv 3.2's tilespec cannot pick a whole-tile cell set by neighbour
+  terrain: a whole-tile layer either picks a numbered variant by tile index or one of 16 sprites by whether each
+  neighbour has the *same* match type, and whole-tile `MATCH_PAIR`/`MATCH_FULL` are "Not yet defined"
+  (`fc_assert(FALSE)` in `client/tilespec.c`, loader and drawing). Corner cells with `MATCH_PAIR` do see neighbours,
+  but only as quarter-tile overlays, and glacier is a `water` match on layer 1. The hooks that would work (a client
+  patch for neighbour-chosen variant sets, a Boreal Forest terrain in the ruleset, or a latitude rule) are written
+  up in issue 127.
 - **Olive pine does not join the temperate forest.** Added as `forest11` and `forest12` (`--olive-pine`), the two
   cells show as dark squares with black gaps between star-shaped crowns among the broadleaf tiles
   (`olive-pine-1to1.jpg`; luminance 62 and 58 against 68-103): a patchwork. The committed build leaves them out.
@@ -513,3 +514,92 @@ views are identical except the blinking focus-unit box (60 x 60 px on trident, 1
 
 **Not checked:** other clients (patch 0028 is in `client/tilespec.c`, which every client uses, but only the Qt client
 was run), a long game, and scroll speed with the extra pieces.
+
+## Cool pine next to tundra and glacier (issue 127, 2026-10-18)
+
+Hook 1 of the issue, built: a fork patch and a tileset change. Run 9's cool pine (r5c1-r5c3 only) is now the forest
+drawn on a tile with a tundra or glacier tile among its eight neighbours. Ordinary forest keeps its ten broadleaf
+variants. The warm olive pine (c4-c5) stays out.
+
+- **Fork, patch 0030** (`client/tilespec.c`): a whole-tile layer whose `layer<n>_match_with` names one other match
+  type (`MATCH_PAIR`, which asserted before) loads two variant sets, `t.l<n>.<tag>1` and up and
+  `t.l<n>.<tag>_<type>1` and up. A tile draws from the second set when one of its eight neighbours has that match
+  type on the layer, and from the first otherwise, picked by tile index as before. In overhead view the terrain
+  fades into its neighbours from the set it is drawn with, and the variant fades of patch 0028 run between the two
+  sets like between any two variants.
+- **Tileset:** the pine cells are cut as `t.l0.forest_tundra1`-`3`, and `[tile_forest]` gets
+  `layer0_match_with = "tundra"` (builder: `PAIRED`). Glacier's layer 0 match type is `tundra` too, so one pair
+  covers both. The issue suggested a new `cold` match type; it is not needed while tundra and glacier share one.
+
+### How it was checked (observed)
+
+`tileset-t0/pine.txt`, an offscreen client at `QT_SCALE_FACTOR=2`: forest all round, with a 4 x 3 tundra patch and a
+3 x 2 glacier patch (the script's lone tundra tile falls off the map's north edge on this start). Before: the fork
+at patch 0029 with the committed tileset. After: patch 0030 with this build.
+
+- `pine-window-after.jpg`: a ring of pine one tile wide round the tundra and round the glacier, broadleaf
+  everywhere else. `pine-window-before.jpg`: broadleaf right up to both.
+- Away from the two patches the after shot is pixel-identical to the before shot (two areas measured: no pixel
+  differs by more than 8), so ordinary forest keeps its variant spread.
+- `pine-after-1to1.png` against `pine-before-1to1.png`: the pine meets the broadleaf through the variant fade,
+  with no hard tile edge, and fades into the tundra with its own crowns. The first build faded every forest from
+  its first broadleaf cell, which left a light broadleaf fringe on the tundra beside dark pine; patch 0030 cuts the
+  fade pieces from the pine set as well (`blend_pair`).
+- The client logged no sprite error.
+
+### Still visible
+
+- The ring is exactly one tile wide, so on a long tundra coast it reads as a band. A second ring would need a
+  distance rule rather than a neighbour rule.
+- Pine is darker than the broadleaf (lightness 56-63 against 68-103 in the tone table), so the band is a clear dark
+  edge. That is the look the art gives it; a lighter pine needs new art.
+
+![Before, 1:1](tileset-t0/pine-before-1to1.png)
+![After, 1:1](tileset-t0/pine-after-1to1.png)
+
+## Coastline from the painted art (issue 184, part of 81, 2026-10-18)
+
+#173 left two things on the water: trident's shore pieces, a blocky blue and green zigzag at 6.4x, and hard edges
+between the water depths. The coastline builder (`coastline()` in the builder) replaces the first, and blending the
+water terrains replaces the second.
+
+- **Shore.** Layer 1 of every water and land tile is now corner cells: four quarter tiles, each picked by the three
+  neighbours around its corner. Water tiles get run 14's beach (r1c3) from the edge facing land, with wet sand, a
+  foam line and sand seen through shallow water. Land tiles get the same sand from the edge facing water, thinning
+  out in grains into their ground. Both sides sample one texture at the same place and share one noise, so the
+  beach runs across the tile edge without a line. A diagonal neighbour alone gives a rounded spit or bite.
+- **Glacier.** Water next to glacier gets an ice edge instead (layer 2, run 13 r1c1, with a light lip and ice seen
+  under the water). Glacier gets its own layer 1 match type, `ice`, so neither side draws a beach there.
+- **Depths.** Ocean, deep ocean, lake and inaccessible get `blend_layer = 1`, so they fade into each other with the
+  wandering masks of #148 and their variants fade like the land's. The fork's **patch 0031** keeps a terrain from
+  fading into a neighbour of the other class (land into water or water into land), which the shore cells draw instead.
+- Run 14's rocky shore (row 2) stays unused: a lake's shore meets the same land cells as the sea's, so one beach
+  serves both.
+
+### How it was checked (observed)
+
+Offscreen client at `QT_SCALE_FACTOR=2`. Before: the fork at patch 0030 with the tileset on main. After: patch 0031
+with this build.
+
+- **The start view** (`coast-window-before.jpg`, `coast-window-after.jpg`, and the 1:1 crops `coast-before-1to1.jpg`
+  and `coast-after-1to1.jpg`: a forest islet under the glacier, two one-tile inlets):
+  - every coast is beach;
+  - the glacier front is a wavy ice edge;
+  - no trident shore piece is left on the map.
+- **`tileset-t0/coast.txt`** (deep ocean west, ocean east, a lake; `depth-before-1to1.jpg`, `depth-after-1to1.jpg`):
+  - deep and shallow ocean meet in a soft wandering edge instead of a straight line;
+  - the tile grid between ocean variants is much fainter (the variant fades).
+- The client logged no sprite error. A missing cell tag stops the client, so all 544 (17 terrains x 32) loaded.
+
+### Still visible
+
+- **One look everywhere.** The beach is the same width round every coast, mountains and swamp included. A rocky or
+  muddy shore by terrain would need cells per land terrain on the water side, which a corner cell cannot know.
+- **Deep water fades far.** Deep ocean reaches well into the shallows: the blend depth is the land's, 48 px.
+- **Unmeasured cost.** Every land and water tile now draws four layer 1 cells, mostly transparent, and every water
+  tile four more on layer 2.
+
+![Before, 1:1](tileset-t0/coast-before-1to1.jpg)
+![After, 1:1](tileset-t0/coast-after-1to1.jpg)
+![Depths before, 1:1](tileset-t0/depth-before-1to1.jpg)
+![Depths after, 1:1](tileset-t0/depth-after-1to1.jpg)

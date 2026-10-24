@@ -1,0 +1,54 @@
+# Drag the map to pan it (issue 231), on freeciv45iso at 2x: a drag from ground with no own unit pans grab-style,
+# a drag from the focus unit still sets a goto, a click still clicks, an order mode still takes the press, and
+# two-finger trackpad scrolling and the mouse wheel pan too. Run with QT_SCALE_FACTOR=2 on the 1728 x 1030 pt screen.
+pace 1000
+wait 4000
+dismiss
+wait 1000
+state start
+shot 01-start
+# a drag on open ground, left and down: the map follows the pointer
+drag 400 300 -240 120
+wait 1000
+state drag-left-down
+shot 02-dragged-left-down
+# and back, right and up: the same view as at the start
+drag 400 420 240 -120
+wait 1000
+state drag-back
+# a drag that stays within a few points is a click, not a pan
+drag 400 300 2 1
+wait 1000
+state tiny-drag
+# two-finger trackpad scrolling: the map moves with the fingers
+mapwheel 0 150
+wait 800
+state trackpad-down
+mapwheel 120 0
+wait 800
+state trackpad-right
+mapwheel -120 -150
+wait 800
+state trackpad-back
+# a mouse wheel notch
+mapwheel 0 120 notch
+wait 800
+state wheel-notch
+mapwheel 0 -120 notch
+wait 800
+state wheel-back
+# a drag from the focus unit is still a goto: the map stays, the unit gets its path
+drag unit 0 96
+wait 2000
+state goto-drag
+unit 115
+shot 03-goto-drag
+# with an order mode on (G), the press takes the order and the drag does not pan
+key g
+wait 800
+drag 827 360 -240 0
+wait 1500
+state goto-key-drag
+unit 114
+shot 04-goto-key
+quit

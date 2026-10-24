@@ -1,5 +1,5 @@
 diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
-index 5e6de95..a5ca1a9 100644
+index 954872c..82fd58a 100644
 --- a/client/gui-qt/fc_client.cpp
 +++ b/client/gui-qt/fc_client.cpp
 @@ -54,6 +54,7 @@
@@ -10,7 +10,7 @@ index 5e6de95..a5ca1a9 100644
  #include "unitbar.h"
  
  fc_icons* fc_icons::m_instance = 0;
-@@ -277,6 +278,7 @@ void fc_client::fc_main(QApplication *qapp)
+@@ -307,6 +308,7 @@ void fc_client::fc_main(QApplication *qapp)
  
    startTimer(TIMER_INTERVAL);
    connect(qapp, &QCoreApplication::aboutToQuit, this, &fc_client::closing);
@@ -20,10 +20,10 @@ index 5e6de95..a5ca1a9 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..691a6b0
+index 0000000..d73b9c1
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,771 @@
+@@ -0,0 +1,869 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -68,6 +68,11 @@ index 0000000..691a6b0
 +    research NAME           research the advance NAME (its rule name)
 +    opencity NAME           open the own city NAME, as a click on it does
 +    scroll DX DY            move the map origin by DX, DY canvas pixels
++    drag X Y DX DY          left drag through the window from X, Y (window
++                            points) by DX, DY, in eight moves
++    drag unit DX DY         the same from the focus unit's tile
++    mapwheel DX DY [notch]  a two-finger trackpad scroll of DX, DY points
++                            on the map, or a mouse wheel angle with notch
 +    clicktile DX DY         left click the tile DX, DY from the focus unit
 +                            (through action_button_pressed, which the map's
 +                            mouse release calls, since that reads QCursor)
@@ -77,7 +82,9 @@ index 0000000..691a6b0
 +    dismiss                 close the modal boxes (welcome message...)
 +                            and an open popup menu
 +    unit ID                 where unit ID is, its activity and orders
-+    state LABEL             append the state to drive.log
++    page main               show the start page (before a shot of it)
++    state LABEL             append the state to drive.log (with the
++                            window title)
 +    shot NAME               state, then NAME.png of the window (+ tooltip)
 +    quit
 +*/
@@ -90,6 +97,7 @@ index 0000000..691a6b0
 +#include <QAbstractButton>
 +#include <QAbstractItemView>
 +#include <QApplication>
++#include <QCursor>
 +#include <QDialog>
 +#include <QDir>
 +#include <QFile>
@@ -133,6 +141,7 @@ index 0000000..691a6b0
 +#include "fc_client.h"
 +#include "hudwidget.h"
 +#include "mapview.h"
++#include "moverange.h"
 +#include "qtg_cxxside.h"
 +#include "sidebar.h"
 +#include "unitbar.h"
@@ -242,33 +251,48 @@ index 0000000..691a6b0
 +}
 +
 +/************************************************************************//**
++  The head focus unit, or nullptr; before a game there is no focus list
++****************************************************************************/
++static struct unit *focus_head()
++{
++  return get_num_units_in_focus() > 0 ? head_of_units_in_focus() : nullptr;
++}
++
++/************************************************************************//**
 +  One line describing the client's unit focus and the bar
 +****************************************************************************/
 +static void log_state(const QString &label)
 +{
 +  QString s = QString("== %1  turn %2").arg(label).arg(game.info.turn);
++
++  s += QString("  title \"%1\"").arg(gui()->windowTitle());
++  s += QString("  tileset %1  ruleset \"%2\"")
++       .arg(tileset != nullptr ? tileset_basename(tileset) : "none")
++       .arg(game.control.name);
 +  unit_bar *bar = gui()->unitbar_wdg;
 +  QStringList chips, acts, texts;
 +
 +  s += QString("  hover_state %1").arg((int) hover_state);
-+  unit_list_iterate(get_units_in_focus(), punit) {
-+    int x, y;
++  if (get_num_units_in_focus() > 0) {
++    unit_list_iterate(get_units_in_focus(), punit) {
++      int x, y;
 +
-+    index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
-+    s += QString("\n   focus #%1 %2 at (%3,%4) activity %5 moves %6 hp %7"
-+                 " orders %8 done %9 ssa %10")
-+         .arg(punit->id).arg(unit_rule_name(punit)).arg(x).arg(y)
-+         .arg(get_activity_text(punit->activity))
-+         .arg(punit->moves_left).arg(punit->hp)
-+         .arg(punit->has_orders ? "yes" : "no")
-+         .arg(punit->done_moving ? "yes" : "no")
-+         .arg((int) punit->ssa_controller);
-+  } unit_list_iterate_end;
-+  if (unit_list_size(get_units_in_focus()) == 0) {
++      index_to_map_pos(&x, &y, tile_index(unit_tile(punit)));
++      s += QString("\n   focus #%1 %2 at (%3,%4) activity %5 moves %6 hp %7"
++                   " orders %8 done %9 ssa %10")
++           .arg(punit->id).arg(unit_rule_name(punit)).arg(x).arg(y)
++           .arg(get_activity_text(punit->activity))
++           .arg(punit->moves_left).arg(punit->hp)
++           .arg(punit->has_orders ? "yes" : "no")
++           .arg(punit->done_moving ? "yes" : "no")
++           .arg((int) punit->ssa_controller);
++    } unit_list_iterate_end;
++  }
++  if (get_num_units_in_focus() == 0) {
 +    s += "\n   focus: none";
 +  } else {
 +    s += "\n   stack";
-+    unit_list_iterate(unit_tile(head_of_units_in_focus())->units, punit) {
++    unit_list_iterate(unit_tile(focus_head())->units, punit) {
 +      if (unit_owner(punit) == client_player()) {
 +        s += QString(" #%1:%2%3").arg(punit->id)
 +             .arg(get_activity_text(punit->activity))
@@ -405,6 +429,8 @@ index 0000000..691a6b0
 +  s += QString("\n   hud_units visible %1")
 +       .arg(gui()->unitinfo_wdg->isVisible() ? "yes" : "no");
 +  s += QString("\n   map origin %1,%2").arg(mapview.gui_x0).arg(mapview.gui_y0);
++  s += QString("\n   move range %1 tiles%2").arg(move_range_size())
++         .arg(move_range_hidden() ? " (hidden)" : "");
 +  {
 +    QStringList tops;
 +
@@ -468,7 +494,7 @@ index 0000000..691a6b0
 +static void run_line(const QString &raw)
 +{
 +  QString line = raw;
-+  struct unit *head = head_of_units_in_focus();
++  struct unit *head = focus_head();
 +  QStringList w;
 +
 +  if (head != nullptr) {
@@ -542,6 +568,7 @@ index 0000000..691a6b0
 +                                        : "nothing")
 +                  .arg(under != nullptr ? under->toolTip() : QString()));
 +      }
++      QCursor::setPos(gui()->mapToGlobal(c));
 +      QTest::mouseMove(win, c);
 +      if (cmd == "rclick") {
 +        QTest::mouseClick(win, Qt::RightButton, Qt::NoModifier, c);
@@ -578,7 +605,7 @@ index 0000000..691a6b0
 +      dsend_packet_player_research(&client.conn, advance_number(padv));
 +    }
 +  } else if (cmd == "clicktile" && w.size() > 2) {
-+    struct unit *punit = head_of_units_in_focus();
++    struct unit *punit = focus_head();
 +
 +    if (punit == nullptr) {
 +      drive_log("   !! no focus unit");
@@ -602,6 +629,66 @@ index 0000000..691a6b0
 +        action_button_pressed(cx, cy, SELECT_POPUP);
 +      }
 +    }
++  } else if (cmd == "drag" && w.size() > 3) {
++    QPoint from, by;
++    bool ok = true;
++
++    if (w[1] == "unit") {
++      struct unit *punit = focus_head();
++      float cx, cy;
++
++      if (punit == nullptr
++          || !tile_to_canvas_pos(&cx, &cy, map_zoom, unit_tile(punit))) {
++        drive_log("   !! no focus unit on the canvas");
++        ok = false;
++      } else {
++        float density = (float) mapview.width / map_widget_width();
++
++        cx += tileset_tile_width(tileset) * map_zoom / 2;
++        cy += tileset_tile_height(tileset) * map_zoom / 2;
++        from = gui()->mapview_wdg->mapTo(gui(),
++                                         QPoint(qRound(cx / density),
++                                                qRound(cy / density)));
++        by = QPoint(w[2].toInt(), w[3].toInt());
++      }
++    } else if (w.size() > 4) {
++      from = QPoint(w[1].toInt(), w[2].toInt());
++      by = QPoint(w[3].toInt(), w[4].toInt());
++    } else {
++      ok = false;
++    }
++    if (ok) {
++      // Press, eight moves and release through the window, as a real drag
++      QWindow *win = gui()->windowHandle();
++      QWidget *under = gui()->childAt(from);
++
++      drive_log(QString("   drag from %1,%2 by %3,%4, under %5")
++                .arg(from.x()).arg(from.y()).arg(by.x()).arg(by.y())
++                .arg(under != nullptr ? under->metaObject()->className()
++                                      : "nothing"));
++      QApplication::setActiveWindow(gui());
++      // The map reads QCursor::pos() on a press, as on a real screen
++      QCursor::setPos(gui()->mapToGlobal(from));
++      QTest::mouseMove(win, from);
++      QTest::mousePress(win, Qt::LeftButton, Qt::NoModifier, from);
++      for (int i = 1; i <= 8; i++) {
++        QCursor::setPos(gui()->mapToGlobal(from + by * i / 8));
++        QTest::mouseMove(win, from + by * i / 8);
++      }
++      QTest::mouseRelease(win, Qt::LeftButton, Qt::NoModifier, from + by);
++    }
++  } else if (cmd == "mapwheel" && w.size() > 2) {
++    // Two-finger trackpad scroll by DX, DY points, or a mouse wheel's
++    // angle with "notch"
++    QWidget *mv = gui()->mapview_wdg;
++    QPoint local = mv->rect().center();
++    QPoint d(w[1].toInt(), w[2].toInt());
++    bool notch = (w.size() > 3 && w[3] == "notch");
++    QWheelEvent we(QPointF(local), QPointF(mv->mapToGlobal(local)),
++                   notch ? QPoint() : d, d, Qt::NoButton, Qt::NoModifier,
++                   notch ? Qt::NoScrollPhase : Qt::ScrollUpdate, false);
++
++    QApplication::sendEvent(mv, &we);
 +  } else if (cmd == "scroll" && w.size() > 2) {
 +    set_mapview_origin(mapview.gui_x0 + w[1].toInt(),
 +                       mapview.gui_y0 + w[2].toInt(), map_zoom);
@@ -729,6 +816,11 @@ index 0000000..691a6b0
 +    }
 +  } else if (cmd == "endturn") {
 +    key_end_turn();
++  } else if (cmd == "page" && w.size() > 1 && w[1] == "main") {
++    gui()->switch_page(PAGE_MAIN);
++  } else if (cmd == "saveopts") {
++    // as on leaving the client: write the options file
++    options_save(NULL);
 +  } else if (cmd == "state") {
 +    log_state(w.size() > 1 ? w[1] : QString());
 +  } else if (cmd == "shot" && w.size() > 1) {
@@ -748,7 +840,7 @@ index 0000000..691a6b0
 +{
 +  if (!started) {
 +    if (client_state() == C_S_RUNNING && can_client_change_view()
-+        && head_of_units_in_focus() != nullptr
++        && focus_head() != nullptr
 +        && gui()->unitbar_wdg != nullptr) {
 +      started = true;
 +      gui()->raise();
@@ -794,6 +886,12 @@ index 0000000..691a6b0
 +  drive_timer = new QTimer(gui());
 +  QObject::connect(drive_timer, &QTimer::timeout, tick);
 +  drive_timer->start(500);
++  // FREECIV_UI_DRIVE_NOW: run the lines from the start page on, without
++  // waiting for a game (for "Start new game" checks)
++  if (getenv("FREECIV_UI_DRIVE_NOW") != nullptr) {
++    started = true;
++    drive_log("== starting the script at once");
++  }
 +}
 diff --git a/client/gui-qt/uidrive.h b/client/gui-qt/uidrive.h
 new file mode 100644
@@ -822,7 +920,7 @@ index 0000000..2a70d55
 +
 +#endif // FC__UIDRIVE_H
 diff --git a/meson.build b/meson.build
-index ca99a71..b0db987 100644
+index fdfb6a4..6a6856e 100644
 --- a/meson.build
 +++ b/meson.build
 @@ -939,7 +939,7 @@ endif
@@ -834,7 +932,7 @@ index ca99a71..b0db987 100644
  else
    qt_mod = import('qt5')
  
-@@ -3572,6 +3572,7 @@ executable('freeciv-qt',
+@@ -3573,6 +3573,7 @@ executable('freeciv-qt',
    'client/gui-qt/spaceshipdlg.cpp',
    'client/gui-qt/sprite.cpp',
    'client/gui-qt/themes.cpp',

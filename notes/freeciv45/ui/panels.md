@@ -343,7 +343,10 @@ as patch 0018 (issue #140) behind its own option, `gui_qt_freeciv45_edges`; what
 `edges-slice.md`, the shots in `edges-test/`. The notification badges (#143) followed as patches 0022 and 0023
 (`badges-slice.md`, shots in `badges-test/`), and the "what next" button above the minimap (#144) as patch 0026
 (`whatnext-slice.md`, shots in `whatnext-test/`). The sidebar's wheel and right-click extras and its indicators
-(#146) followed as patch 0027 (`extras-slice.md`, shots in `extras-test/`).
+(#146) followed as patch 0027 (`extras-slice.md`, shots in `extras-test/`). Dragging the map to pan it and two-finger
+scrolling (#231) came as patch 0042 (`pan-slice.md`, shots in `pan-test/`).
+The selected unit's movement range (#232) followed as patch 0044 (`range-slice.md`, shots in `range-test/`).
+The unit bar was sized to its action boxes (#233) as patch 0046 (`barsize-slice.md`, shots in `barsize-test/`).
 
 ## 8. The map's edges: top strip, right-edge column, "what next" and the tile box
 

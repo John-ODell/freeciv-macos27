@@ -2,9 +2,10 @@
 
 Getting [Freeciv](https://www.freeciv.org/) running well on macOS 27 (Apple Silicon), then improving it.
 
-Freeciv is the GPL empire-building game inspired by Civilization I/II. This repo holds
+Freeciv is a free, open-source (GPL) empire-building strategy game. This repo holds
 the macOS 27 port work: notes, build scripts, exported patches against upstream, and
-packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
+packaging. It does not contain Freeciv itself, and it holds no code or assets from any
+commercial game.
 
 ## Layout
 
@@ -14,7 +15,7 @@ packaging. It does not contain Freeciv itself, Civ2 code, or any Civ2 assets.
 | `port/` | Working fork of Freeciv where fixes are made and built. Its own git repo. | No |
 | `patches/` | Patches exported from `port/` with `git format-patch`, one per concern, upstreamable. | Yes |
 | `scripts/` | `build.sh` (configure+build+install), `test.sh` (autogame + save/load probe), `bundle.sh` + `fix-dylibs.py` (self-contained .app with a compiled `launcher.c` and the `collect-licenses.py` notices), `sign-app.sh` (ad-hoc or Developer ID, hardened runtime), `dmg.sh` (DMG, optional notarization), and the probe helpers used for the evidence. | Yes |
-| `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log, Civ4/5 planning menu (`civ45-planning.md`), the proposal for the port, civ45 and civ54 as two or three games (`game-directions.md`), and the Freeciv45 build plan (`freeciv45-plan.md`, research in `freeciv45/`). | Yes |
+| `notes/` | Findings: project map, reproduction logs, REA analysis of prebuilt apps, root cause, plan, backlog, install log, the Freeciv45 planning menu (`civ45-planning.md`), the proposal for the port, civ45 and civ54 as two or three games (`game-directions.md`), and the Freeciv45 build plan (`freeciv45-plan.md`, research in `freeciv45/`). | Yes |
 | `downloads/` | Prebuilt macOS apps and tarballs used for diagnosis. | No |
 | `inbox/` | Notes between this desk and other Claude desks (rules in `inbox/README.md`). Local only. | No |
 
@@ -70,7 +71,7 @@ counts the great people born and spent by the AI from the `FC45GP` lines civ45's
 table in `script.lua`;
 `test.sh` reads the installed data unless given `--data port/freeciv/data`, and its result line names the directory
 the ruleset came from. `--ruleset civ54` does the same for civ54, the copy of civ45's earlier one-unit-per-tile hex
-rules kept for the later Civ5-style game (patch 0005, `data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz`
+rules kept for a later hex game (patch 0005, `data/civ54/README.civ54`). `scripts/check-stacking.py SAVE.gz`
 counts units per tile in the saves an autogame leaves behind (add `--ruleset port/freeciv/data/civ54` to apply civ54's
 exemptions for aircraft and ships in port, or `--report` for civ45, where stacks are the rule).
 `scripts/civ45-rules-test.sh ~/freeciv-builds/qt` checks Freeciv45's rules in a game with one human-controlled
@@ -107,9 +108,29 @@ A "what next" button above the minimap asks for research, then unit orders, then
 (patch 0026, `notes/freeciv45/ui/whatnext-slice.md`).
 The old sidebar's wheel and right-click shortcuts sit on the matching edge buttons and its four indicators in the strip
 (patch 0027, `notes/freeciv45/ui/extras-slice.md`).
+A drag on the map that starts no goto pans it, and two-finger scrolling pans too (patch 0042, `notes/freeciv45/ui/pan-slice.md`).
+The tiles the selected unit can reach this turn are lit on the map; a click on the unit cancels an order or hides them
+(patch 0044, `notes/freeciv45/ui/range-slice.md`).
+The unit bar is as wide as its action boxes and wraps them onto more rows past six (patch 0046,
+`notes/freeciv45/ui/barsize-slice.md`).
 In overhead view the edge between two terrains wanders instead of running as a straight band, and two variants of
 one terrain fade into each other at the tile edge, when the tileset gives the masks for it (patch 0028,
 `notes/freeciv45/tileset-t0.md`, "Wandering edges and variant fades").
+In the Qt client a moving unit slides between tiles instead of freezing the client and jumping (patch 0029,
+`notes/freeciv45/ui/slide/slide.md`).
+Forest next to tundra or glacier is drawn as cool pine, from a second variant set the tileset gives for a terrain next
+to another (patch 0030, `notes/freeciv45/tileset-t0.md`, "Cool pine next to tundra and glacier").
+The shore is drawn from the painted beach and glacier, across both tiles of every coast, and the water depths fade
+into each other; land and water no longer blend into each other (patch 0031, `notes/freeciv45/tileset-t0.md`,
+"Coastline from the painted art").
+civ45 maps are seen at an angle (topology ISO; patch 0032, `notes/freeciv45/iso-default.md`): same square tiles and
+rules, isometric tilesets such as amplio2.
+`tilesets/freeciv45iso` is the angled tileset: the painted ground as 192 x 96 diamonds with soft, wandering edges,
+amplio2 (scaled 2x) for units, cities, rivers and the rest (patch 0033 lets isometric tilesets blend through the
+masks; `notes/freeciv45/iso/freeciv45iso.md`). `tilesets/make-freeciv45iso.py` rebuilds it from the same cut as
+freeciv45test. Its trees, hills and mountains are the art pack's props baked into a few variants per terrain; hill
+ridges and mountain ranges follow the grid line their own kind continues on (patch 0034 lets whole-tile variants
+depend on the neighbours' form, and a pair name several types).
 
 `scripts/harness-test.sh ~/freeciv-builds/qt` tests the harness hook of patch 0007, which hands named AI players'
 build and research choices to a program outside the server, for play-testing (`notes/freeciv45/harness.md`). It

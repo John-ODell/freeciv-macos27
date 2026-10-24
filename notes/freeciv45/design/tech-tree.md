@@ -34,7 +34,14 @@ With `base_tech_cost` 10, `Tech_Cost_Factor` 3 and `sciencebox` 100, bulbs = 10 
 `cost_pct` column is the lever. The first build used 100 to 150 (a gentle nudge); John chose the reference game's
 shape on 2026-10-17 (plan decision 10): costs that rise steeply era over era (mechanics.md 2.4 cites the science
 sources; the reference game's own era ratios are not in the notes, so the target shape is unverified and the
-numbers below are ours). The curve is +50 after era I, then +25 per era.
+numbers below are ours). The curve is +50 after era I, then +25 per era up to era IV, and flat after it.
+
+Changed 2026-10-18 (issue 167): eras V, VI and VII were 225, 250 and 275. Balance report 1's Easy AIs reached
+era VII by turn 243 to 305. At the Normal level (issue 159), with great people slowed to a step of 200 (issue 166),
+the first civ reached era VII at turn 415 or later on seed 3, against the test plan's era VII by turn 400
+(section 5), whose lever is to lower `cost_pct` for the late eras. With V to VII at 200 the first civ reaches era VII
+at turn 360 on seed 3. On the war-heavy seed 42 it reaches era VI at turn 345 and no era VII by 475
+(`notes/freeciv45/balance-2.md`).
 
 | Era | Techs | Tier range (num_reqs) | `cost_pct` | Bulbs, cheapest to dearest | Era average | Ratio to era I |
 |---|---|---|---|---|---|---|
@@ -42,12 +49,12 @@ numbers below are ours). The curve is +50 after era I, then +25 per era.
 | II | 14 | 1 to 8 | 150 | 90 to 405 | 199 | 4.2 |
 | III | 12 | 5 to 14 | 175 | 315 to 787 | 542 | 11.5 |
 | IV | 10 | 10 to 22 | 200 | 660 to 1,380 | 1,068 | 22.7 |
-| V | 14 | 20 to 49 | 225 | 1,417 to 3,375 | 2,372 | 50 |
-| VI | 15 | 28 to 59 | 250 | 2,175 to 4,500 | 3,635 | 77 |
-| VII | 16 | 49 to 70 | 275 | 4,125 to 5,857 | 5,161 | 110 |
+| V | 14 | 20 to 49 | 200 | 1,260 to 3,000 | 2,108 | 45 |
+| VI | 15 | 28 to 59 | 200 | 1,740 to 3,600 | 2,908 | 62 |
+| VII | 16 | 49 to 70 | 200 | 3,000 to 4,260 | 3,754 | 80 |
 
 The era average is 30 × (mean tier + 1) × cost_pct / 100 over the era's techs; the rules test pins Alphabet 30,
-Gunpowder 1,080 (tier 17, 200%) and Fusion Power 5,857 (tier 70, 275%; the cost is a double, so no rounding before the factor). The pace this gives the AI, before and
+Gunpowder 1,080 (tier 17, 200%) and Fusion Power 4,260 (tier 70, 200%). The pace this gives the AI, before and
 after, is in mechanics.md section 12; the first build's 100 to 150 curve reached era V by turn 302 and no era VI
 by turn 400 (section 9), so the steep curve makes the late eras a matter of science output, as John intends.
 

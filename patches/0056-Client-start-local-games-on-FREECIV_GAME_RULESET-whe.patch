@@ -1,0 +1,38 @@
+From 12b6260d963b1925fbb5074ae077a5b912a01c89 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Wed, 21 Oct 2026 02:22:23 -0500
+Subject: [PATCH] Client: start local games on FREECIV_GAME_RULESET when the
+ tileset names none
+
+A game built on Freeciv sets FREECIV_GAME_RULESET in its launcher, so
+"Start new game" plays that game's ruleset on any tileset. A tileset's
+own for_ruleset still comes first, and without the variable nothing
+changes.
+
+Freeciv45 issue 290.
+---
+ client/connectdlg_common.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/client/connectdlg_common.c b/client/connectdlg_common.c
+index 64d100e..0b0306b 100644
+--- a/client/connectdlg_common.c
++++ b/client/connectdlg_common.c
+@@ -294,6 +294,14 @@ bool client_start_server(void)
+   }
+ 
+   ruleset = tileset_what_ruleset(tileset);
++  if (ruleset == NULL || ruleset[0] == '\0') {
++    /* A game built on Freeciv (such as Freeciv45) names its ruleset in
++     * FREECIV_GAME_RULESET, for tilesets that name none. */
++    ruleset = getenv("FREECIV_GAME_RULESET");
++    if (ruleset != NULL && ruleset[0] == '\0') {
++      ruleset = NULL;
++    }
++  }
+ 
+ #ifdef HAVE_USABLE_FORK
+   {
+-- 
+2.56.0
+

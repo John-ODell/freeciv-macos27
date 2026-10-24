@@ -1,0 +1,27 @@
+# Cottage stages and faith pictures in freeciv45iso (issue 295). Run on a driver build at patch 0057:
+#   FREECIV_DRIVE_PREFIX=<prefix> FREECIV_DRIVE_TILESET=freeciv45iso FREECIV_DRIVE_TILESETS=<repo>/tilesets \
+#     scripts/ui-drive.sh notes/freeciv45/ui/cottage-test/cottages.txt <outdir>
+# The three Lua lines found Hearthstead on the free land tile near the start with the most land around it, give it the Temple and faith buildings,
+# and put a cottage, hamlet, village and town on bare grassland near it. Lua output goes to the chat (FC45LOOK done ... placed N).
+pace 1200
+wait 4000
+dismiss
+wait 1000
+option popup_new_cities off
+chat /lua cmd fc45look = {}; for p in players_iterate() do if p:is_human() then fc45look.me = p end end; for x in fc45look.me:units_iterate() do fc45look.start = x.tile; break end; local best = -1; for t in fc45look.start:square_iterate(6) do if t.terrain:class_name() == "Land" and t:num_units() == 0 then local n = 0; for u in t:square_iterate(2) do if u.terrain:class_name() == "Land" then n = n + 1 end end; if n > best then best = n; fc45look.home = t end end end; edit.create_city(fc45look.me, fc45look.home, "Hearthstead")
+wait 2500
+chat /lua cmd local c = fc45look.home:city(); for _, b in ipairs({ "Temple", "Hearth Faith", "Hearth State Faith", "Holy City", "Shrine", "One Flame Faith", "Deep Well Faith" }) do pcall(function() edit.create_building(c, find.building_type(b)) end) end
+wait 1500
+chat /lua cmd local ok, err = pcall(function() local s = { "Cottage", "Hamlet", "Village", "Town" }; local k = 1; for t in fc45look.home:square_iterate(2) do if k <= 4 and t.id ~= fc45look.home.id and t.terrain:class_name() == "Land" and t:num_units() == 0 and t:city() == nil then edit.change_terrain(t, find.terrain("Grassland")); for _, e in ipairs({ "River", "Irrigation", "Farmland", "Mine", "Road", "Resources" }) do pcall(function() edit.remove_extra(t, e) end) end; for _, r in ipairs(fc45_res_all or {}) do pcall(function() edit.remove_extra(t, r) end) end; edit.create_extra(t, s[k]); log.normal("FC45LOOK %s on tile %d", s[k], t.id); k = k + 1 end end; fc45look.placed = k - 1 end); log.normal("FC45LOOK done %s %s placed %s", tostring(ok), tostring(err), tostring(fc45look.placed))
+wait 3000
+dismiss
+wait 1000
+opencity Hearthstead
+wait 2500
+state city
+shot city
+key Escape
+wait 1500
+state placed
+shot map
+quit

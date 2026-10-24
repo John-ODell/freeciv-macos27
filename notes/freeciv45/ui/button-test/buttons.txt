@@ -1,0 +1,18 @@
+# The edge buttons and unit-bar actions from the tileset (issue 307, patch 0059). Run on a driver build at patch 0059:
+#   FREECIV_DRIVE_PREFIX=<prefix> FREECIV_DRIVE_TILESET=freeciv45iso FREECIV_DRIVE_TILESETS=<repo>/tilesets \
+#     scripts/ui-drive.sh notes/freeciv45/ui/button-test/buttons.txt <outdir>
+# and once more with the default trident, which has no ui.edge or ui.action sprites, for the theme icons.
+# civ45, seed 42: the start stack is two Warriors, a Scout, Workers and Settlers (chip 4).
+pace 1200
+wait 4000
+dismiss
+wait 1000
+state warriors
+shot warriors
+click chip 4
+wait 1000
+state settlers
+hover tip Build City
+wait 1500
+shot settlers
+quit

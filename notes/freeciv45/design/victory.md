@@ -110,8 +110,8 @@ Notes, all derived unless marked:
   it, hence the map walk.
 - Population is the sum of city sizes, which is what the score calls citizens (`up/server/score.c:355`).
 - Three turns in a row stops a one-turn spike from a captured city deciding the game.
-- Cost: one pass over the map and all cities per turn. At `tilesperplayer` 100 and 12 players the map is about
-  2,500 tiles (`civ45/game.ruleset:919,926`); unverified, measure in the autogame (section 4).
+- Cost: one pass over the map and all cities per turn. At `tilesperplayer` 110 (issue 211) and 12 players the map is about
+  2,750 tiles (`civ45/game.ruleset:919,926`); unverified, measure in the autogame (section 4).
 - `player_victory` makes the server announce "Scenario victory to the X" (`up/server/srv_main.c:391`); the
   notify line above gives the player the real reason first.
 - Allies: with ALLIED on, an alliance that jointly passes the thresholds does not win here; the thresholds are
@@ -143,6 +143,16 @@ Notes, all derived unless marked:
 - Parts are the three `Special` buildings behind Apollo Program's `Enable_Space` (`civ45/buildings.ruleset:1338-1347`
   for Space Structural; `civ45/effects.ruleset` `apollo_program_1`, observed). Their techs are Space Flight,
   Superconductors and Environmentalism; the tech-tree design keeps them in the last era.
+- Changed 2026-10-18 (issue 164, balance report 2): each part needs a Factory in the city as well as its tech
+  and the Apollo Program, and costs 50, 100 and 200 shields (Structural, Component, Module). Until then a part
+  needed a Factory, a Library, a University and a Research Lab and cost 150, 300 and 600: in two Normal-AI games Research
+  Labs stood in 1 and 5 of about 105 cities at turn 475, and the ships of balance report 1 stopped at 16 to 23
+  structurals with no module. The whole ship is 5,600 shields instead of 16,800.
+- The default AI launched only a complete ship (all 32 structurals, 16 components and 12 modules,
+  `ai/default/aihand.c`, `dai_manage_spaceship`). The fork's AI also launches a ship that is not complete when
+  it has a success rate of at least 90 % and the game's last turn (`endturn`) is close enough that waiting
+  longer would miss it: on the last four turns on which its flight time still ends before `endturn`
+  (`dai_spaceship_deadline`).
 - If a ship arrives, `rank_users()` marks every other player surrendered for the ranking (`up/server/score.c:445-461`).
 
 ### 2.5 Diplomatic: allied now, a vote later
@@ -158,6 +168,13 @@ Notes, all derived unless marked:
   needs every living player in the alliance, so a human decides whether it can fire. Autogames that must run
   to their end turn ALLIED off with `--extra "set victories SPACERACE|CULTURE"`, and `scripts/test.sh` reports a
   game that ends by a victory as a pass that names the turn.
+- Changed 2026-10-18 (issue 159): the single bloc came from the AI level. Every game before that day ran at the server's
+  default, Easy, which adds handicaps Normal lacks, among them `H_CEASEFIRE` (a cease-fire offer at first contact),
+  `H_DIPLOMACY` and `H_DEFENSIVE` (`ai/difficulty.c`); which of them builds the bloc was not isolated.
+  civ45's game.ruleset now sets `ailevel` to Normal, and the fork's server gives a ruleset's level to the AIs that
+  aifill made in pregame before the ruleset loaded (`server/settings.c`, `settings_ruleset`). On seeds 42/42, where
+  every pair was allied from T200 to T350 at Easy (balance report 1, b1), 29 to 38 of 55 pairs are at war from T100
+  to the end, with 1,730 attacks (`logs/test-qt-20261018-160612`, `notes/freeciv45/balance-2.md`).
 - A real vote needs Lua, and Lua cannot read diplomatic states or the AI's attitude: `tolua_game.pkg` and
   `tolua_server.pkg` have no diplstate, alliance or "love" getter (grep for those words, 2026-10-17, observed
   absence). The one known door is an effect with a `DiplRel` requirement read through
@@ -194,8 +211,8 @@ as decision 5 of the plan keeps map and killstack unlocked.
 | `endspaceship` | engine default TRUE | `"endspaceship", "ENABLED", FALSE` written out | The ship must arrive, as the spec says; writing it makes the rule visible |
 | `spaceship_travel_pct` | 100 | 100 | No reason to change until the space era is tuned |
 | `endturn` | engine default 5000 | 475 | The turn the calendar reaches 2050 (2.6); a game that reaches it ends on score |
-| `[culture] victory_min_points` | 20000 | 8000 | Reachable near turn 350 to 400 by a player who builds for culture at today's pace, which is after space parts become possible, so the two races overlap (derived from 2.3; re-tune after roadmap row 8) |
-| `[culture] victory_lead_pct` | 100 | 50 | Needing double the runner-up punishes a two-builder game; half again still demands a clear lead |
+| `[culture] victory_min_points` | 20000 | 30000 | Reachable near turn 350 to 400 by a player who builds for culture at today's pace, which is after space parts become possible, so the two races overlap. 8000 until 2026-10-18 (issue 165): the top civ passed it at turn 225 to 275 in AI games, so only the lead decided; 30000 is the top AI civ's culture near turn 400 to 475 in Normal-AI games on seed 3, which do not build for culture; on the war-heavy seed 42 the top civ stayed under 14000 (balance-1.md, balance-2.md) |
+| `[culture] victory_lead_pct` | 100 | 25 | Needing double the runner-up punishes a two-builder game; a quarter more still demands a clear lead. 50 until 2026-10-18: met in one game of six in balance report 1, while leads of 20 to 45% were common |
 | Domination (Lua) | none | land 60%, citizens 50%, 3 turns, from turn 100 | A map share that needs real conquest on a 12-player map (the best AI holds about 15% of the land at turn 101: 185 of about 1,200 land tiles, `landarea` in the T101 save); citizens stop a land-rich, city-poor empire winning on borders alone |
 
 `citymindist`, `tilesperplayer` and `aifill` stay as they are (`civ45/game.ruleset:919-929`).
@@ -240,7 +257,7 @@ before turn 400, raise `victory_min_points`; if none passes 4,000 by turn 475, l
    (2.5), so "yes" means the `DiplRel` trick or waiting for an engine getter.
 3. `endturn` 475 (the year 2050) as the shipped default, or leave the engine's 5000 and let hosts set it?
 4. Culture: 8000 and a 50% lead now, knowing row 8 of the roadmap will change the pace, or leave 20000 until
-   that slice lands?
+   that slice lands? (Built as 8000 and 50 %; changed to 30000 and a quarter in issue 165, balance report 2.)
 5. Should the score winner at `endturn` be announced through Lua (2.6), or is the plain turn-limit ending enough?
 
 ## Implementation order

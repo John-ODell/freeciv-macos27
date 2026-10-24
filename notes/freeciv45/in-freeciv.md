@@ -31,7 +31,9 @@ manuals, SDK or data tables were read or copied.
   uses ignore it.
 - **Square map**: `topology ""` with civ45's `init_city_radius_sq = 5` gives exactly 21 tiles, the Civ4
   fat cross. The culture radius steps must go. `"ISO"` keeps the same rules with iso art; trident is the
-  only overhead square tileset.
+  only overhead square tileset. Since 2026-10-18 (issue 188) civ45 uses `"ISO"`: John prefers the angled view,
+  amplio2 for now and freeciv45iso when it is ready. freeciv45iso is built since 2026-10-18 (issue 190,
+  `notes/freeciv45/iso/freeciv45iso.md`).
 - **New systems**: luxury happiness, resource health, specialists, drafting, upgrade tweaks and cottages
   are Tier A; Great Generals, leader traits and upgrades in own territory are Tier B; whipping, culture and
   espionage rates, Civ4-style unhappiness, vassals and corporations need the engine.

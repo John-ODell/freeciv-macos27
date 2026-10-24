@@ -1,0 +1,66 @@
+From a17cd153132e759a3136d14027d7a3b5009bb97d Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 18 Oct 2026 13:41:10 -0500
+Subject: [PATCH 37/41] civ45: the last three eras cost 200%, like the
+ Renaissance
+
+Issue 167: the steep curve (100, 150, 175, 200, 225, 250, 275) was set
+against Easy AIs, which reached era VII by turn 243 to 305. With Normal
+AIs (issue 159) and fewer great people (issue 166) the first civ reached
+era VII at turn 415 or later. With the Industrial, Modern and
+Information eras at 200 the first civ reaches it at turn 360.
+---
+ data/civ45/README.civ45  |  2 +-
+ data/civ45/techs.ruleset | 10 ++++++----
+ 2 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index 4518f00..548fdab 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -59,7 +59,7 @@ Differences from sandbox
+   ends with a victor rather than a turn-limit notice. The thresholds are first values, untuned.
+ - The tech tree has 92 advances in seven eras (Ancient, Classical,
+   Medieval, Renaissance, Industrial, Modern, Information), each a tech
+-  class whose cost_pct (100, 100, 110, 120, 130, 140, 150) scales the
++  class whose cost_pct (100, 150, 175, 200, 200, 200, 200) scales the
+   era's costs on top of the Linear style. Six techs are new
+   (Agriculture, Hunting, Archery, Machinery, Compass, Printing), three
+   sandbox leftovers are gone (Ruler Apotheosis, Nanomaterials, Labor
+diff --git a/data/civ45/techs.ruleset b/data/civ45/techs.ruleset
+index 487df32..d726932 100644
+--- a/data/civ45/techs.ruleset
++++ b/data/civ45/techs.ruleset
+@@ -45,7 +45,9 @@ format_version = 30
+ ;name =
+ 
+ ; Freeciv45's seven eras. Each advance names its era in "class"; cost_pct scales the
+-; era's tech costs (notes/freeciv45/design/tech-tree.md, section 1).
++; era's tech costs (notes/freeciv45/design/tech-tree.md, section 1). The curve stops rising after
++; era IV (Industrial, Modern and Information were 225, 250 and 275 until issue 167: with Normal AIs and
++; the slower great people of issue 166 the first civ reached era VII at turn 415 or later, not near 400).
+ [techclass_ancient]
+ name     = _("Ancient")
+ cost_pct = 100
+@@ -64,15 +66,15 @@ cost_pct = 200
+ 
+ [techclass_industrial]
+ name     = _("Industrial")
+-cost_pct = 225
++cost_pct = 200
+ 
+ [techclass_modern]
+ name     = _("Modern")
+-cost_pct = 250
++cost_pct = 200
+ 
+ [techclass_information]
+ name     = _("Information")
+-cost_pct = 275
++cost_pct = 200
+ 
+ ; /* <-- avoid gettext warnings
+ ;
+-- 
+2.56.0
+

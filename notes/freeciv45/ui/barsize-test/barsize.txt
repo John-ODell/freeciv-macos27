@@ -1,0 +1,23 @@
+# The unit bar's size (issue 233): one unit with five actions, one with four, and three units selected at once
+# with the actions they share. Run at 1440 x 900 (1x) and on the 1728 x 1030 pt screen at 2x.
+pace 1000
+wait 4000
+dismiss
+wait 1000
+state warriors
+shot 01-warriors
+key w
+wait 600
+key w
+wait 600
+key w
+wait 1000
+state workers
+shot 02-workers
+click chip 0 shift
+wait 800
+click chip 4 shift
+wait 1000
+state three-selected
+shot 03-three-selected
+quit

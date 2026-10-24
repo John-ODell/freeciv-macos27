@@ -1,0 +1,25 @@
+# Start new game in Freeciv45.app (issue 272): from the start page, "Start new game", then Start, on whatever
+# tileset the app gives a profile. A driver build of the fork at patch 0054 (notes/freeciv45/ui/bar-test/uidrive.diff,
+# with FREECIV_UI_DRIVE_NOW and saveopts) bundled with scripts/bundle.sh qt --game freeciv45, run through the app's
+# own launcher, offscreen, with a throwaway HOME:
+#   HOME=<home> QT_QPA_PLATFORM=offscreen FREECIV_UI_DRIVE=<this file> FREECIV_UI_DRIVE_OUT=<out> FREECIV_UI_DRIVE_NOW=1 \
+#     Freeciv45.app/Contents/MacOS/Freeciv45
+# The state lines carry the window title, the tileset and the ruleset; saveopts writes the options file as leaving
+# the client does. The runs and what they showed: runs.txt.
+pace 1500
+wait 4000
+state main
+shot main
+click button Start new game
+wait 10000
+state pregame
+shot pregame
+click button Start
+wait 12000
+dismiss
+wait 2000
+state ingame
+shot game
+saveopts
+wait 1000
+quit

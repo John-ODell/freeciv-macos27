@@ -8,7 +8,9 @@
 # Usage: scripts/ui-drive.sh <drive-script> <outdir> [port] [theme]
 #   FREECIV_DRIVE_PREFIX  install prefix of the driver build (required; see below)
 #   port                  server port (default 5720); theme: Qt theme name (default NightStalker)
-#   FREECIV_DRIVE_TILESET   tileset to force with -t (default trident)
+#   FREECIV_DRIVE_TILESET   tileset to force with -t (default trident; "none" passes no -t, so the client picks
+#                           its own default for the map, as a player's client does)
+#   FREECIV_DRIVE_FRESH=1   start from empty client options instead of a copy of ~/.freeciv/freeciv-client-rc-3.2
 #   FREECIV_DRIVE_TILESETS  a dir with that tileset's .tilespec, put first on the client's FREECIV_DATA_PATH
 #   FREECIV_DRIVE_SERV      extra server lines for game.serv, e.g. "set fogofwar DISABLED"
 #   FREECIV_DRIVE_VISIBLE=1 show the client window; by default it runs with QT_QPA_PLATFORM=offscreen (or
@@ -38,7 +40,7 @@ if [ -n "$(ls -A "$OUT")" ] && [ ! -f "$OUT/drive.log" ] && [ ! -f "$OUT/game.se
   echo "$OUT is not empty and holds no earlier run; pick a new folder"; exit 1
 fi
 rm -rf "${OUT:?}"/*; mkdir -p "$OUT/home/.freeciv"
-if [ -f ~/.freeciv/freeciv-client-rc-3.2 ]; then
+if [ -f ~/.freeciv/freeciv-client-rc-3.2 ] && [ "${FREECIV_DRIVE_FRESH:-0}" != 1 ]; then
   sed -e "s/^gui_qt_default_theme_name=.*/gui_qt_default_theme_name=\"$THEME\"/" \
       ~/.freeciv/freeciv-client-rc-3.2 > "$OUT/home/.freeciv/freeciv-client-rc-3.2"
 else
@@ -66,9 +68,10 @@ HPID=$!
 sleep 3
 QPA="${FREECIV_DRIVE_QPA:-offscreen}"; [ "${FREECIV_DRIVE_VISIBLE:-0}" = 1 ] && QPA="${QT_QPA_PLATFORM:-cocoa}"
 DATA="$(dirname "$BIN")/share/freeciv"; [ -n "${FREECIV_DRIVE_TILESETS:-}" ] && DATA="$FREECIV_DRIVE_TILESETS:$DATA"
+TSARG=(-t "${FREECIV_DRIVE_TILESET:-trident}"); [ "${FREECIV_DRIVE_TILESET:-}" = none ] && TSARG=()
 ( cd "$OUT" && HOME="$OUT/home" FREECIV_OPT=home/.freeciv/freeciv-client-rc-3.2 FREECIV_UI_DRIVE="$SCRIPT" \
   FREECIV_UI_DRIVE_OUT="$OUT" QT_QPA_PLATFORM="$QPA" FREECIV_DATA_PATH="$DATA" \
-  exec "$BIN/freeciv-qt" -a -s localhost -p "$PORT" -n Probe -t "${FREECIV_DRIVE_TILESET:-trident}" \
+  exec "$BIN/freeciv-qt" -a -s localhost -p "$PORT" -n Probe ${TSARG[@]+"${TSARG[@]}"} \
   > "$OUT/client.log" 2>&1 ) &
 CPID=$!
 sleep 10
