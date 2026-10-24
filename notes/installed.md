@@ -166,3 +166,12 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - `Freeciv45.app` was rebundled on it with `FREECIV_SRC=port/s61 scripts/bundle.sh qt --game freeciv45`, from main at f3523aa (184 MB, ad-hoc signed, `codesign -v` passes). Its civ45 rules carry the Labour, Trade, Faith and Service sliders.
 - Checked: a 5-turn civ45 autogame on `~/freeciv-builds/qt` passes. No new formulae. Git-ignored, safe to delete and regenerate.
 
+
+## 2026-10-24, the client and Freeciv45.app at patch 0063, and the Freeciv45 release files
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0063 (eb20321, worktree `port/s61`). Patch 0063 (culture victory at 50,000 points) changes only data, so this was an incremental build with 0 compiler warnings. `Freeciv45.app` was rebundled on it from main at 88e9b8b. Its `civ45/game.ruleset` has `victory_min_points = 50000`, and `codesign -v` passes.
+- Checked: a 100-turn civ45 autogame on the app's own server (`Contents/MacOS`, `--data Contents/Resources/share/freeciv`) passes.
+- Release files for the first Freeciv45 release, made but **not published** (that waits for John):
+  - `~/freeciv-builds/apps/Freeciv45-3.2.6-arm64.dmg` (109 MB, `scripts/dmg.sh`, `hdiutil verify` valid) and its `.sha256`;
+  - `~/freeciv-builds/apps/freeciv45-1-src.tar.gz` (`git -C port/freeciv archive --prefix=freeciv45-1/ series-0063`) and its `.sha256`. `SOURCE.txt` in the app names the same tree (eb20321).
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
