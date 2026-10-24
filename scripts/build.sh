@@ -52,8 +52,9 @@ esac
 # ---- the patch series ------------------------------------------------------------------------------------------
 # A git source tree must carry every patch in patches/ as a commit; git am keeps a patch's subject, so the check
 # looks for each subject in the tree's log (issue 269: macos27-port once lacked 0035-0043, 0045, 0047 and 0048, and a
-# build from it quietly lost balance 2). A plain directory, such as a driver build's copy, can't be checked.
-if git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1; then
+# build from it quietly lost balance 2). A plain directory, such as a driver build's copy, can't be checked; one
+# inside another checkout (port/ is ignored in this repo) counts as plain, so only a tree's own top is checked.
+if [ "$(git -C "$SRC" rev-parse --show-toplevel 2>/dev/null)" = "$(cd "$SRC" && pwd -P)" ]; then
   SUBJECTS="$(git -C "$SRC" log --format=%s -n 5000)"
   LACKING=""
   for p in "$ROOT"/patches/*.patch; do
