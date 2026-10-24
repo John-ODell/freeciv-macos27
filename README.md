@@ -21,14 +21,32 @@ commercial game.
 
 ## Download (macOS 27, Apple Silicon)
 
-Releases: https://github.com/John-ODell/freeciv-macos27/releases. Each release has `Freeciv-<version>-arm64.dmg`,
-its `.sha256`, and `freeciv-<version>-src.tar.gz`, the exact source the DMG was built from (upstream S3_2 plus
-`patches/`). The app is ad-hoc signed, not notarized, so the first launch of a downloaded copy is refused by
+Two downloads, both free, both for macOS 27 on Apple Silicon:
+
+- **Freeciv for Mac:** stock Freeciv 3.2.6 with only the fixes it needs to run well on this Mac. Play it as the
+  Freeciv project ships it.
+- **Freeciv45:** a game of its own built on Freeciv: stacks of units, a tech tree in seven eras, faiths, great
+  people, cottages and civics sliders, with its own isometric art (`notes/freeciv45/standalone.md`). It installs as
+  its own app beside Freeciv for Mac and keeps its own settings.
+
+The easiest way to install either one: https://northbridgelandmark.com/builds/freeciv/, with a one-click download
+and step-by-step install.
+
+For Windows, Linux, Intel Macs and older macOS, get Freeciv from the Freeciv project: https://www.freeciv.org.
+This repo is an unofficial Mac build, not a release of the Freeciv project.
+
+Releases: https://github.com/John-ODell/freeciv-macos27/releases. Freeciv for Mac releases are tagged
+`v<version>-mac<N>` and have `Freeciv-<version>-arm64.dmg`; Freeciv45 releases are tagged `freeciv45-<N>` and have
+`Freeciv45-<version>-arm64.dmg`. Each release also has the DMG's `.sha256` and a `-src.tar.gz`, the exact source the
+DMG was built from (upstream S3_2 plus `patches/`). The apps are ad-hoc signed, not notarized, so the first launch
+of a downloaded copy is refused by
 Gatekeeper. Either open System Settings > Privacy & Security and choose Open Anyway after the refusal, or run:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Freeciv.app
 ```
+
+(or `/Applications/Freeciv45.app`).
 
 Check the download first:
 
