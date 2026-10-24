@@ -1,0 +1,41 @@
+From 0546e380aa9483d7780dae2f3bd6b2733ea93e17 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 24 Oct 2026 12:27:07 -0500
+Subject: [PATCH] civ45: Settlers only found cities
+
+Settlers had the Settlers and Fortress flags, so they could build roads,
+irrigation, mines and forts like Workers.  In civ45 the land is the
+Workers' job: Settlers keep Cities and AddToCity, and the helptext says
+so.
+---
+ data/civ45/units.ruleset | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 6c6877a..7e1fda3 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -533,8 +533,8 @@ uk_shield     = 0
+ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+-flags         = "Settlers", "Cant_Fortify", "NonMil", "HasNoZOC",
+-                "AddToCity", "Cities", "Fortress", "FleshBased"
++flags         = "Cant_Fortify", "NonMil", "HasNoZOC",
++                "AddToCity", "Cities", "FleshBased"
+ ; No veteran levels (level name is never displayed)
+ veteran_names = _("green")
+ veteran_base_raise_chance = 0
+@@ -546,7 +546,8 @@ helptext      = _("\
+ Settlers are one of the key units in the game, as they are your main \
+ means of founding new cities.\
+ "), _("\
+-Settlers can also perform the same terrain alterations as Workers.\
++Settlers found cities (or join one) and do nothing else: roads, \
++irrigation, mines and forts are the Workers' job.\
+ "), _("\
+ TIP: optimal production of Settlers occurs in cities of at most \
+ size 4, or cities with a Granary of at most size 6.\
+-- 
+2.56.0
+
