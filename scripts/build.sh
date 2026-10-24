@@ -8,7 +8,8 @@
 #   gtk   : freeciv-gtk4 and freeciv-gtk3.22 clients, fcmp-gtk4/gtk3, server, manual, ruleup
 #   sdl2  : freeciv-sdl2 client, fcmp-cli, server, manual, ruleup
 #
-# Source tree : $FREECIV_SRC   (default: <repo>/port/freeciv, our patched S3_2 checkout)
+# Source tree : $FREECIV_SRC   (default: <repo>/port/freeciv, our patched S3_2 checkout); a git tree must have every
+#               patch in patches/ as a commit, or the build stops (FREECIV_ALLOW_MISSING_PATCHES=1 builds anyway)
 # Build dir   : $FREECIV_SRC/build-<client>[-debug]
 # Install to  : $FREECIV_PREFIX_ROOT/<client>[-debug]   (default: ~/freeciv-builds; NOT under ~/Desktop,
 #               ~/Documents or ~/Downloads: macOS privacy protection blocks LaunchServices-launched apps there,
@@ -47,6 +48,26 @@ case "$TARGET" in
   qt|gtk|sdl2) ;;
   *) usage ;;
 esac
+
+# ---- the patch series ------------------------------------------------------------------------------------------
+# A git source tree must carry every patch in patches/ as a commit; git am keeps a patch's subject, so the check
+# looks for each subject in the tree's log (issue 269: macos27-port once lacked 0035-0043, 0045, 0047 and 0048, and a
+# build from it quietly lost balance 2). A plain directory, such as a driver build's copy, can't be checked.
+if git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1; then
+  SUBJECTS="$(git -C "$SRC" log --format=%s -n 5000)"
+  LACKING=""
+  for p in "$ROOT"/patches/*.patch; do
+    s="$(git -C "$ROOT" mailinfo /dev/null /dev/null < "$p" | sed -n 's/^Subject: //p')"
+    printf '%s\n' "$SUBJECTS" | grep -Fxq -- "$s" || LACKING="$LACKING $(basename "$p" | cut -c1-4)"
+  done
+  if [ -n "$LACKING" ]; then
+    echo "$SRC lacks patches:$LACKING"
+    echo "build from a tree with the whole series (44e6898 plus git am patches/*.patch), or set FREECIV_ALLOW_MISSING_PATCHES=1"
+    [ "${FREECIV_ALLOW_MISSING_PATCHES:-0}" = 1 ] || exit 1
+  fi
+else
+  echo "note: $SRC is not a git checkout, so it is not checked against patches/"
+fi
 
 # ---- Homebrew dependencies -------------------------------------------------------------------------------------
 command -v brew >/dev/null || { echo "Homebrew is required (https://brew.sh)"; exit 1; }
