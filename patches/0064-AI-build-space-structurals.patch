@@ -1,0 +1,109 @@
+From 3ef8a60b8a8f29b4f74e6856b341997b2165cfb7 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sun, 25 Oct 2026 11:17:34 -0500
+Subject: [PATCH] AI: build space structurals
+
+The AI gave Space Structural, Component and Module the same want in a
+city, and building_advisor_choose() keeps the first of equal wants in
+ruleset order. civ45 (like civ2civ3) lists Component, Module, Structural,
+so structurals were never chosen and no part was ever connected: in a
+475-turn civ45 game three civs built 16 components and up to 4 modules
+each, with 0 structurals and a 0 % success rate.
+
+Want structurals twice as much while the ship has fewer than it needs
+to connect s0 and its placed parts, and half as much once it has enough.
+Want the first three modules half again as much, so a ship gets its
+habitation, life support and solar panels before more components.
+
+Seed 7 islands game, turns 350-450 from the same save: before, Rama
+Thibodi 0/16/1 (structurals/components/modules) and Zachary Taylor
+0/16/4; after, 15/11/3 and 11/5/3.
+---
+ ai/default/daieffects.c | 64 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 64 insertions(+)
+
+diff --git a/ai/default/daieffects.c b/ai/default/daieffects.c
+index f6ef8e0..3454d53 100644
+--- a/ai/default/daieffects.c
++++ b/ai/default/daieffects.c
+@@ -131,6 +131,53 @@ static int num_affected_units(const struct effect *peffect,
+   return unit_count;
+ }
+ 
++/**********************************************************************//**
++  Mark structural req and the chain it hangs from back to s0.
++**************************************************************************/
++static void dai_spaceship_need(bv_spaceship_structure *need, int req)
++{
++  while (req >= 0 && !BV_ISSET(*need, req)) {
++    BV_SET(*need, req);
++    req = structurals_info[req].required;
++  }
++}
++
++/**********************************************************************//**
++  How many structurals the spaceship needs to connect s0 and every part
++  already placed. A part that isn't connected doesn't count when the
++  ship flies (spaceship_calc_derived()).
++**************************************************************************/
++static int dai_spaceship_structurals_needed(const struct player_spaceship *ship)
++{
++  bv_spaceship_structure need;
++  int i, n = 0;
++
++  BV_CLR_ALL(need);
++  dai_spaceship_need(&need, 0);
++  for (i = 0; i < ship->fuel; i++) {
++    dai_spaceship_need(&need, components_info[i * 2].required);
++  }
++  for (i = 0; i < ship->propulsion; i++) {
++    dai_spaceship_need(&need, components_info[i * 2 + 1].required);
++  }
++  for (i = 0; i < ship->habitation; i++) {
++    dai_spaceship_need(&need, modules_info[i * 3].required);
++  }
++  for (i = 0; i < ship->life_support; i++) {
++    dai_spaceship_need(&need, modules_info[i * 3 + 1].required);
++  }
++  for (i = 0; i < ship->solar_panels; i++) {
++    dai_spaceship_need(&need, modules_info[i * 3 + 2].required);
++  }
++  for (i = 0; i < NUM_SS_STRUCTURALS; i++) {
++    if (BV_ISSET(need, i)) {
++      n++;
++    }
++  }
++
++  return n;
++}
++
+ /**********************************************************************//**
+   How desirable is a particular effect for a particular city,
+   given the number of cities in range (c).
+@@ -438,6 +485,23 @@ adv_want dai_effect_value(struct player *pplayer,
+         space_want *= 3;
+       }
+ 
++      /* The three parts would otherwise get the same want, and a tie goes
++       * to whichever the ruleset lists first, so structurals came last and
++       * no part was ever connected. Want structurals while the ship lacks
++       * the structure its parts need, and the first module of each kind
++       * before more components, since a ship without them can't fly. */
++      if (peffect->type == EFT_SS_STRUCTURAL) {
++        if (pplayer->spaceship.structurals
++            < dai_spaceship_structurals_needed(&pplayer->spaceship)) {
++          space_want *= 2;
++        } else {
++          space_want /= 2;
++        }
++      } else if (peffect->type == EFT_SS_MODULE
++                 && pplayer->spaceship.modules < 3) {
++        space_want = space_want * 3 / 2;
++      }
++
+       v += space_want;
+     }
+     break;
+-- 
+2.56.0
+
