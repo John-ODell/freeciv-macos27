@@ -169,12 +169,12 @@ Across the 16 games (`summary.md`, each game's header lines):
 ## 4. Findings (new issues)
 
 - The AI builds spaceship components and modules but not the structurals that connect them, so no ship launches
-  (seed 7 islands).
-- Domination, alliance, space and conquest never win in 475 turns of AI play: the bars (above) are John's call.
-- The regular civ45 map puts every civ on one continent; separate continents need `generator ISLAND`.
+  (seed 7 islands): issue 331.
+- Domination, alliance, space and conquest never win in 475 turns of AI play: the bars (above) are John's call: issue 332.
+- The regular civ45 map puts every civ on one continent; separate continents need `generator ISLAND`: issue 333.
 - The start decides the winner on the shared-land maps: the civ with the most land at T50 wins, and coastal or cramped
   starts finish last. Options to weigh: a fairer start (`startpos`, `dispersion`, or a fair-islands map), or more
-  ways back for a cramped civ.
+  ways back for a cramped civ: issue 334.
 
 ## Not checked
 
