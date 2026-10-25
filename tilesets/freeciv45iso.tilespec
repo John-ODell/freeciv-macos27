@@ -177,6 +177,7 @@ files =
   "misc/techs.spec",
   "freeciv45iso/tech_icons.spec",
   "misc/treaty.spec",
+  "freeciv45iso/space_treaty.spec",
   "freeciv45iso/nuke.spec",
   "freeciv45iso/explosions.spec",
   "freeciv45iso/cities.spec",

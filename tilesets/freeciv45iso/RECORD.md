@@ -66,6 +66,7 @@ Cut as `make-freeciv45test.py` cuts them (the same panels, cells, cutter and ton
 | `freeciv45iso/icons.spec`, `intro.png`, `freeciv45.icns` | the art pack's title art (`freeciv45/14_title_art`, `run1`): `title_b` and the keep of `app_icon` | the picture cropped to 0x60x1536x960 and scaled to 820x480; the keep's largest piece, defringed, centred on transparent squares (appicon 512 px, cityicon 32 px; the .icns at 16, 32, 128, 256, 512 px and their @2x) | `intro.png`, `appicon.png`, `cityicon.png` |
 | `freeciv45iso/ui_icons.spec` | the art pack's UI icons (`freeciv45/13_ui_icons`, `run1`, panels 1 to 4, `post/raw`), 53 cuts | tidied, fitted into 15x20 cells (people standing on the cell's foot); the bulb, sun and flake in 8 levels, grey to full colour | 240x100 |
 | `freeciv45iso/ui_buttons.spec` | the art pack's buttons (`freeciv45/13_ui_icons`, `run2`, panels 1 and 2, `post/raw`), 16 cuts | tidied, fitted into 76x76 (edge) and 48x48 (actions) cells, twice the client's size | 532x124 |
+| `freeciv45iso/space_treaty.spec` | the art pack's spaceship parts and treaty marks (`freeciv45/13_ui_icons`, `run3/panel1`, the whole sheet), 9 cuts | cut by piece from the sheet (row 3's exhaust and Agree split at x = 499), defringed, fitted into 60x60 (parts, each at the stock part's footprint, SPACE_FIT) and 30x30 (marks) cells, the stock sizes | 420x90 |
 | `freeciv45iso/coast.spec` | `run14` r1c3 (shores_and_banks.png), through `seamless.py`: beach cells for water tiles next to land, layer 1 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | `run14` r1c3 (shores_and_banks.png), through `seamless.py`: sand cells for land tiles next to water, layer 1 | generated, 96 px quarter cells | 3072x288 |
 | `freeciv45iso/coast.spec` | `run13` r1c1 (glacier_and_swamp.png), through `seamless.py`: ice cells for water tiles next to glacier, layer 2 | generated, 96 px quarter cells | 3072x288 |
@@ -100,6 +101,10 @@ Cut as `make-freeciv45test.py` cuts them (the same panels, cells, cutter and ton
 ## Buttons
 
 `ui_buttons.spec`: the Qt client's right-edge buttons (`ui.edge.<name>`) and unit-bar actions (`ui.action.<name>`), which patches 0059 and 0060 draw in place of the theme's icons: the Freeciv45 art pack's buttons (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/13_ui_icons`, run 2, issue 307), cleaned and fitted at twice the 38 and 24 points the client draws them at. Each has a colour and shape of its own. Used: `map`, `research`, `nations`, `cities`, `units`, `economy`, `more`, `settle`, `road`, `irrigate`, `mine`, `goto`, `fortify`, `sentry`, `wait`, `done`; run 2's messages and end turn stay in the art repo until the client has buttons for them. GPL-2.0-or-later, like the rest of the folder.
+
+## Spaceship parts and treaty marks
+
+`space_treaty.spec`: the spaceship dialog's seven parts (`spaceship.<part>`) and the diplomacy dialog's agree and disagree marks (`treaty.agree_thumb_up`, `treaty.disagree_thumb_down`): the Freeciv45 art pack's sheet (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/13_ui_icons`, run 3, issue 328), cut by piece from the whole sheet so the exhaust keeps its flame, cleaned and fitted at the stock 60 and 30 px, each part at the stock part's footprint in its cell (`SPACE_FIT`), since the client centres each one on its point in the ship plan. Used: `solar_panels`, `life_support`, `habitation`, `structural`, `fuel`, `propulsion`, `exhaust`, `treaty_agree`, `treaty_disagree`. GPL-2.0-or-later, like the rest of the folder.
 
 ## Start picture and icons
 

@@ -996,6 +996,65 @@ def buttons(art, out_dir, record):
                   % (NAME, BUTTON_RUN, len(BUTTON_EDGE) + len(BUTTON_ACTIONS), ep, ep, ap, ap, *sheet.size))
     return list(BUTTON_EDGE + BUTTON_ACTIONS)
 
+# Spaceship parts and treaty marks (issue 328): the art pack's freeciv45/13_ui_icons run 3, one 3 x 3 sheet, in place of the
+# stock misc/space.spec and misc/treaty.spec. The client lays the spaceship plan out by the parts' own size and draws the
+# treaty marks unscaled (client/tilespec.c), so they keep the stock 60 x 60 and 30 x 30. The parts are cut from the whole
+# sheet (panel_props), so a coupling that crosses into the next cell stays with its part. The exhaust's flame runs on into
+# the Agree cell and touches the parchment, so row 3's first two are cut at SPACE_SPLIT instead (the column where the
+# parchment starts, measured on the sheet), and Agree drops the flame's blue pixels left on its edge.
+SPACE_RUN, SPACE_PANEL = "run3", "panel1"
+SPACE_PX, TREATY_PX = 60, 30
+SPACE_PARTS = ("solar_panels", "life_support", "habitation", "structural", "fuel", "propulsion", "exhaust")
+TREATY_MARKS = (("treaty_agree", "treaty.agree_thumb_up"), ("treaty_disagree", "treaty.disagree_thumb_down"))
+SPACE_SPLIT = 499 / 1254
+# The client draws each part centred on its point in common/spaceship.c's tables (client/mapview_common.c put_spaceship):
+# modules every 60 px, structurals every 30 px (so the stock lattice is about 38 px and they overlap), a fuel tank 45 px
+# left of its engine, and the exhaust a whole cell right of the engine. So each part has the stock part's footprint in
+# its cell, (width, height, alignment): the engine reaches the cell's right edge to meet the exhaust, which starts at
+# its cell's left edge, and the tank leans right towards the engine.
+SPACE_FIT = {"solar_panels": (60, 60, "c"), "life_support": (60, 60, "c"), "habitation": (60, 60, "c"),
+             "structural": (40, 40, "c"), "fuel": (48, 28, "r"), "propulsion": (60, 32, "r"), "exhaust": (34, 30, "l")}
+
+def space_treaty(art, out_dir, record):
+    """space_treaty.png and .spec: the seven parts in a row of 60 px cells, the two marks in a row of 30 px cells under
+    them; returns the cut names used."""
+    sheet_path = os.path.join(art, SPACE_RUN, SPACE_PANEL, "space_treaty.png")
+    names = read_names(os.path.join(art, "space_treaty.names"))
+    cut = panel_props(sheet_path, names, grid=3)
+    whole = Image.open(sheet_path).convert("RGBA"); w, h = whole.size; split = round(w * SPACE_SPLIT)
+    def box(x0, x1, drop_blue=False):
+        im = whole.crop((x0, h * 2 // 3, x1, h))
+        if drop_blue:
+            px = im.load()
+            for y in range(im.height):
+                for x in range(im.width):
+                    r, g, b, a = px[x, y]
+                    if a and b > r + 20: px[x, y] = (r, g, b, 0)
+        im = defringe(pieces(im))
+        return im.crop(im.getchannel("A").point(lambda v: 255 if v >= 16 else 0).getbbox())
+    cut["exhaust"], cut["treaty_agree"] = box(0, split), box(split, w * 2 // 3, drop_blue=True)
+    def fit(im, px, fw, fh, align="c"):
+        im = scaled(im, min(fw / im.width, fh / im.height)); cell = Image.new("RGBA", (px, px), (0, 0, 0, 0))
+        x = {"l": 0, "c": (px - im.width) // 2, "r": px - im.width}[align]
+        cell.alpha_composite(im, (x, (px - im.height) // 2)); return cell
+    sheet = Image.new("RGBA", (SPACE_PX * len(SPACE_PARTS), SPACE_PX + TREATY_PX), (0, 0, 0, 0))
+    for k, name in enumerate(SPACE_PARTS): sheet.alpha_composite(fit(cut[name], SPACE_PX, *SPACE_FIT[name]), (k * SPACE_PX, 0))
+    for k, (name, _) in enumerate(TREATY_MARKS):
+        sheet.alpha_composite(fit(cut[name], TREATY_PX, TREATY_PX, TREATY_PX), (k * TREATY_PX, SPACE_PX))
+    sheet.save(os.path.join(out_dir, "space_treaty.png"), optimize=True)
+    write_spec(out_dir, "space_treaty", "Spaceship parts and treaty marks for the Freeciv45 iso tileset: the Freeciv45 art pack's\n"
+               "freeciv45/13_ui_icons run 3, fitted by tilesets/make-%s.py (see RECORD.md) at the stock sizes.\n"
+               "Listed after misc/treaty.spec, so these tags override the stock pictures." % NAME,
+               [("space", 0, SPACE_PX, SPACE_PX, [(0, k, ["spaceship." + n]) for k, n in enumerate(SPACE_PARTS)]),
+                ("treaty", SPACE_PX, TREATY_PX, TREATY_PX, [(0, k, [t]) for k, (_, t) in enumerate(TREATY_MARKS)])])
+    record.append("| `%s/space_treaty.spec` | the art pack's spaceship parts and treaty marks (`freeciv45/13_ui_icons`, `%s/%s`, "
+                  "the whole sheet), %d cuts | cut by piece from the sheet (row 3's exhaust and Agree split at x = %d), "
+                  "defringed, fitted into %dx%d (parts, each at the stock part's footprint, SPACE_FIT) and %dx%d (marks) cells, the "
+                  "stock sizes | %dx%d |"
+                  % (NAME, SPACE_RUN, SPACE_PANEL, len(SPACE_PARTS) + len(TREATY_MARKS), split,
+                     SPACE_PX, SPACE_PX, TREATY_PX, TREATY_PX, *sheet.size))
+    return list(SPACE_PARTS) + [n for n, _ in TREATY_MARKS]
+
 def border_alpha(d):
     """The band's coverage at distance d from the edge into the owner's tile."""
     if d < 0: return 0.0
@@ -1393,6 +1452,7 @@ def main():
     ap.add_argument("--ui-art", help="the art repo's freeciv45/13_ui_icons (default: next to --art)")
     ap.add_argument("--no-ui-icons", action="store_true", help="keep the stock citizens, specialists, rate and government icons")
     ap.add_argument("--no-buttons", action="store_true", help="no ui.edge and ui.action buttons: the client keeps its theme icons")
+    ap.add_argument("--no-space", action="store_true", help="keep the stock spaceship parts and treaty marks")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
@@ -1451,6 +1511,10 @@ def main():
     if not a.no_buttons:
         button_props = buttons(a.ui_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "13_ui_icons"),
                                out_dir, painted_record)
+    space_props = []
+    if not a.no_space:
+        space_props = space_treaty(a.ui_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "13_ui_icons"),
+                                   out_dir, painted_record)
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -1499,6 +1563,7 @@ def main():
             if not a.no_title and rel == "misc/icons.spec": files.append("%s/icons.spec" % NAME)
             if not a.no_ui_icons and rel == "misc/specialists.spec": files.append("%s/ui_icons.spec" % NAME)
             if not a.no_buttons and rel == "misc/specialists.spec": files.append("%s/ui_buttons.spec" % NAME)
+            if not a.no_space and rel == "misc/treaty.spec": files.append("%s/space_treaty.spec" % NAME)
     tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku,
              icons=not (a.no_bk_icons and a.no_title and a.no_ui_icons), intro=not a.no_title)
     if not a.no_bk_extras: extras_styles(os.path.join(a.out, NAME + ".tilespec"))
@@ -1593,6 +1658,15 @@ def main():
                     "draws them at. Each has a colour and shape of its own. Used: %s; run 2's messages and end turn stay in the "
                     "art repo until the client has buttons for them. GPL-2.0-or-later, like the rest of "
                     "the folder.\n" % (BUTTON_PX, ACTION_PX, ", ".join("`%s`" % n for n in button_props)))
+        if space_props:
+            f.write("\n## Spaceship parts and treaty marks\n\n`space_treaty.spec`: the spaceship dialog's seven parts "
+                    "(`spaceship.<part>`) and the diplomacy dialog's agree and disagree marks (`treaty.agree_thumb_up`, "
+                    "`treaty.disagree_thumb_down`): the Freeciv45 art pack's sheet (John O'Dell's sheet workflow with OpenAI "
+                    "image generation through Codex, art repo folder `freeciv45/13_ui_icons`, run 3, issue 328), cut by piece "
+                    "from the whole sheet so the exhaust keeps its flame, cleaned and fitted at the stock %d and %d px, each "
+                    "part at the stock part's footprint in its cell (`SPACE_FIT`), since the client centres each one on its "
+                    "point in the ship plan. Used: %s. GPL-2.0-or-later, like the rest of the folder.\n"
+                    % (SPACE_PX, TREATY_PX, ", ".join("`%s`" % n for n in space_props)))
         if title_props:
             f.write("\n## Start picture and icons\n\n`intro.png` (the tilespec's `main_intro_file`), `icons.spec` (`icon.freeciv`, "
                     "the application icon, and `icon.citydlg`, the city dialog's) and `freeciv45.icns` (Freeciv45.app's icon, "
