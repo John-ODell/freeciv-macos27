@@ -1,0 +1,16 @@
+23:42 culture s7 rc=0 logs/test-qt-20261024-231939 autogame: ok, ended by a victory in turn 440, up to 475 turns, 10 AIs, 1396 s; Game ended in cultural domination victory for Alfonso el Sabio.
+00:10 space s7 rc=0 logs/test-qt-20261024-234255 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1667 s; Scenario victory to the Spanish.
+00:34 allied s7 rc=0 logs/test-qt-20261025-001042 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1450 s; Scenario victory to the Spanish.
+01:09 domination s7 rc=0 logs/test-qt-20261025-003452 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 2079 s; Scenario victory to the Spanish.
+01:37 conquest s7 rc=0 logs/test-qt-20261025-010931 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1666 s; Scenario victory to the Spanish.
+02:07 islands s7 rc=0 logs/test-qt-20261025-013717 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1804 s; Scenario victory to the Poles.
+02:39 continents s7 rc=0 logs/test-qt-20261025-020721 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1941 s; Scenario victory to the Austrians.
+03:02 regular s7 rc=0 logs/test-qt-20261025-023942 autogame: ok, ended by a victory in turn 421, up to 475 turns, 10 AIs, 1349 s; Game ended in cultural domination victory for Alfonso el Sabio.
+03:24 culture s42 rc=0 logs/test-qt-20261025-030211 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1316 s; Scenario victory to the Thai.
+03:41 space s42 rc=0 logs/test-qt-20261025-032407 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1037 s; Scenario victory to the Thai.
+04:03 allied s42 rc=0 logs/test-qt-20261025-034125 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1309 s; Scenario victory to the Thai.
+04:22 domination s42 rc=0 logs/test-qt-20261025-040314 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1163 s; Scenario victory to the Thai.
+04:40 conquest s42 rc=0 logs/test-qt-20261025-042237 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1044 s; Scenario victory to the Thai.
+05:01 islands s42 rc=0 logs/test-qt-20261025-044001 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1260 s; Scenario victory to the Austrians.
+05:25 continents s42 rc=0 logs/test-qt-20261025-050101 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 1463 s; Scenario victory to the French.
+05:40 regular s42 rc=0 logs/test-qt-20261025-052524 autogame: ok, ended by a victory in turn 475, up to 475 turns, 10 AIs, 899 s; Scenario victory to the Thai.
