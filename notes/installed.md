@@ -175,3 +175,11 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
   - `~/freeciv-builds/apps/Freeciv45-3.2.6-arm64.dmg` (109 MB, `scripts/dmg.sh`, `hdiutil verify` valid) and its `.sha256`;
   - `~/freeciv-builds/apps/freeciv45-1-src.tar.gz` (`git -C port/freeciv archive --prefix=freeciv45-1/ series-0063`) and its `.sha256`. `SOURCE.txt` in the app names the same tree (eb20321).
 - No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-26, the client and Freeciv45.app at patch 0065
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0065 (0b61032, worktree `port/s61`): patch 0064 (AI builds space structurals) and 0065 (the map scrolls at its edges). Incremental build; its 4 warnings are all the linker's "reducing alignment of section __DATA,__common", none from the compiler.
+- `Freeciv45.app` was rebundled on it from main at 3e44d3b, so it also has the spaceship and treaty art from PR 329. `SOURCE.txt` names tree 0b61032 and lists patches through 0065; `codesign -v` passes. The 0063 app was kept at `~/freeciv-builds/apps-0063-Freeciv45.app`.
+- Checked: the app's client has the "Scroll the map at its edges" option (`strings`), and a 40-turn civ45 autogame on the app's own server (`Contents/MacOS/freeciv-server`, `FREECIV_DATA_PATH=Contents/Resources/share/freeciv`) ran to its end turn.
+- Not checked: the client window (no pop-up game windows). The DMG and source tarball from 10-24 are still at 0063 and were not remade.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
