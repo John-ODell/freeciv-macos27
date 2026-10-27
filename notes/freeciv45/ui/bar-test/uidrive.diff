@@ -1,5 +1,5 @@
 diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
-index 954872c..82fd58a 100644
+index 8b9fd3a..c3d08c2 100644
 --- a/client/gui-qt/fc_client.cpp
 +++ b/client/gui-qt/fc_client.cpp
 @@ -54,6 +54,7 @@
@@ -20,10 +20,10 @@ index 954872c..82fd58a 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..d73b9c1
+index 0000000..a445457
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,869 @@
+@@ -0,0 +1,883 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -73,6 +73,9 @@ index 0000000..d73b9c1
 +    drag unit DX DY         the same from the focus unit's tile
 +    mapwheel DX DY [notch]  a two-finger trackpad scroll of DX, DY points
 +                            on the map, or a mouse wheel angle with notch
++    pointer X Y             leave the pointer at X, Y (map points; off
++                            the map if negative or past its size) and
++                            log the map's origin
 +    clicktile DX DY         left click the tile DX, DY from the focus unit
 +                            (through action_button_pressed, which the map's
 +                            mouse release calls, since that reads QCursor)
@@ -821,6 +824,17 @@ index 0000000..d73b9c1
 +  } else if (cmd == "saveopts") {
 +    // as on leaving the client: write the options file
 +    options_save(NULL);
++  } else if (cmd == "pointer" && w.size() > 2) {
++    // Leave the pointer at X,Y in map-view points (negative or past the
++    // size is off the map) and log the map's origin there
++    QWidget *mv = gui()->mapview_wdg;
++    QPoint at(w[1].toInt(), w[2].toInt());
++
++    QApplication::setActiveWindow(gui());
++    QCursor::setPos(mv->mapToGlobal(at));
++    drive_log(QString("   pointer at %1,%2 of a %3x%4 map, origin %5,%6")
++              .arg(at.x()).arg(at.y()).arg(mv->width()).arg(mv->height())
++              .arg(mapview.gui_x0).arg(mapview.gui_y0));
 +  } else if (cmd == "state") {
 +    log_state(w.size() > 1 ? w[1] : QString());
 +  } else if (cmd == "shot" && w.size() > 1) {

@@ -1,0 +1,158 @@
+From 0b610321cd41766ef6d9a48125c03300e1858031 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Mon, 26 Oct 2026 20:09:52 -0500
+Subject: [PATCH] Freeciv45: scroll the map at its edges
+
+The Qt client had no edge scrolling: to see past the view, or to drag a
+goto farther than the view reaches, the player had to stop and pan.
+
+The map view now scrolls, about a view's width in a second and a half,
+while the pointer is within 8 points of one of its edges, and past an
+edge while a goto is being dragged, so the goto's line follows the
+pointer onto the newly shown tiles. A 30 ms timer reads the pointer's
+position instead of the map's mouse events, because the Freeciv45 top
+strip and edge buttons lie over the map's edges. Nothing scrolls while
+the window is inactive, a modal dialog or popup is up, or the map is
+being dragged.
+
+New client option "Scroll the map at its edges" (gui_qt_edge_scroll,
+Interface, on by default) turns it off.
+---
+ client/gui-qt/mapctrl.cpp | 54 +++++++++++++++++++++++++++++++++++++++
+ client/gui-qt/mapview.cpp |  3 +++
+ client/gui-qt/mapview.h   |  1 +
+ client/options.c          |  7 +++++
+ client/options.h          |  1 +
+ 5 files changed, 66 insertions(+)
+
+diff --git a/client/gui-qt/mapctrl.cpp b/client/gui-qt/mapctrl.cpp
+index 43beb15..61db9a2 100644
+--- a/client/gui-qt/mapctrl.cpp
++++ b/client/gui-qt/mapctrl.cpp
+@@ -697,6 +697,60 @@ void map_view::mouseMoveEvent(QMouseEvent *event)
+   control_mouse_cursor(canvas_pos_to_tile(pos.x(), pos.y(), map_zoom));
+ }
+ 
++/**********************************************************************//**
++  Scroll the map while the pointer is at one of its edges, or past one
++  while a goto is being dragged. The pointer's position is read
++  rather than taken from mouse events, because the top strip and the
++  edge buttons lie over the map's edges.
++**************************************************************************/
++void map_view::edge_scroll()
++{
++  const int margin = 8;
++  bool held = QApplication::mouseButtons() != Qt::NoButton
++              && (keyboardless_goto_button_down || keyboardless_goto_active
++                  || goto_is_active());
++  QPoint p, c;
++  int dx = 0, dy = 0, step;
++
++  if (!gui_options.gui_qt_edge_scroll || panning || !isVisible()
++      || !can_client_change_view()
++      || QApplication::activeWindow() != window()
++      || QApplication::activeModalWidget() != nullptr
++      || QApplication::activePopupWidget() != nullptr) {
++    return;
++  }
++
++  p = mapFromGlobal(QCursor::pos());
++  if (!held && !rect().contains(p)) {
++    return;
++  }
++  if (p.x() < margin) {
++    dx = -1;
++  } else if (p.x() >= width() - margin) {
++    dx = 1;
++  }
++  if (p.y() < margin) {
++    dy = -1;
++  } else if (p.y() >= height() - margin) {
++    dy = 1;
++  }
++  if (dx == 0 && dy == 0) {
++    return;
++  }
++
++  // About a view's width in a second and a half
++  step = MAX(4, MIN(width(), height()) / 50);
++  c = map_canvas_pos(QPoint(dx * step, dy * step));
++  pan_to(mapview.gui_x0 + c.x(), mapview.gui_y0 + c.y());
++
++  // The tile under the pointer changed: move a goto's line with it
++  p.setX(CLIP(0, p.x(), width() - 1));
++  p.setY(CLIP(0, p.y(), height() - 1));
++  c = map_canvas_pos(p);
++  update_line(c.x(), c.y());
++  control_mouse_cursor(canvas_pos_to_tile(c.x(), c.y(), map_zoom));
++}
++
+ /**********************************************************************//**
+   Two-finger trackpad scrolling pans the map with the fingers; a mouse
+   wheel notch moves it a sixth of the view
+diff --git a/client/gui-qt/mapview.cpp b/client/gui-qt/mapview.cpp
+index 4e910da..c16ae93 100644
+--- a/client/gui-qt/mapview.cpp
++++ b/client/gui-qt/mapview.cpp
+@@ -264,6 +264,9 @@ map_view::map_view() : QWidget()
+   setAttribute(Qt::WA_OpaquePaintEvent, true);
+   connect(timer, &QTimer::timeout, this, &map_view::timer_event);
+   timer->start(200);
++  QTimer *edge_timer = new QTimer(this);
++  connect(edge_timer, &QTimer::timeout, this, &map_view::edge_scroll);
++  edge_timer->start(30);
+   resize(0, 0);
+   setMouseTracking(true);
+   stored_autocenter = gui_options.auto_center_on_unit;
+diff --git a/client/gui-qt/mapview.h b/client/gui-qt/mapview.h
+index b046533..f9afcfe 100644
+--- a/client/gui-qt/mapview.h
++++ b/client/gui-qt/mapview.h
+@@ -114,6 +114,7 @@ protected:
+   void leaveEvent(QEvent *event);
+ private slots:
+   void timer_event();
++  void edge_scroll();
+ private:
+   void update_font(const QString &name, const QFont &font);
+   void pan_to(float gui_x0, float gui_y0);
+diff --git a/client/options.c b/client/options.c
+index 61c0f5a..ccac3d6 100644
+--- a/client/options.c
++++ b/client/options.c
+@@ -381,6 +381,7 @@ struct client_options gui_options = {
+   .gui_qt_sidebar_left = TRUE,
+   .gui_qt_freeciv45_panels = TRUE,
+   .gui_qt_freeciv45_edges = TRUE,
++  .gui_qt_edge_scroll = TRUE,
+   .gui_qt_default_theme_name = FC_QT_DEFAULT_THEME_NAME,
+   .gui_qt_font_default = "Sans Serif,10,-1,5,75,0,0,0,0,0",
+   .gui_qt_font_notify_label = "Monospace,8,-1,5,75,0,0,0,0,0",
+@@ -3308,6 +3309,12 @@ static struct client_option client_options[] = {
+                      "overviews down its right edge, instead of the "
+                      "sidebar."),
+                   COC_INTERFACE, GUI_QT, TRUE, NULL),
++  GEN_BOOL_OPTION(gui_qt_edge_scroll, N_("Scroll the map at its edges"),
++                  N_("If this option is set, the map scrolls while the "
++                     "mouse pointer is at an edge of the map, or past it "
++                     "while a button is held, as when dragging a unit's "
++                     "goto."),
++                  COC_INTERFACE, GUI_QT, TRUE, NULL),
+   GEN_STR_OPTION(gui_qt_wakeup_text,
+                  N_("Wake up sequence"),
+                  N_("String which will trigger sound in pregame page; "
+diff --git a/client/options.h b/client/options.h
+index f41e839..22279a2 100644
+--- a/client/options.h
++++ b/client/options.h
+@@ -408,6 +408,7 @@ struct client_options
+   bool gui_qt_sidebar_left;
+   bool gui_qt_freeciv45_panels;
+   bool gui_qt_freeciv45_edges;
++  bool gui_qt_edge_scroll;
+   char gui_qt_default_theme_name[512];
+   char gui_qt_font_default[FONT_NAME_SIZE];
+   char gui_qt_font_notify_label[FONT_NAME_SIZE];
+-- 
+2.56.0
+
