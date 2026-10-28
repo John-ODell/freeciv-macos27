@@ -1,0 +1,11 @@
+base-13 players 12 2nd city by T40: 12 median turn 20.5 range (16, 26) cities 47 mean 3.9
+base-42 players 12 2nd city by T40: 12 median turn 22.0 range (4, 33) cities 41 mean 3.4
+base-5 players 12 2nd city by T40: 12 median turn 18.5 range (9, 24) cities 56 mean 4.7
+base-7 players 12 2nd city by T40: 12 median turn 22.0 range (16, 28) cities 37 mean 3.1
+base-99 players 12 2nd city by T40: 12 median turn 21.0 range (16, 27) cities 49 mean 4.1
+new-13 players 12 2nd city by T40: 12 median turn 16.5 range (13, 26) cities 61 mean 5.1
+new-42 players 12 2nd city by T40: 12 median turn 17.0 range (4, 28) cities 58 mean 4.8
+new-5 players 12 2nd city by T40: 12 median turn 14.5 range (9, 20) cities 70 mean 5.8
+new-7 players 12 2nd city by T40: 12 median turn 17.0 range (14, 28) cities 63 mean 5.2
+new-99 players 12 2nd city by T40: 12 median turn 16.5 range (13, 27) cities 71 mean 5.9
+
