@@ -1,0 +1,33 @@
+== A-7
+== A-7 errors 0 first  units:  uprisings: 0
+== A-42
+== A-42 errors 0 first  units:  uprisings: 0
+== A-13
+== A-13 errors 0 first  units:  uprisings: 0
+== B-7
+== B-7 errors 0 first 46 units:  4 boat  4 sea  uprisings: 4
+   taken by barbarians: 0  barbarian attacks: 0
+== B-42
+== B-42 errors 0 first 31 units:  6 boat  1 land  6 sea  uprisings: 7
+   taken by barbarians: 2  barbarian attacks: 2
+== B-13
+== B-13 errors 0 first 33 units:  8 boat  8 sea  uprisings: 8
+   taken by barbarians: 2  barbarian attacks: 0
+== C-7
+== C-7 errors 0 first 35 units:  4 boat  8 land  4 sea  uprisings: 6
+   taken by barbarians: 5  barbarian attacks: 6
+== C-42
+== C-42 errors 0 first 31 units:  4 boat  2 land  4 sea  uprisings: 6
+   taken by barbarians: 2  barbarian attacks: 1
+== C-13
+== C-13 errors 0 first 32 units:  4 boat  4 land  4 sea  uprisings: 5
+   taken by barbarians: 2  barbarian attacks: 6
+== D-7
+== D-7 errors 0 first 30 units:  19 boat  8 land  19 sea  uprisings: 21
+   taken by barbarians: 4  barbarian attacks: 9
+== D-42
+== D-42 errors 0 first 40 units:  7 boat  2 land  7 sea  uprisings: 9
+   taken by barbarians: 0  barbarian attacks: 1
+== D-13
+== D-13 errors 0 first 32 units:  14 boat  4 land  14 sea  uprisings: 15
+   taken by barbarians: 3  barbarian attacks: 9
