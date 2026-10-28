@@ -21,7 +21,7 @@ John's play test, 2026-10-27: "there are no barbarians", and later: expanding to
 
 | Step | Rules | First barbarian (turn) | Uprisings per game | Land raiders per game | Cities barbarians took |
 |---|---|---|---|---|---|
-| A | onset 30 | 37, 61, 46 | sea only | 0 | 3, 1, 1 |
+| A | onset 30 | 37, 61, 46 | sea only | 0 | 3, 1, 2 |
 | B | A + FREQUENT, era units, Trireme | 46, 31, 33 | 4, 7, 8 | 0, 1, 0 | 0, 2, 2 |
 | C | B + barbsfromfog | 35, 31, 32 | 6, 6, 5 | 8, 2, 4 | 5, 2, 2 |
 | D (patch) | C at HORDES | 30, 40, 32 | 21, 9, 15 | 8, 2, 4 | 4, 0, 3 |
