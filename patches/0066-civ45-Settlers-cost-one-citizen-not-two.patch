@@ -1,0 +1,42 @@
+From 4c160f7b60477de0b3d78a8021aa0cfd8fb55a9c Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Tue, 27 Oct 2026 19:02:02 -0500
+Subject: [PATCH] civ45: Settlers cost one citizen, not two
+
+A city had to reach size 3 before it could finish Settlers, so the
+second city came around turn 21 (median of 12 AIs on 5 seeds). With one
+citizen a size 2 city can finish them: median turn 16.5, and about 45%
+more cities by turn 40. Issue 350.
+---
+ data/civ45/units.ruleset | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 7e1fda3..975ee4c 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -519,7 +519,9 @@ sound_move_alt = "m_generic"
+ sound_fight   = "f_settlers"
+ sound_fight_alt = "f_generic"
+ build_cost    = 30
+-pop_cost      = 2
++; Freeciv45: one citizen, not two, so a size 2 city can finish Settlers
++; (John's play test, issue 350: the second city came too late).
++pop_cost      = 1
+ attack        = 0
+ defense       = 1
+ hitpoints     = 20
+@@ -549,8 +551,8 @@ means of founding new cities.\
+ Settlers found cities (or join one) and do nothing else: roads, \
+ irrigation, mines and forts are the Workers' job.\
+ "), _("\
+-TIP: optimal production of Settlers occurs in cities of at most \
+-size 4, or cities with a Granary of at most size 6.\
++Building Settlers takes one citizen from the city, so the city \
++must be at least size 2.\
+ ")
+ 
+ [unit_migrants]
+-- 
+2.56.0
+
