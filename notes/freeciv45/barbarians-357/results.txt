@@ -1,0 +1,47 @@
+H30-1: lost 1 (first T80), first barb T31, land 8, boat-borne 24, last state T100, errs 20
+H30-2: lost 4 (first T37), first barb T31, land 5, boat-borne 16, last state T50, errs 7
+H30-3: lost 0 (first T-), first barb T30, land 8, boat-borne 24, last state T100, errs 0
+H30-4: lost 1 (first T47), first barb T35, land 6, boat-borne 28, last state T100, errs 5
+H30-5: lost 3 (first T56), first barb T51, land 18, boat-borne 32, last state T100, errs 9
+N30-1: lost 0 (first T-), first barb T35, land 2, boat-borne 8, last state T100, errs 0
+N30-2: lost 0 (first T-), first barb T71, land 0, boat-borne 4, last state T100, errs 0
+N30-3: lost 0 (first T-), first barb T52, land 2, boat-borne 4, last state T100, errs 0
+N30-4: lost 0 (first T-), first barb T61, land 0, boat-borne 2, last state T100, errs 0
+N30-5: lost 0 (first T-), first barb T44, land 2, boat-borne 4, last state T100, errs 0
+N40-1: lost 0 (first T-), first barb T80, land 0, boat-borne 2, last state T100, errs 0
+N40-2: lost 0 (first T-), first barb T-, land 0, boat-borne 0, last state T100, errs 0
+N40-3: lost 0 (first T-), first barb T78, land 0, boat-borne 2, last state T100, errs 0
+N40-4: lost 0 (first T-), first barb T66, land 0, boat-borne 6, last state T100, errs 0
+N40-5: lost 0 (first T-), first barb T67, land 2, boat-borne 0, last state T100, errs 0
+H30a-1: lost 3 (first T33), first barb T31, land 0, boat-borne 10, last state T40, errs 9
+H30a-2: lost 3 (first T48), first barb T34, land 2, boat-borne 10, last state T50, errs 3
+H30a-3: lost 3 (first T35), first barb T30, land 5, boat-borne 2, last state T45, errs 1
+H30a-4: lost 3 (first T40), first barb T31, land 0, boat-borne 12, last state T45, errs 9
+H30a-5: lost 3 (first T41), first barb T33, land 5, boat-borne 8, last state T55, errs 1
+N30a-1: lost 0 (first T-), first barb T-, land 0, boat-borne 0, last state T100, errs 0
+N30a-2: lost 4 (first T45), first barb T39, land 10, boat-borne 6, last state T80, errs 31
+N30a-3: lost 3 (first T52), first barb T45, land 3, boat-borne 4, last state T70, errs 1
+N30a-4: lost 4 (first T79), first barb T72, land 2, boat-borne 4, last state T95, errs 17
+N30a-5: lost 5 (first T36), first barb T31, land 9, boat-borne 4, last state T75, errs 13
+R30-1: lost 0 (first T-), first barb T31, land 6, boat-borne 30, last state T100, errs 0
+R30-2: lost 1 (first T37), first barb T31, land 6, boat-borne 28, last state T100, errs 0
+R30-3: lost 0 (first T-), first barb T30, land 8, boat-borne 30, last state T100, errs 0
+R30-4: lost 0 (first T-), first barb T35, land 6, boat-borne 22, last state T100, errs 0
+R30-5: lost 0 (first T-), first barb T51, land 10, boat-borne 22, last state T100, errs 0
+R30a-1: lost 4 (first T35), first barb T31, land 4, boat-borne 12, last state T70, errs 0
+R30a-2: lost 2 (first T60), first barb T34, land 12, boat-borne 24, last state T100, errs 0
+R30a-3: lost 3 (first T35), first barb T30, land 3, boat-borne 2, last state T45, errs 0
+R30a-4: lost 0 (first T-), first barb T31, land 6, boat-borne 26, last state T100, errs 0
+R30a-5: lost 6 (first T39), first barb T33, land 12, boat-borne 20, last state T90, errs 0
+a7: barb units 3, first T49, cities barbarians took 0, spam 0
+a7h: barb units 67, first T30, cities barbarians took 4, spam 0
+a13: barb units 9, first T63, cities barbarians took 0, spam 0
+a13h: barb units 47, first T32, cities barbarians took 3, spam 0
+a42: barb units 3, first T65, cities barbarians took 0, spam 0
+a42h: barb units 25, first T40, cities barbarians took 0, spam 0
+a5: barb units 3, first T31, cities barbarians took 0, spam 0
+a5h: barb units 50, first T30, cities barbarians took 5, spam 0
+r7: barb units 67, first T30, cities barbarians took 4, spam 0, types:    1 Archers   21 Barbarian    9 Horsemen    6 Legion   19 Trireme   11 Warriors 
+r13: barb units 47, first T32, cities barbarians took 3, spam 0, types:   15 Barbarian    4 Horsemen    6 Legion   14 Trireme    8 Warriors 
+r42: barb units 25, first T40, cities barbarians took 0, spam 0, types:    9 Barbarian    1 Horsemen    1 Legion    7 Trireme    7 Warriors 
+r5: barb units 50, first T30, cities barbarians took 5, spam 0, types:   16 Barbarian    8 Horsemen    2 Legion   13 Trireme   11 Warriors 
