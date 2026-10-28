@@ -28,7 +28,7 @@
 # Workers, Explorer, two defenders on one tile), the trident tileset (-t, so no tileset suggestion box), a
 # throwaway HOME with a copy of ~/.freeciv/freeciv-client-rc-3.2. The client reads its options through a short
 # relative FREECIV_OPT because the options path is a 256-byte buffer (client/options.c) and a long <outdir>
-# truncates it. The connection gets cmdlevel admin after the start, so "chat /lua cmd ..." lines work.
+# truncates it. The client runs with sound off (-P none). The connection gets cmdlevel admin after the start, so "chat /lua cmd ..." lines work.
 # With FREECIV_DRIVE_VISIBLE=1 the client window shows on screen while it runs: clicking into it changes the run.
 set -u
 [ $# -ge 2 ] || { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
@@ -71,7 +71,7 @@ DATA="$(dirname "$BIN")/share/freeciv"; [ -n "${FREECIV_DRIVE_TILESETS:-}" ] && 
 TSARG=(-t "${FREECIV_DRIVE_TILESET:-trident}"); [ "${FREECIV_DRIVE_TILESET:-}" = none ] && TSARG=()
 ( cd "$OUT" && HOME="$OUT/home" FREECIV_OPT=home/.freeciv/freeciv-client-rc-3.2 FREECIV_UI_DRIVE="$SCRIPT" \
   FREECIV_UI_DRIVE_OUT="$OUT" QT_QPA_PLATFORM="$QPA" FREECIV_DATA_PATH="$DATA" \
-  exec "$BIN/freeciv-qt" -a -s localhost -p "$PORT" -n Probe ${TSARG[@]+"${TSARG[@]}"} \
+  exec "$BIN/freeciv-qt" -a -s localhost -p "$PORT" -n Probe -P none ${TSARG[@]+"${TSARG[@]}"} \
   > "$OUT/client.log" 2>&1 ) &
 CPID=$!
 sleep 10
