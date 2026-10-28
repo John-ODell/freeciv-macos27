@@ -168,6 +168,7 @@ files =
   "misc/specialists.spec",
   "freeciv45iso/ui_icons.spec",
   "freeciv45iso/ui_buttons.spec",
+  "freeciv45iso/leaders.spec",
   "freeciv45iso/units.spec",
   "freeciv45iso/animals.spec",
   "misc/buildings-large.spec",
