@@ -196,3 +196,10 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - `Freeciv45.app` rebundled from main at f4ebf26; its server has the new setting, `civ45/game.ruleset` turns it on, `SOURCE.txt` lists 0067, `codesign -v` passes.
 - The rules were tested before the patch in twelve 80-turn autogames (`notes/freeciv45/barbarians-345.md`). The client window was not opened.
 - No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-27, the client and Freeciv45.app at patch 0068
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0068 (548369c, worktree `port/s61`), 0 compiler warnings. `Freeciv45.app` was rebundled from main at 51f7fa3: its freeciv45iso has `leaders.jpg` and `leaders.spec`, its client has the portrait code, `SOURCE.txt` lists 0068 and `codesign -v` passes.
+- The rebuild ran while the testing session had a game on the app's own server (port 5740); that server kept running from the replaced files. The session was told.
+- Tested before the patch with the offscreen driver (`notes/freeciv45/leaders-347.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
