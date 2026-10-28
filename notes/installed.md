@@ -203,3 +203,9 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - The rebuild ran while the testing session had a game on the app's own server (port 5740); that server kept running from the replaced files. The session was told.
 - Tested before the patch with the offscreen driver (`notes/freeciv45/leaders-347.md`). The client window was not opened.
 - No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-27, the client and Freeciv45.app at patch 0070
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0070 (f106277, worktree `port/s61`), 0 compiler warnings. The intermediate 0069-only build counted 4 linker alignment warnings (issue 367). `Freeciv45.app` was rebundled from main at 7eea689: `SOURCE.txt` lists 0069 and 0070, civ45's `units.ruleset` makes Archers the fallback sea raider, and `codesign -v` passes.
+- Tested with autogames on the built server (`notes/freeciv45/barbarians-357.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
