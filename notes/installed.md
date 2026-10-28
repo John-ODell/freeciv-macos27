@@ -183,3 +183,9 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - Checked: the app's client has the "Scroll the map at its edges" option (`strings`), and a 40-turn civ45 autogame on the app's own server (`Contents/MacOS/freeciv-server`, `FREECIV_DATA_PATH=Contents/Resources/share/freeciv`) ran to its end turn.
 - Not checked: the client window (no pop-up game windows). The DMG and source tarball from 10-24 are still at 0063 and were not remade.
 - No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-27, the client and Freeciv45.app at patch 0066
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0066 (4c160f7, worktree `port/s61`); patch 0066 changes only `data/civ45/units.ruleset`, 0 compiler warnings. `Freeciv45.app` was rebundled on it from main at 86a8332; its `civ45/units.ruleset` gives Settlers `pop_cost = 1`, `SOURCE.txt` lists patches through 0066, and `codesign -v` passes.
+- The rules change was tested before the patch in ten 40-turn autogames (`notes/freeciv45/settlers-350.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
