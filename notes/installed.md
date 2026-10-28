@@ -189,3 +189,10 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - `~/freeciv-builds/qt` was rebuilt from fork branch series-0066 (4c160f7, worktree `port/s61`); patch 0066 changes only `data/civ45/units.ruleset`, 0 compiler warnings. `Freeciv45.app` was rebundled on it from main at 86a8332; its `civ45/units.ruleset` gives Settlers `pop_cost = 1`, `SOURCE.txt` lists patches through 0066, and `codesign -v` passes.
 - The rules change was tested before the patch in ten 40-turn autogames (`notes/freeciv45/settlers-350.md`). The client window was not opened.
 - No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-27, the client and Freeciv45.app at patch 0067
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0067 (69dc1aa, worktree `port/s61`); 0067 adds the `barbsfromfog` server setting, so `common/game.h` changed and much of the tree recompiled. 4 warnings: one `-Wgnu-folding-constant` in `client/mapview_common.c` (upstream code this patch doesn't touch) and three linker `__DATA,__common` alignment notes.
+- `Freeciv45.app` rebundled from main at f4ebf26; its server has the new setting, `civ45/game.ruleset` turns it on, `SOURCE.txt` lists 0067, `codesign -v` passes.
+- The rules were tested before the patch in twelve 80-turn autogames (`notes/freeciv45/barbarians-345.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
