@@ -89,6 +89,5 @@ In the "More" section, collapsed by default:
   and with a mocked API answer it points at the `-arm64.dmg` asset.
 - Committed through the site's usual GitHub record: an issue, a branch, a PR with a review, a squash merge.
   Nothing goes live until John says so; pushing to `main` deploys.
-- **No AI attribution anywhere:** follow https://github.com/John-ODell/github-cleanhub (the github-bullseye
-  skill). No `Co-Authored-By` lines, no "Generated with" lines, nothing authored as Claude. This replaces the
-  "Keep the Co-Authored-By line" sentence in the site's CLAUDE.md.
+- **Authored as John:** commits and the PR carry John's name and email only, with no extra trailers or
+  footers.
