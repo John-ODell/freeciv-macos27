@@ -1,0 +1,312 @@
+From b330f5485d0416b929513cd7edf7f696990d6ddb Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Thu, 29 Oct 2026 18:40:41 -0500
+Subject: [PATCH 72/73] Freeciv45: the production chooser is a list in sections
+
+With the Freeciv45 layout on, the chooser that the city dialog, the city
+overlay and the map's quick-select open is one column instead of a
+three-column grid: the city's name, then Units, Buildings, Great Wonders,
+Small Wonders and the rest (Coinage), each under a heading that cannot be
+picked, then Cancel. Each row has the picture, the name and how many
+turns it takes. The grid stays for the other layout. Issue 374.
+---
+ client/gui-qt/citydlg.cpp | 177 +++++++++++++++++++++++++++++++++++++-
+ client/gui-qt/citydlg.h   |  16 +++-
+ 2 files changed, 191 insertions(+), 2 deletions(-)
+
+diff --git a/client/gui-qt/citydlg.cpp b/client/gui-qt/citydlg.cpp
+index 025062f..893d973 100644
+--- a/client/gui-qt/citydlg.cpp
++++ b/client/gui-qt/citydlg.cpp
+@@ -4242,6 +4242,22 @@ void city_production_delegate::paint(QPainter *painter,
+     return;
+   }
+ 
++  qvar = index.data(PRODUCTION_HEADING_ROLE);
++  if (qvar.isValid()) {
++    // A section heading of the Freeciv45 list
++    QFont bold = painter->font();
++
++    painter->save();
++    painter->fillRect(option.rect, option.palette.color(QPalette::Mid));
++    bold.setBold(true);
++    painter->setFont(bold);
++    painter->setPen(option.palette.color(QPalette::BrightText));
++    painter->drawText(option.rect.adjusted(6, 0, -6, 0),
++                      Qt::AlignLeft | Qt::AlignVCenter, qvar.toString());
++    painter->restore();
++    return;
++  }
++
+   qvar = index.data();
+ 
+   if (!qvar.isValid()) {
+@@ -4316,6 +4332,12 @@ void city_production_delegate::paint(QPainter *painter,
+   rect2.setTop(rect2.top() + (rect2.height()
+                               - painter->fontMetrics().height()) / 2);
+   QItemDelegate::drawDisplay(painter, opt, rect2, name);
++  qvar = index.data(PRODUCTION_TURNS_ROLE);
++  if (qvar.isValid()) {
++    // The Freeciv45 list: how long it takes, on the right
++    painter->drawText(option.rect.adjusted(0, 0, -8, 0),
++                      Qt::AlignRight | Qt::AlignVCenter, qvar.toString());
++  }
+ 
+   if (is_unit) {
+     if (is_sea) {
+@@ -4389,6 +4411,17 @@ production_item::production_item(struct universal *ptarget,
+   target = ptarget;
+ }
+ 
++/************************************************************************//**
++  A section heading of the Freeciv45 production list
++****************************************************************************/
++production_item::production_item(const QString &section,
++                                 QObject *parent): QObject()
++{
++  setParent(parent);
++  target = nullptr;
++  heading = section;
++}
++
+ /************************************************************************//**
+   Production item destructor
+ ****************************************************************************/
+@@ -4429,6 +4462,7 @@ city_production_model::city_production_model(struct city *pcity, bool f,
+   show_buildings = sb;
+   mcity = pcity;
+   future_t = f;
++  listed = gui_options.gui_qt_freeciv45_edges;
+   populate();
+ }
+ 
+@@ -4450,6 +4484,45 @@ QVariant city_production_model::data(const QModelIndex &index, int role) const
+     return QVariant();
+   }
+ 
++  if (listed) {
++    production_item *pi;
++    struct universal *target;
++
++    if (index.row() < 0 || index.row() >= city_target_list.count()
++        || index.column() != 0) {
++      return QVariant();
++    }
++    pi = city_target_list[index.row()];
++    if (!pi->heading.isEmpty()) {
++      return (role == PRODUCTION_HEADING_ROLE ? QVariant(pi->heading)
++                                              : QVariant());
++    }
++    target = reinterpret_cast<universal *>(pi->data().value<void *>());
++    if (role == PRODUCTION_HEADING_ROLE) {
++      return QVariant();
++    }
++    if (role == PRODUCTION_TURNS_ROLE) {
++      int turns;
++
++      if (target == nullptr
++          || (VUT_IMPROVEMENT == target->kind
++              && improvement_has_flag(target->value.building, IF_GOLD))) {
++        return QVariant();
++      }
++      turns = city_turns_to_build(mcity, target, TRUE);
++      if (turns >= FC_INFINITY) {
++        // TRANS: the Freeciv45 production list, no shields at all
++        return QVariant(QString(_("never")));
++      }
++      // TRANS: the Freeciv45 production list
++      return QVariant(QString(PL_("%1 turn", "%1 turns", turns)).arg(turns));
++    }
++    if (role == Qt::ToolTipRole) {
++      return get_tooltip(pi->data());
++    }
++    return pi->data();
++  }
++
+   if (index.row() >= 0 && index.row() < rowCount() && index.column() >= 0
+       && index.column() < columnCount()
+       && (index.column() + index.row() * 3 < city_target_list.count())) {
+@@ -4497,6 +4570,19 @@ void city_production_model::populate()
+                  future_t);
+   name_and_sort_items(targets, targets_used, items, false, mcity);
+ 
++  if (listed) {
++    QList<struct universal *> shown;
++
++    for (item = 0; item < targets_used; item++) {
++      if (future_t
++          || can_city_build_now(&(wld.map), mcity, &items[item].item)) {
++        shown << new universal(items[item].item);
++      }
++    }
++    populate_listed(shown);
++    return;
++  }
++
+   for (item = 0; item < targets_used; item++) {
+     if (future_t || can_city_build_now(&(wld.map), mcity, &items[item].item)) {
+       renegade = new universal(items[item].item);
+@@ -4536,6 +4622,90 @@ void city_production_model::populate()
+   sh.setX(qMin(sh.x(), 250));
+ }
+ 
++/************************************************************************//**
++  The Freeciv45 list: the city's name, then Units, Buildings, Great
++  Wonders, Small Wonders and the rest (Coinage), each under its heading,
++  then Cancel. Takes the
++  targets, in name order; the ones not shown are deleted.
++****************************************************************************/
++void city_production_model::populate_listed(QList<struct universal *> &targets)
++{
++  enum { SEC_UNITS, SEC_BUILDINGS, SEC_GREAT, SEC_SMALL, SEC_OTHER, SEC_N };
++  // TRANS: headings of the Freeciv45 production list
++  const char *names[SEC_N] = { N_("Units"), N_("Buildings"),
++                               N_("Great Wonders"), N_("Small Wonders"),
++                               N_("Other") };
++  QList<struct universal *> sections[SEC_N];
++  QFont f = *fc_font::instance()->get_font(fonts::default_font);
++  QFontMetrics fm(f);
++  int i, name_w = 0;
++
++  for (struct universal *target : targets) {
++    int sec;
++    QString str;
++
++    if (VUT_UTYPE == target->kind) {
++      sec = (show_units ? SEC_UNITS : -1);
++      str = utype_name_translation(target->value.utype);
++    } else {
++      const struct impr_type *pimprove = target->value.building;
++
++      str = improvement_name_translation(pimprove);
++      if (is_great_wonder(pimprove)) {
++        sec = (show_wonders ? SEC_GREAT : -1);
++      } else if (is_small_wonder(pimprove)) {
++        sec = (show_wonders ? SEC_SMALL : -1);
++      } else if (is_convert_improvement(pimprove)) {
++        sec = SEC_OTHER;
++      } else if (is_improvement(pimprove)) {
++        sec = (show_buildings ? SEC_BUILDINGS : -1);
++      } else {
++        sec = (show_buildings ? SEC_OTHER : -1);
++      }
++    }
++    if (sec < 0) {
++      delete target;
++      continue;
++    }
++    name_w = qMax(name_w, fm.horizontalAdvance(str));
++    sections[sec] << target;
++  }
++
++  // The city first: the list can open on its own (issue 373)
++  city_target_list << new production_item(QString(city_name_get(mcity)),
++                                          this);
++  name_w = qMax(name_w, fm.horizontalAdvance(city_name_get(mcity)));
++  for (i = 0; i < SEC_N; i++) {
++    if (sections[i].isEmpty()) {
++      continue;
++    }
++    city_target_list << new production_item(QString(_(names[i])), this);
++    for (struct universal *target : sections[i]) {
++      // Deleted in production_item destructor
++      city_target_list << new production_item(target, this);
++    }
++  }
++  city_target_list << new production_item((struct universal *) nullptr,
++                                          this);
++
++  // Picture, name, and room for "99 turns" on the right
++  sh.setX(sh.y() + 4 + name_w + 24
++          + fm.horizontalAdvance(QString(_("%1 turns")).arg(999)) + 8);
++}
++
++/************************************************************************//**
++  Headings of the Freeciv45 list cannot be picked
++****************************************************************************/
++Qt::ItemFlags city_production_model::flags(const QModelIndex &index) const
++{
++  if (listed && index.isValid() && index.row() < city_target_list.count()
++      && !city_target_list[index.row()]->heading.isEmpty()) {
++    return Qt::NoItemFlags;
++  }
++
++  return QAbstractListModel::flags(index);
++}
++
+ /************************************************************************//**
+   Sets data in model
+ ****************************************************************************/
+@@ -4597,8 +4767,13 @@ production_widget::production_widget(QWidget *parent, struct city *pcity,
+                              const QItemSelection &)));
+   resizeRowsToContents();
+   resizeColumnsToContents();
+-  setFixedWidth(3 * sh.x() + 6);
++  setFixedWidth(list_model->columnCount() * sh.x() + 6);
+   setFixedHeight(list_model->rowCount()*sh.y() + 6);
++  if (list_model->columnCount() == 1) {
++    // The Freeciv45 list: room for the scroll bar a long list gets
++    horizontalHeader()->setStretchLastSection(true);
++    setFixedWidth(width() + verticalScrollBar()->sizeHint().width());
++  }
+ 
+   if (width() > desk_width) {
+     setFixedWidth(desk_width);
+diff --git a/client/gui-qt/citydlg.h b/client/gui-qt/citydlg.h
+index 36d2c31..a6e04fc 100644
+--- a/client/gui-qt/citydlg.h
++++ b/client/gui-qt/citydlg.h
+@@ -332,12 +332,15 @@ class production_item: public QObject
+ 
+ public:
+   production_item(struct universal *ptarget, QObject *parent);
++  production_item(const QString &section, QObject *parent);
+   ~production_item();
+   inline int columnCount() const {
+     return 1;
+   }
+   QVariant data() const;
+   bool setData();
++  // Non-empty for a section heading of the Freeciv45 list
++  QString heading;
+ 
+ private:
+   struct universal *target;
+@@ -356,13 +359,17 @@ public:
+   ~city_production_model();
+   inline int rowCount(const QModelIndex &index = QModelIndex()) const {
+     Q_UNUSED(index);
++    if (listed) {
++      return city_target_list.size();
++    }
+     return (qCeil(static_cast<float>(city_target_list.size()) / 3));
+   }
+   int columnCount(const QModelIndex &parent = QModelIndex()) const {
+     Q_UNUSED(parent);
+-    return 3;
++    return listed ? 1 : 3;
+   }
+   QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const;
++  Qt::ItemFlags flags(const QModelIndex &index) const;
+   bool setData(const QModelIndex &index, const QVariant &value,
+                int role = Qt::DisplayRole);
+   QPoint size_hint();
+@@ -376,8 +383,15 @@ private:
+   bool show_units;
+   bool show_buildings;
+   bool show_wonders;
++  // Freeciv45 layout: one column in sections, not the three-column grid
++  bool listed;
++  void populate_listed(QList<struct universal *> &targets);
+ };
+ 
++// Model roles of the Freeciv45 production list
++#define PRODUCTION_HEADING_ROLE (Qt::UserRole + 1)
++#define PRODUCTION_TURNS_ROLE (Qt::UserRole + 2)
++
+ /****************************************************************************
+   Class for popup available production
+ ****************************************************************************/
+-- 
+2.56.0
+
