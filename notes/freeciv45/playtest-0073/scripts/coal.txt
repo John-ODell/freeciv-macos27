@@ -1,0 +1,40 @@
+pace 400
+option gui_qt_freeciv45_edges on
+dismiss
+wait 14000
+key Escape
+dismiss
+chat /lua cmd for p in players_iterate() do if p:is_human() then local t = nil; for u in p:units_iterate() do if u.utype:has_flag("Cities") then t = u.tile; break end end; if t then edit.create_city(p, t, "Alpha"); for u in t:units_iterate() do if u.utype:has_flag("Cities") then edit.unit_kill(u, "disbanded", nil) end end end end end
+wait 3500
+state founded
+chooser 3 0
+wait 2500
+click button Return to map
+wait 800
+chat /lua cmd local mx, my = 0, 0; for t in whole_map_iterate() do if t.nat_x > mx then mx = t.nat_x end; if t.nat_y > my then my = t.nat_y end end; local a = nil; for p in players_iterate() do if p:is_human() then for c in p:cities_iterate() do a = c end end end; local bx = math.max(0, math.min(a.tile.nat_x - 6, mx - 13)); local by = math.min(a.tile.nat_y + 3, my - 13); for tt in whole_map_iterate() do local dx, dy = tt.nat_x - bx, tt.nat_y - by; if dx >= 0 and dx < 13 and dy >= 0 and dy < 13 and tt ~= a.tile then local n = "Grassland"; if dy <= 1 then n = "Glacier" elseif dy <= 5 then n = "Tundra" elseif dy <= 9 then n = "Desert" end; edit.change_terrain(tt, find.terrain(n)); if dy == 2 or dy == 7 or dy == 11 then if dx == 2 or dx == 6 or dx == 10 then edit.change_terrain(tt, find.terrain("Hills")); edit.create_extra(tt, "Coal") elseif dx == 4 then edit.change_terrain(tt, find.terrain("Mountains")); edit.create_extra(tt, "Iron") elseif dx == 8 then edit.change_terrain(tt, find.terrain("Mountains")); edit.create_extra(tt, "Gold") end end end end
+wait 3500
+chat /lua cmd for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do edit.unit_kill(u, "disbanded", nil) end end end
+wait 800
+chat /lua cmd local mx, my = 0, 0; for t in whole_map_iterate() do if t.nat_x > mx then mx = t.nat_x end; if t.nat_y > my then my = t.nat_y end end; local a = nil; for p in players_iterate() do if p:is_human() then for c in p:cities_iterate() do a = c end end end; local bx = math.max(0, math.min(a.tile.nat_x - 6, mx - 13)); local by = math.min(a.tile.nat_y + 3, my - 13); for p in players_iterate() do if p:is_human() then for tt in whole_map_iterate() do if tt.nat_x == bx + 5 and tt.nat_y == by + 2 then edit.create_unit(p, tt, find.unit_type("Warriors"), 0, nil, -1) end end end end
+wait 3000
+click tip for orders; shows the next one
+wait 2500
+center
+shot coal-tundra
+chat /lua cmd for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do edit.unit_kill(u, "disbanded", nil) end end end
+wait 800
+chat /lua cmd local mx, my = 0, 0; for t in whole_map_iterate() do if t.nat_x > mx then mx = t.nat_x end; if t.nat_y > my then my = t.nat_y end end; local a = nil; for p in players_iterate() do if p:is_human() then for c in p:cities_iterate() do a = c end end end; local bx = math.max(0, math.min(a.tile.nat_x - 6, mx - 13)); local by = math.min(a.tile.nat_y + 3, my - 13); for p in players_iterate() do if p:is_human() then for tt in whole_map_iterate() do if tt.nat_x == bx + 5 and tt.nat_y == by + 7 then edit.create_unit(p, tt, find.unit_type("Warriors"), 0, nil, -1) end end end end
+wait 1500
+click tip for orders; shows the next one
+wait 2500
+center
+shot coal-desert
+chat /lua cmd for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do edit.unit_kill(u, "disbanded", nil) end end end
+wait 800
+chat /lua cmd local mx, my = 0, 0; for t in whole_map_iterate() do if t.nat_x > mx then mx = t.nat_x end; if t.nat_y > my then my = t.nat_y end end; local a = nil; for p in players_iterate() do if p:is_human() then for c in p:cities_iterate() do a = c end end end; local bx = math.max(0, math.min(a.tile.nat_x - 6, mx - 13)); local by = math.min(a.tile.nat_y + 3, my - 13); for p in players_iterate() do if p:is_human() then for tt in whole_map_iterate() do if tt.nat_x == bx + 5 and tt.nat_y == by + 11 then edit.create_unit(p, tt, find.unit_type("Warriors"), 0, nil, -1) end end end end
+wait 1500
+click tip for orders; shows the next one
+wait 2500
+center
+shot coal-grass
+quit

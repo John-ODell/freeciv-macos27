@@ -1,0 +1,44 @@
+pace 400
+option gui_qt_freeciv45_edges on
+dismiss
+wait 8000
+key Escape
+dismiss
+chat /lua cmd for p in players_iterate() do if p:is_human() then local t = nil; for u in p:units_iterate() do if u.utype:has_flag("Cities") then t = u.tile; break end end; if t then edit.create_city(p, t, "Alpha"); edit.create_building(t:city(), find.building_type("Marco Polo's Embassy")); for u in t:units_iterate() do if u.utype:has_flag("Cities") then edit.unit_kill(u, "disbanded", nil) end end end end end
+wait 3500
+state s0open
+chooser 3 0
+wait 2500
+state s0picked
+click button Return to map
+wait 800
+chat /lua cmd local mx, my = 0, 0; for t in whole_map_iterate() do if t.nat_x > mx then mx = t.nat_x end; if t.nat_y > my then my = t.nat_y end end; local best, bd = nil, 1e9; for t in whole_map_iterate() do if t.terrain:class_name() == "Land" and t:city() == nil then local d = (t.nat_x - mx / 2) ^ 2 + (t.nat_y - my / 2) ^ 2; if d < bd then bd = d; best = t end end end; for p in players_iterate() do if p:is_human() then edit.create_unit(p, best, find.unit_type("Warriors"), 0, nil, -1); edit.create_unit(p, best, find.unit_type("Warriors"), 0, nil, -1) end end
+wait 2000
+state c0
+center
+click tip for orders; shows the next one
+wait 1500
+center
+click tip for orders; shows the next one
+wait 1500
+center
+shot c1
+state S1-city-removed-while-its-chooser-is-open
+chat /lua cmd local function more(p, name) for c in p:cities_iterate() do for tt in c.tile:square_iterate(8) do if tt:city() == nil and tt.terrain:class_name() == "Land" then local ok = true; for c2 in p:cities_iterate() do if c2.tile:sq_distance(tt) < 16 then ok = false end end; for c3 in tt:square_iterate(3) do if c3:city() ~= nil and c3:city().owner ~= p then ok = false end end; if ok then edit.create_city(p, tt, name); if tt:city() ~= nil then return end end end end end end; for p in players_iterate() do if p:is_human() then more(p, "Beta") end end
+wait 3500
+city Beta
+state s1open
+shot s1open
+chat /lua cmd local tc = nil; for p in players_iterate() do for c in p:cities_iterate() do if c.name == "Beta" then tc = c end end end; if tc then tc:remove() end
+wait 2000
+state s1removed
+wait 1500
+state s1later
+chooser 3 0
+wait 2500
+state s1picked
+activate
+click button Return to map
+wait 800
+city Alpha
+quit
