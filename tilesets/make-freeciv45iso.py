@@ -121,12 +121,14 @@ LAND_GRADE = (0, 0, 0)
 # already cut by its tools/props.py to 192x96 tiles standing on the tile's foot point with a soft contact shadow, the
 # size and anchor of amplio2's resource sprites doubled. Only the pick for each of civ45's 21 ts.* tags is copied
 # (RESOURCES.md, "Runs and retakes"; John: "we should only ship the chosen final assets"); they replace amplio2's.
-RESOURCE_RUNS = {"run1": "run1/panel1/post", "run2": "run2/panel2/post"}
+# Coal (issue 208): run 2's coal_2 nearly vanished on the hills, so it is run 3's retake, coal_a_1, a heap the size of gold
+# and iron with bright facets.
+RESOURCE_RUNS = {"run1": "run1/panel1/post", "run2": "run2/panel2/post", "run3": "run3/panel3/post"}
 RESOURCES = [
     ("ts.wheat", "run1", "wheat_1"), ("ts.buffalo", "run1", "buffalo_1"), ("ts.horses", "run1", "horses_1"),
     ("ts.grassland_resources", "run1", "grassland_resources_2"), ("ts.fruit", "run1", "fruit_1"),
     ("ts.gems", "run2", "gems_1"), ("ts.oasis", "run1", "oasis_1"), ("ts.oil", "run2", "oil_1"),
-    ("ts.pheasant", "run1", "pheasant_1"), ("ts.silk", "run2", "silk_1"), ("ts.coal", "run2", "coal_2"),
+    ("ts.pheasant", "run1", "pheasant_1"), ("ts.silk", "run2", "silk_1"), ("ts.coal", "run3", "coal_a_1"),
     ("ts.wine", "run2", "wine_1"), ("ts.gold", "run2", "gold_1"), ("ts.iron", "run2", "iron_1"),
     ("ts.tundra_game", "run1", "tundra_game_2"), ("ts.furs", "run1", "furs_1"),
     ("ts.arctic_ivory", "run1", "arctic_ivory_1"), ("ts.peat", "run2", "peat_1"), ("ts.spice", "run2", "spice_1"),
