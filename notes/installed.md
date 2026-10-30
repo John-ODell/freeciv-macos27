@@ -216,3 +216,9 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
 - A test-only driver build lives in `port/drv-0073` (source `port/drv-0073-src`: the 0073 tree plus `uidrive.diff`, with temporary log lines in its `edgebar.cpp`). It is not John's client.
 - Tested offscreen with the driver (`notes/freeciv45/production-chooser.md`). The client window was not opened.
 - No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-29, Freeciv45.app rebundled with the coal retake
+
+- `Freeciv45.app` was rebundled from main at 1e7966b (PR 286) with `FREECIV_SRC=port/s61`; the client binaries are the 0073 build above, unchanged. The app's `freeciv45iso/resources.png` and `leaders.jpg` match the repo's byte for byte, and `codesign -v` passes.
+- The client window was not opened.
+- No new formulae.
