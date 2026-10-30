@@ -1,0 +1,19 @@
+   other windows []
+   centre tile 13,31  focus unit #126 at 25,27
+   centre tile 25,27  focus unit #127 at 25,27
+   other windows []
+   centre tile 25,27  focus unit #126 at 25,27
+   other windows []
+   other windows [production_widget]
+> chooser 2 0
+   chooser 11 rows, picking ""
+   other windows [production_widget]
+> chooser last 0
+   chooser 9 rows, picking ""
+== cancelled  turn 1  title "Freeciv (Qt6)"  tileset freeciv45iso  ruleset "Freeciv45 ruleset"  hover_state 0
+   other windows []
+== gamma  turn 1  title "Freeciv (Qt6)"  tileset freeciv45iso  ruleset "Freeciv45 ruleset"  hover_state 0
+   other windows []
+   other windows []
+   other windows []
+   other windows []

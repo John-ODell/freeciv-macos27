@@ -1,0 +1,258 @@
+From 62dd8ef7bd517e7a419f4f5b23419a7c05dcf4de Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Thu, 29 Oct 2026 18:41:21 -0500
+Subject: [PATCH 73/73] Freeciv45: a city that needs production opens its
+ chooser
+
+With the Freeciv45 layout on, during the player's own phase and while the
+game window is active, a city that finished its build with nothing
+queued, or was just founded, centres the map on itself and opens its
+production chooser beside it. After a pick the next such city opens;
+closing a chooser without a pick stops this for the rest of the turn.
+The city overlay showing a new city does not count as having chosen. The
+"City needs production" button opens the chooser too, instead of the
+city dialog. Issue 373.
+---
+ client/gui-qt/citydlg.cpp |   1 +
+ client/gui-qt/citydlg.h   |   4 ++
+ client/gui-qt/edgebar.cpp | 112 +++++++++++++++++++++++++++++++++-----
+ client/gui-qt/edgebar.h   |   7 +++
+ 4 files changed, 111 insertions(+), 13 deletions(-)
+
+diff --git a/client/gui-qt/citydlg.cpp b/client/gui-qt/citydlg.cpp
+index 893d973..4815c07 100644
+--- a/client/gui-qt/citydlg.cpp
++++ b/client/gui-qt/citydlg.cpp
+@@ -4914,6 +4914,7 @@ void production_widget::prod_selected(const QItemSelection &sl,
+     default:
+       break;
+     }
++    emit chosen();
+   }
+   close();
+   destroy();
+diff --git a/client/gui-qt/citydlg.h b/client/gui-qt/citydlg.h
+index a6e04fc..42ef709 100644
+--- a/client/gui-qt/citydlg.h
++++ b/client/gui-qt/citydlg.h
+@@ -411,6 +411,10 @@ public:
+ public slots:
+   void prod_selected(const QItemSelection &sl, const QItemSelection &ds);
+ 
++signals:
++  // Something was picked (not Cancel, and not closed some other way)
++  void chosen();
++
+ protected:
+   void mousePressEvent(QMouseEvent *event);
+   bool eventFilter(QObject *obj, QEvent *ev);
+diff --git a/client/gui-qt/edgebar.cpp b/client/gui-qt/edgebar.cpp
+index 75818a5..49c031c 100644
+--- a/client/gui-qt/edgebar.cpp
++++ b/client/gui-qt/edgebar.cpp
+@@ -16,6 +16,7 @@
+ #endif
+ 
+ // Qt
++#include <QApplication>
+ #include <QContextMenuEvent>
+ #include <QEvent>
+ #include <QHBoxLayout>
+@@ -56,6 +57,7 @@
+ #include "tilespec.h"
+ 
+ // gui-qt
++#include "citydlg.h"
+ #include "cityoverlay.h"
+ #include "cityrep.h"
+ #include "edgebar.h"
+@@ -875,6 +877,7 @@ what_next_button::what_next_button(QWidget *minimap_wdg, QWidget *parent)
+   end_turn_enabled = true;
+   end_turn_attention = false;
+   seen_turn = -1;
++  chooser_stopped_turn = -1;
+   setFixedSize(WHAT_NEXT_WIDTH, WHAT_NEXT_HEIGHT);
+   setFocusPolicy(Qt::NoFocus);
+   setCursor(Qt::PointingHandCursor);
+@@ -890,6 +893,7 @@ what_next_button::what_next_button(QWidget *minimap_wdg, QWidget *parent)
+   timer = new QTimer(this);
+   connect(timer, &QTimer::timeout, this, [this]() {
+     note_seen_city();
++    auto_chooser();
+     if (isVisible()) {
+       refresh();
+     } else {
+@@ -984,6 +988,7 @@ void what_next_button::note_seen_city()
+   if (seen_turn != game.info.turn) {
+     seen_turn = game.info.turn;
+     seen_cities.clear();
++    chooser_cities.clear();
+   }
+   if (gui() == nullptr || gui()->cityoverlay_wdg == nullptr) {
+     return;
+@@ -995,14 +1000,26 @@ void what_next_button::note_seen_city()
+ }
+ 
+ /************************************************************************//**
+-  The first own city that needs production: it finished something at this
+-  turn's start, or was founded this turn, has nothing queued after the
+-  current item, and was not seen this turn. The server sends the worklist
+-  and production-changed events to no message window by default, so the
+-  city's own data decides, not the messages. Founding stamps
++  A city finished something at this turn's start, or was founded this
++  turn, and has nothing queued after the current item. Founding stamps
+   turn_last_built too, so a stamp equal to the founding turn is not a
+   finished build.
+ ****************************************************************************/
++static bool city_needs_production(const struct city *pcity)
++{
++  bool finished = (city_built_last_turn(pcity)
++                   && pcity->turn_last_built != pcity->turn_founded);
++
++  return ((finished || pcity->turn_founded == game.info.turn)
++          && worklist_is_empty(&pcity->worklist));
++}
++
++/************************************************************************//**
++  The first own city that needs production (city_needs_production) and
++  was not seen this turn. The server sends the worklist and
++  production-changed events to no message window by default, so the
++  city's own data decides, not the messages.
++****************************************************************************/
+ struct city *what_next_button::city_waiting(int *count_out)
+ {
+   struct city *first = nullptr;
+@@ -1014,11 +1031,7 @@ struct city *what_next_button::city_waiting(int *count_out)
+   }
+   note_seen_city();
+   city_list_iterate(pplayer->cities, pcity) {
+-    bool finished = (city_built_last_turn(pcity)
+-                     && pcity->turn_last_built != pcity->turn_founded);
+-
+-    if ((finished || pcity->turn_founded == game.info.turn)
+-        && worklist_is_empty(&pcity->worklist)
++    if (city_needs_production(pcity)
+         && !seen_cities.contains(pcity->id)) {
+       (*count_out)++;
+       if (first == nullptr) {
+@@ -1030,6 +1043,81 @@ struct city *what_next_button::city_waiting(int *count_out)
+   return first;
+ }
+ 
++/************************************************************************//**
++  Centre the map on the city and open its production chooser beside it;
++  the city counts as seen for the rest of the turn
++****************************************************************************/
++void what_next_button::open_chooser(struct city *pcity)
++{
++  production_widget *pw;
++  QPoint middle;
++  int x, right;
++
++  seen_cities.insert(pcity->id);
++  chooser_cities.insert(pcity->id);
++  side_show_map(true);
++  center_tile_mapcanvas(city_tile(pcity));
++  pw = new production_widget(this, pcity, false, 0, 0, true);
++  connect(pw, &production_widget::destroyed, this, [this]() {
++    // Picked or not, the next city waits a moment; closing it unpicked
++    // stops the automatic choosers for this turn
++    refresh();
++  });
++  connect(pw, &production_widget::chosen, this, [this]() {
++    chooser_stopped_turn = -1;
++  });
++  chooser_stopped_turn = game.info.turn;
++  // Beside the city, which the map now has in the middle, not over it
++  middle = gui()->mapToGlobal(gui()->rect().center());
++  x = middle.x() + tileset_tile_width(tileset);
++  right = gui()->mapToGlobal(gui()->rect().topRight()).x();
++  if (x + pw->width() > right) {
++    x = qMax(gui()->mapToGlobal(QPoint(0, 0)).x(), right - pw->width());
++  }
++  pw->move(x, middle.y() - pw->height() / 2);
++  pw->show();
++}
++
++/************************************************************************//**
++  With the Freeciv45 layout, during the player's own phase, a city that
++  needs production opens its chooser by itself, one city after another
++  (issue 373), unless the game window is not the active one (a popup
++  opened then closes at once), a popup or modal box is up, or the player
++  closed one unpicked this turn
++****************************************************************************/
++void what_next_button::auto_chooser()
++{
++  struct player *pplayer = client_player();
++  struct city *next = nullptr;
++
++  if (!gui_options.gui_qt_freeciv45_edges || pplayer == nullptr
++      || client_is_observer() || C_S_RUNNING != client_state()
++      || !can_client_issue_orders()
++      || !is_player_phase(pplayer, game.info.phase)
++      || chooser_stopped_turn == game.info.turn
++      || !gui()->isActiveWindow()
++      || QApplication::activePopupWidget() != nullptr
++      || QApplication::activeModalWidget() != nullptr) {
++    return;
++  }
++  foreach (QWidget *w, QApplication::topLevelWidgets()) {
++    if (w->isVisible() && w->inherits("production_widget")) {
++      return;
++    }
++  }
++  note_seen_city();
++  city_list_iterate(pplayer->cities, pcity) {
++    if (city_needs_production(pcity)
++        && !chooser_cities.contains(pcity->id)) {
++      next = pcity;
++      break;
++    }
++  } city_list_iterate_end;
++  if (next != nullptr) {
++    open_chooser(next);
++  }
++}
++
+ /************************************************************************//**
+   Work out the step, in decision 10's order: research unset, a unit that
+   needs orders, a city that needs production, then End turn
+@@ -1154,9 +1242,7 @@ void what_next_button::do_next()
+       struct city *pcity = city_waiting(&n);
+ 
+       if (pcity != nullptr) {
+-        seen_cities.insert(pcity->id);
+-        side_show_map(true);
+-        qtg_real_city_dialog_popup(pcity);
++        open_chooser(pcity);
+       }
+     }
+     break;
+diff --git a/client/gui-qt/edgebar.h b/client/gui-qt/edgebar.h
+index 8c3b76c..4dae3ab 100644
+--- a/client/gui-qt/edgebar.h
++++ b/client/gui-qt/edgebar.h
+@@ -153,6 +153,8 @@ private:
+   struct unit *unit_waiting(int *count);
+   struct city *city_waiting(int *count);
+   void note_seen_city();
++  void open_chooser(struct city *pcity);
++  void auto_chooser();
+   QWidget *minimap;
+   QLabel *what;
+   QLabel *count;
+@@ -162,6 +164,11 @@ private:
+   bool end_turn_attention;
+   int seen_turn;
+   QSet<int> seen_cities;
++  // The turn in which the player closed an automatic chooser unpicked
++  int chooser_stopped_turn;
++  // Cities whose chooser opened this turn; the overlay showing a city
++  // makes it seen, but its chooser still opens once
++  QSet<int> chooser_cities;
+ };
+ 
+ void apply_freeciv45_edges(void);
+-- 
+2.56.0
+

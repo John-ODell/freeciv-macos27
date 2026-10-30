@@ -20,10 +20,10 @@ index 8b9fd3a..c3d08c2 100644
    free_mapcanvas_and_overview();
 diff --git a/client/gui-qt/uidrive.cpp b/client/gui-qt/uidrive.cpp
 new file mode 100644
-index 0000000..fe6a8f9
+index 0000000..a01cb56
 --- /dev/null
 +++ b/client/gui-qt/uidrive.cpp
-@@ -0,0 +1,901 @@
+@@ -0,0 +1,929 @@
 +/***********************************************************************
 + Freeciv - Copyright (C) 1996 - A Kjeldberg, L Gregersen, P Unold
 +   This program is free software; you can redistribute it and/or modify
@@ -60,7 +60,12 @@ index 0000000..fe6a8f9
 +                            tooltip contains TEXT, for icon-only buttons)
 +    city NAME               where the city is, its build, stock and gold
 +    chooser ROW COL         pick that cell of the open production chooser,
-+                            as a click on it does (selection changed)
++                            as a click on it does (selection changed);
++                            ROW "last" is the last row (Cancel)
++    center                  log the tile at the middle of the map view
++                            and the focus unit's tile
++    activate                make the game window the active one, as a
++                            click on it does
 +    accept                  accept the active modal box (its OK button)
 +    endturn                 end the turn, as the Turn Done button does
 +    key K                   g f s w space escape enter shift+enter, or one
@@ -83,7 +88,8 @@ index 0000000..fe6a8f9
 +                            (default gui_qt_freeciv45_panels)
 +    chat TEXT               send a chat line or a /command to the server
 +    dismiss                 close the modal boxes (welcome message...)
-+                            and an open popup menu
++                            and an open popup menu (not a production
++                            chooser, which a test may want left open)
 +    unit ID                 where unit ID is, its activity and orders
 +    page main               show the start page (before a shot of it)
 +    state LABEL             append the state to drive.log (with the
@@ -722,7 +728,8 @@ index 0000000..fe6a8f9
 +  } else if (cmd == "chat" && w.size() > 1) {
 +    send_chat(QStringList(w.mid(1)).join(' ').toUtf8().constData());
 +  } else if (cmd == "dismiss") {
-+    if (QApplication::activePopupWidget() != nullptr) {
++    if (QApplication::activePopupWidget() != nullptr
++        && !QApplication::activePopupWidget()->inherits("production_widget")) {
 +      drive_log(QString("   closing %1").arg(
 +                QApplication::activePopupWidget()->metaObject()->className()));
 +      QApplication::activePopupWidget()->close();
@@ -810,7 +817,9 @@ index 0000000..fe6a8f9
 +    if (view == nullptr) {
 +      drive_log("   !! no chooser open");
 +    } else {
-+      QModelIndex idx = view->model()->index(w[1].toInt(), w[2].toInt());
++      int row = (w[1] == "last" ? view->model()->rowCount() - 1
++                                : w[1].toInt());
++      QModelIndex idx = view->model()->index(row, w[2].toInt());
 +
 +      drive_log(QString("   chooser %1 rows, picking \"%2\"")
 +                .arg(view->model()->rowCount())
@@ -855,6 +864,25 @@ index 0000000..fe6a8f9
 +              .arg(mapview.gui_x0).arg(mapview.gui_y0));
 +  } else if (cmd == "state") {
 +    log_state(w.size() > 1 ? w[1] : QString());
++  } else if (cmd == "activate") {
++    gui()->raise();
++    gui()->activateWindow();
++    QApplication::setActiveWindow(gui());
++    drive_log(QString("   window active: %1")
++              .arg(gui()->isActiveWindow() ? "yes" : "no"));
++  } else if (cmd == "center") {
++    struct tile *ct = get_center_tile_mapcanvas();
++    int cx = -1, cy = -1, ux = -1, uy = -1;
++
++    if (ct != nullptr) {
++      index_to_map_pos(&cx, &cy, tile_index(ct));
++    }
++    if (head != nullptr) {
++      index_to_map_pos(&ux, &uy, tile_index(unit_tile(head)));
++    }
++    drive_log(QString("   centre tile %1,%2  focus unit #%3 at %4,%5")
++              .arg(cx).arg(cy).arg(head != nullptr ? head->id : -1)
++              .arg(ux).arg(uy));
 +  } else if (cmd == "shot" && w.size() > 1) {
 +    shot(w[1]);
 +  } else if (cmd == "quit") {
