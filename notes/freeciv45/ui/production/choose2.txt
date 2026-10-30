@@ -1,0 +1,45 @@
+option gui_qt_freeciv45_edges on
+dismiss
+wait 12000
+key Escape
+wait 500
+dismiss
+chat /lua cmd local mx, my = 0, 0; for t in whole_map_iterate() do if t.nat_x > mx then mx = t.nat_x end; if t.nat_y > my then my = t.nat_y end end; local best, bd = nil, 1e9; for t in whole_map_iterate() do if t.terrain:class_name() == "Land" and t:city() == nil then local d = (t.nat_x - mx / 2) ^ 2 + (t.nat_y - my / 2) ^ 2; if d < bd then bd = d; best = t end end end; for p in players_iterate() do if p:is_human() then for u in p:units_iterate() do edit.unit_kill(u, "disbanded", nil) end; edit.create_unit(p, best, find.unit_type("Warriors"), 0, nil, -1); edit.create_unit(p, best, find.unit_type("Warriors"), 0, nil, -1) end end
+wait 3000
+state middle
+center
+click tip wait for orders
+wait 1500
+center
+shot unit1
+click tip wait for orders
+wait 1500
+center
+shot unit2
+chat /lua cmd local function more(p, name) for c in p:cities_iterate() do for tt in c.tile:square_iterate(6) do if tt:city() == nil and tt.terrain:class_name() == "Land" and c.tile:sq_distance(tt) >= 16 then local ok = true; for c2 in p:cities_iterate() do if c2.tile:sq_distance(tt) < 16 then ok = false end end; if ok then edit.create_city(p, tt, name); if tt:city() ~= nil then return end end end end end end; for p in players_iterate() do if p:is_human() then local t = nil; for u in p:units_iterate() do t = u.tile end; edit.create_city(p, t, "Alpha"); more(p, "Beta") end end
+wait 3000
+shot founded
+chooser 2 0
+wait 3000
+shot second
+chooser last 0
+wait 3000
+state cancelled
+city Alpha
+city Beta
+chat /lua cmd local function more(p, name) for c in p:cities_iterate() do for tt in c.tile:square_iterate(6) do if tt:city() == nil and tt.terrain:class_name() == "Land" and c.tile:sq_distance(tt) >= 16 then local ok = true; for c2 in p:cities_iterate() do if c2.tile:sq_distance(tt) < 16 then ok = false end end; if ok then edit.create_city(p, tt, name); if tt:city() ~= nil then return end end end end end end; for p in players_iterate() do if p:is_human() then more(p, "Gamma") end end
+wait 3000
+state gamma
+city Gamma
+click button Return to map
+wait 1500
+key space
+wait 800
+key space
+wait 1500
+state units-done
+click tip has nothing queued
+wait 2000
+shot button
+state button
+quit
