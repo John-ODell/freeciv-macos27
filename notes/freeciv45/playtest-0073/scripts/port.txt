@@ -1,0 +1,34 @@
+pace 400
+dismiss
+wait 14000
+chat /lua cmd for p in players_iterate() do local t = nil; for u in p:units_iterate() do if u.utype:has_flag("Cities") then t = u.tile; break end end; if t ~= nil then edit.create_city(p, t, p.name .. "ville"); if p:is_human() then edit.create_building(t:city(), find.building_type("Marco Polo's Embassy")) end end end
+wait 3000
+key Escape
+dismiss
+click button Return to map
+endturn
+wait 9000
+dismiss
+meet 1
+meet 2
+meet 3
+wait 3000
+dtab 0
+wait 800
+hover portrait
+wait 1500
+state tab0
+shot tab0
+dtab 1
+wait 800
+hover portrait
+wait 1500
+state tab1
+shot tab1
+dtab 2
+wait 800
+hover portrait
+wait 1500
+state tab2
+shot tab2
+quit

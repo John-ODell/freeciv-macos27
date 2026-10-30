@@ -1,0 +1,7 @@
+freeciv-qt crash, 2026-10-30 11:07 -0500, drive build at patch 0073, MallocScribble=1
+exception: {"codes": "0x0000000000000001, 0x000000016f220000", "rawCodes": [1, 6159466496], "type": "EXC_BAD_ACCESS", "signal": "SIGSEGV", "subtype": "KERN_INVALID_ADDRESS at 0x000000016f220000"}
+faulting thread frames:
+  libsystem_platform.dylib  _platform_memmove +88
+  freeciv-qt  city_get_queue +32
+  freeciv-qt  production_widget::prod_selected(QItemSelection const&, QItemSelection const&) +372
+  None  None +None
