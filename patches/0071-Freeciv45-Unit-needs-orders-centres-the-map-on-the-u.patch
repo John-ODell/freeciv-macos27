@@ -1,0 +1,33 @@
+From ec30a48312a26b23b90c9d7c92c4c9428ae9f89b Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Thu, 29 Oct 2026 18:38:32 -0500
+Subject: [PATCH 71/73] Freeciv45: "Unit needs orders" centres the map on the
+ unit
+
+When a unit already had focus, the button moved to the next one as W
+does, and that scrolls the map only when the unit is off screen. Now
+every click centres the map on the unit it leaves selected. Issue 372.
+---
+ client/gui-qt/edgebar.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/client/gui-qt/edgebar.cpp b/client/gui-qt/edgebar.cpp
+index 26eb789..75818a5 100644
+--- a/client/gui-qt/edgebar.cpp
++++ b/client/gui-qt/edgebar.cpp
+@@ -1141,7 +1141,11 @@ void what_next_button::do_next()
+         key_unit_wait();
+       } else {
+         unit_focus_set_and_select(punit);
+-        center_tile_mapcanvas(unit_tile(punit));
++      }
++      // W scrolls only when the unit is off screen; centre it either way
++      head = head_of_units_in_focus();
++      if (head != nullptr) {
++        center_tile_mapcanvas(unit_tile(head));
+       }
+     }
+     break;
+-- 
+2.56.0
+
