@@ -1,0 +1,173 @@
+From 548369c8e7a41ee088538ff4760c6dca2175ae48 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Tue, 27 Oct 2026 21:15:34 -0500
+Subject: [PATCH] Freeciv45: the other leader's portrait in the diplomacy
+ dialog
+
+The Qt client's meeting tab shows the other leader's face beside the two
+sides of the treaty, from the tileset tags leader.<nation>.<male|female>.<mood>
+or leader.<nation>.<mood>. An AI's mood follows its love for us: angry,
+annoyed, neutral, pleased or delighted, and sad when it is at war with us
+although it likes us; a human leader stays neutral. The AI's attitude is
+the tooltip. Without a portrait the dialog is as before. Issue 347.
+---
+ client/gui-qt/diplodlg.cpp | 94 ++++++++++++++++++++++++++++++++++++++
+ client/gui-qt/diplodlg.h   |  2 +
+ 2 files changed, 96 insertions(+)
+
+diff --git a/client/gui-qt/diplodlg.cpp b/client/gui-qt/diplodlg.cpp
+index 82b6565..0568d16 100644
+--- a/client/gui-qt/diplodlg.cpp
++++ b/client/gui-qt/diplodlg.cpp
+@@ -33,6 +33,7 @@
+ // client
+ #include "client_main.h"
+ #include "svgflag.h"
++#include "tilespec.h"
+ 
+ // gui-qt
+ #include "colors.h"
+@@ -50,6 +51,63 @@ typedef advance *p_advance;
+ typedef city *p_city;
+ 
+ #define FLAG_HEIGHT_DIPLDLG 150
++#define PORTRAIT_HEIGHT_DIPLDLG 192
++
++/************************************************************************//**
++  Freeciv45: the face the other leader shows. An AI's mood follows how it
++  feels about us (its love for our player): delighted, pleased, neutral,
++  annoyed or angry, and sad when it is at war with us although it likes us
++  (players start at war, so a first meeting is still neutral).
++  A human leader stays neutral.
++****************************************************************************/
++static const char *leader_mood(const struct player *they,
++                               const struct player *us)
++{
++  int love;
++
++  if (us == nullptr || !is_ai(they)) {
++    return "neutral";
++  }
++  love = they->ai_common.love[player_index(us)];
++  if (pplayers_at_war(they, us) && love > MAX_AI_LOVE * 10 / 100) {
++    return "sad";
++  }
++  if (love <= -MAX_AI_LOVE * 50 / 100) {
++    return "angry";
++  } else if (love <= -MAX_AI_LOVE * 10 / 100) {
++    return "annoyed";
++  } else if (love <= MAX_AI_LOVE * 10 / 100) {
++    return "neutral";
++  } else if (love <= MAX_AI_LOVE * 50 / 100) {
++    return "pleased";
++  }
++  return "delighted";
++}
++
++/************************************************************************//**
++  Freeciv45: the tileset's portrait of a leader in a mood, from the tags
++  leader.<nation>.<male|female>.<mood> or leader.<nation>.<mood>, where
++  <nation> is the nation's rule name in lower case with spaces as
++  underscores; nullptr when the tileset has neither
++****************************************************************************/
++static struct sprite *leader_portrait(const struct player *pplayer,
++                                      const char *mood)
++{
++  QString nation = QString(nation_rule_name(nation_of_player(pplayer)))
++                     .toLower().replace(' ', '_');
++  QByteArray tag = QString("leader.%1.%2.%3")
++                     .arg(nation, pplayer->is_male ? "male" : "female",
++                          mood).toUtf8();
++  QByteArray alt = QString("leader.%1.%2").arg(nation, mood).toUtf8();
++
++  if (tileset == nullptr) {
++    return nullptr;
++  }
++
++  return tiles_lookup_sprite_tag_alt(tileset, LOG_DEBUG, tag.constData(),
++                                     alt.constData(), nullptr, "leader",
++                                     tag.constData(), false);
++}
+ 
+ /************************************************************************//**
+   Constructor for diplomacy widget
+@@ -171,6 +229,12 @@ diplo_wdg::diplo_wdg(struct Treaty *ptreaty,
+   layout->addWidget(label2, 6, 5);
+   layout->addWidget(plr2_accept, 6, 10);
+ 
++  /* Freeciv45: the other leader's face beside the two sides of the treaty */
++  portrait = new QLabel;
++  portrait->setAlignment(Qt::AlignCenter);
++  layout->addWidget(portrait, 0, 11, 8, 1);
++  update_portrait();
++
+   if (clause_enabled(CLAUSE_GOLD)) {
+     QLabel *goldlab1;
+     QLabel *goldlab2;
+@@ -692,6 +756,35 @@ int diplo_wdg::get_index()
+   return index;
+ }
+ 
++/************************************************************************//**
++  Freeciv45: shows the other leader's portrait in the mood of the moment,
++  with the AI's attitude as tooltip; hidden when the tileset has no portrait
++****************************************************************************/
++void diplo_wdg::update_portrait()
++{
++  struct player *other = (plr2 != client_player() ? plr2 : plr1);
++  struct player *us = (other == plr2 ? plr1 : plr2);
++  struct sprite *spr = leader_portrait(other, leader_mood(other, us));
++  qreal dpr = devicePixelRatioF();
++  QPixmap pm;
++
++  if (spr == nullptr) {
++    portrait->hide();
++    return;
++  }
++  pm = spr->pm->scaledToHeight(qRound(PORTRAIT_HEIGHT_DIPLDLG * dpr),
++                               Qt::SmoothTransformation);
++  pm.setDevicePixelRatio(dpr);
++  portrait->setPixmap(pm);
++  if (is_ai(other) && us != nullptr) {
++    portrait->setToolTip(QString(love_text(
++                           other->ai_common.love[player_index(us)])));
++  } else {
++    portrait->setToolTip(QString());
++  }
++  portrait->show();
++}
++
+ /************************************************************************//**
+   Updates diplomacy widget - updates clauses and redraws pixmaps
+ ****************************************************************************/
+@@ -703,6 +796,7 @@ void diplo_wdg::update_wdg()
+   QPixmap *pix = NULL;
+   QTableWidgetItem *qitem;
+ 
++  update_portrait();
+   blank = true;
+   text_edit->clearContents();
+   text_edit->setRowCount(0);
+diff --git a/client/gui-qt/diplodlg.h b/client/gui-qt/diplodlg.h
+index 3139337..bfcb4ad 100644
+--- a/client/gui-qt/diplodlg.h
++++ b/client/gui-qt/diplodlg.h
+@@ -55,6 +55,7 @@ class diplo_wdg: public QWidget
+   QPushButton *accept_treaty;
+   QPushButton *cancel_treaty;
+   QTableWidget *text_edit;
++  QLabel *portrait;
+ 
+ public:
+   diplo_wdg(struct Treaty *ptreaty,
+@@ -91,6 +92,7 @@ protected:
+ private:
+   struct player *plr1;
+   struct player *plr2;
++  void update_portrait();
+   int active_menu;
+   struct player *curr_player;
+   bool p1_accept;
+-- 
+2.56.0
+

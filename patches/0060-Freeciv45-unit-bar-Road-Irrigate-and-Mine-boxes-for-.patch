@@ -1,0 +1,85 @@
+From d5d63ae4ccba5f5eb36f4389709fc1ca2ded761c Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Thu, 22 Oct 2026 22:40:25 -0500
+Subject: [PATCH] Freeciv45 unit bar: Road, Irrigate and Mine boxes for workers
+
+A worker's main orders were only in the Work menu or on the R, I and M
+keys.  The unit bar now shows a box for each after Settle, when every
+unit in focus can do it by the checks the Work menu enables them by,
+and a click runs the same key_unit_road, key_unit_irrigate and
+key_unit_mine as the keys.  The tileset's ui.action.road, irrigate and
+mine draw them, or the theme's buildroad, irrigation and mine icons.
+A worker has seven boxes, so a row now holds eight before it wraps.
+---
+ client/gui-qt/unitbar.cpp | 34 ++++++++++++++++++++++++++++++----
+ 1 file changed, 30 insertions(+), 4 deletions(-)
+
+diff --git a/client/gui-qt/unitbar.cpp b/client/gui-qt/unitbar.cpp
+index a5853b3..18b26a6 100644
+--- a/client/gui-qt/unitbar.cpp
++++ b/client/gui-qt/unitbar.cpp
+@@ -71,8 +71,9 @@ static const int ACTION_SIZE = 36;
+ static const int ACTION_ICON = 24;
+ static const int BAR_MARGIN = 12;
+ static const int GAP = 6;
+-// The bar is as wide as its action boxes, up to this many a row; more wrap
+-static const int MAX_COLUMNS = 6;
++// The bar is as wide as its action boxes, up to this many a row; more wrap.
++// A Worker's seven (Road, Irrigate, Mine and the four every unit has) fit.
++static const int MAX_COLUMNS = 8;
+ 
+ /************************************************************************//**
+   Draw the unit as the map draws it, cropped to its ink, scaled to the given
+@@ -279,8 +280,11 @@ unit_action_button::unit_action_button(shortcut_id sid, const QString &icon,
+   fc_shortcut *sc = fc_shortcuts::sc()->get_shortcut(sid);
+ 
+   action = sid;
+-  // The theme calls Settle's icon "home"
+-  icon_pix = ui_button_pixmap("action", icon == "home" ? "settle" : icon);
++  // Some of the theme's names differ from the tileset's
++  icon_pix = ui_button_pixmap("action", icon == "home" ? "settle"
++                                        : icon == "buildroad" ? "road"
++                                        : icon == "irrigation" ? "irrigate"
++                                        : icon);
+   if (icon_pix.isNull()) {
+     QPixmap *pm = fc_icons::instance()->get_pixmap(icon);
+ 
+@@ -333,6 +337,15 @@ void unit_action_button::run()
+   case SC_BUILDCITY:
+     key_unit_build_city();
+     break;
++  case SC_BUILDROAD:
++    key_unit_road();
++    break;
++  case SC_BUILDIRRIGATION:
++    key_unit_irrigate();
++    break;
++  case SC_BUILDMINE:
++    key_unit_mine();
++    break;
+   case SC_FORTIFY:
+     key_unit_fortify();
+     break;
+@@ -541,6 +554,19 @@ void unit_bar::refresh(struct unit_list *punits)
+       new_actions.append(new unit_action_button(SC_BUILDCITY, "home",
+                                                 this));
+     }
++    // Then a worker's: as the Work menu enables them
++    if (can_units_do_any_road(&(wld.map), get_units_in_focus())) {
++      new_actions.append(new unit_action_button(SC_BUILDROAD, "buildroad",
++                                                this));
++    }
++    if (can_units_do_activity_client(get_units_in_focus(),
++                                     ACTIVITY_IRRIGATE)) {
++      new_actions.append(new unit_action_button(SC_BUILDIRRIGATION,
++                                                "irrigation", this));
++    }
++    if (can_units_do_activity_client(get_units_in_focus(), ACTIVITY_MINE)) {
++      new_actions.append(new unit_action_button(SC_BUILDMINE, "mine", this));
++    }
+     new_actions.append(new unit_action_button(SC_GOTO, "goto", this));
+     if (all_fortify) {
+       new_actions.append(new unit_action_button(SC_FORTIFY, "fortify",
+-- 
+2.56.0
+

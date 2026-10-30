@@ -1,0 +1,13 @@
+The edge buttons and unit-bar actions from the tileset (issue 307, patch 0059), 2026-10-22
+Driver build at patch 0059 (the 0058 driver build with patch 0059 applied), civ45, seed 42. Two runs of buttons.txt.
+
+freeciv45iso (ui_buttons.spec): the seven edge buttons show their own plates (Map teal, Research blue, Nations red,
+Cities terracotta, Units green, Economy amber, More slate) and the actions their own pictures; with Settlers in focus
+   actions [Build City (B) | Go to Tile (G) | Sentry (S) | Wait (W) | Done (Space)]
+   settlers.jpg, the right half of compare.jpg.
+amplio2 (no ui.edge or ui.action sprites): the theme's icons as before, with no tileset error in client.log;
+   the left half of compare.jpg.
+
+A first fallback run on trident stopped at a tileset error box ("Missing Cottage building activity sprite for tags
+unit.mine"): trident lacks a civ45 activity sprite, which has nothing to do with the buttons; amplio2 was used instead.
+Not run: a tileset change during a game (edge_column::reload_icons from tileset_changed).

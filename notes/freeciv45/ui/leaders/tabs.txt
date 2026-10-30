@@ -1,0 +1,26 @@
+dismiss
+wait 12000
+chat /lua cmd for p in players_iterate() do local t = nil; for u in p:units_iterate() do t = u.tile end; if t ~= nil then edit.create_city(p, t, p.name .. "ville"); if p.name == "AI*1" then edit.create_building(t:city(), find.building_type("Marco Polo's Embassy")) end end end
+wait 3000
+key Escape
+wait 500
+dismiss
+endturn
+wait 8000
+dismiss
+wait 500
+meet 1
+meet 2
+meet 3
+meet 4
+wait 3000
+dtab 0
+wait 800
+shot tab0
+dtab 1
+wait 800
+shot tab1
+dtab 2
+wait 800
+shot tab2
+quit

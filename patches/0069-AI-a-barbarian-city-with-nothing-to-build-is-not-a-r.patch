@@ -1,0 +1,36 @@
+From 81b20571767487dbd0f678c877a7489df54aed56 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Tue, 27 Oct 2026 21:55:38 -0500
+Subject: [PATCH 69/70] AI: a barbarian city with nothing to build is not a
+ ruleset error
+
+When a barbarian-held city could build none of the barbarian build units
+(civ45's Swordsmen need Iron next to the city), the fallback code logged
+'Cannot even build a fallback ... Fix the ruleset!' at error level every
+turn, up to 65 lines in an 80-turn game. Barbarians only ever build their
+role units, so for them the city just waits, and the line is now a debug
+note. Issue 358.
+---
+ ai/default/daicity.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/ai/default/daicity.c b/ai/default/daicity.c
+index d1ddcdb..1ee1b0e 100644
+--- a/ai/default/daicity.c
++++ b/ai/default/daicity.c
+@@ -306,6 +306,12 @@ static void dai_city_choose_build(struct ai_type *ait, struct player *pplayer,
+           = dai_role_utype_for_terrain_class(pcity, UTYF_SETTLERS, TC_LAND);
+         city_data->choice.type = CT_CIVILIAN;
+         adv_choice_set_use(&(city_data->choice), "fallback worker");
++      } else if (is_barbarian(pplayer)) {
++        /* Barbarians build only their role units, and a city that has
++         * none it can build (say, Swordsmen without Iron) just waits.
++         * That is not a ruleset error. */
++        CITY_LOG(LOG_DEBUG, pcity, "Barbarians have nothing to build");
++        city_data->choice.want = 0;
+       } else {
+         CITY_LOG(LOG_ERROR, pcity, "Cannot even build a fallback "
+                  "(caravan/coinage/settlers). Fix the ruleset!");
+-- 
+2.56.0
+

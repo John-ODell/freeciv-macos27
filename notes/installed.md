@@ -140,3 +140,79 @@ No official DMG exists for 3.1/3.2; the official macOS artefact is a tar.gz of a
   with no tileset suggestion window and no tileset warning.
 - Not chosen: shipping freeciv45iso with the build at a priority above amplio2's 25. That would change the iso
   default for every player and every ruleset, and it needs patch 0033 in the build. It is John's call.
+
+## 2026-10-21, first Freeciv45.app
+
+- `~/freeciv-builds/apps/Freeciv45.app` (183 MB, self-contained, ad-hoc signed) from `scripts/bundle.sh qt --game
+  freeciv45` on main at d4a9eaa. Its client is `~/freeciv-builds/qt` (patches to 0057, no test driver) and it carries
+  the freeciv45iso tileset with the start picture, icons and UI icons of PRs 297 and 299; its Dock icon is
+  `tilesets/freeciv45iso/freeciv45.icns`. Options go to `~/.freeciv/freeciv45-client-rc-3.2`. Nothing new from
+  Homebrew. Git-ignored, safe to delete and regenerate.
+- Checked: a copy (with Qt's offscreen plugin added, the copy only) ran 20 s on the start page with a fresh HOME.
+- Later the same night: `~/freeciv-builds/qt` rebuilt with `scripts/build.sh qt` from fork branch series-0058 (098b172,
+  patch 0058, the unit bar's Settle box), and `Freeciv45.app` rebundled on it from main at 404dae3. No new formulae.
+
+## 2026-10-22, the client and Freeciv45.app at patch 0059
+
+- `~/freeciv-builds/qt` was rebuilt with `scripts/build.sh qt` from fork branch series-0059 (7ac05c8). Patch 0059 makes the right-edge buttons and unit-bar actions take the tileset's pictures. The build had 0 compiler warnings.
+- `Freeciv45.app` was rebundled on it from main at c99ea1a (184 MB). It carries `freeciv45iso/ui_buttons.spec`.
+- No new formulae. Git-ignored, safe to delete and regenerate.
+- Later the same night: `~/freeciv-builds/qt` was rebuilt from fork branch series-0060 (d5d63ae). Patch 0060 adds the unit bar's Road, Irrigate and Mine boxes. The build had 0 compiler warnings. `Freeciv45.app` was rebundled on it from main at 97da34f (184 MB), and its `ui_buttons.spec` has the nine actions. No new formulae.
+
+## 2026-10-24, the client and Freeciv45.app at patch 0062
+
+- `~/freeciv-builds/qt` was rebuilt with `scripts/build.sh qt --no-install-deps` from fork branch series-0062 (e7b12b3, worktree `port/s61`). That adds patch 0061 (Settlers only found or join cities) and patch 0062 (civics as four policy sliders). `build.sh`'s new patch check passed: the tree has every subject in `patches/`.
+- This was a full build in a fresh tree. It reports 48 compiler warnings, all on upstream lines: 34 in the vendored Lua 5.4, 4 linker alignment notes, and 10 in upstream C (none on a line any patch changed; `git blame` on the two in patched files shows upstream commit 3636c3a). The earlier "0 warnings" builds reused build trees.
+- `Freeciv45.app` was rebundled on it with `FREECIV_SRC=port/s61 scripts/bundle.sh qt --game freeciv45`, from main at f3523aa (184 MB, ad-hoc signed, `codesign -v` passes). Its civ45 rules carry the Labour, Trade, Faith and Service sliders.
+- Checked: a 5-turn civ45 autogame on `~/freeciv-builds/qt` passes. No new formulae. Git-ignored, safe to delete and regenerate.
+
+
+## 2026-10-24, the client and Freeciv45.app at patch 0063, and the Freeciv45 release files
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0063 (eb20321, worktree `port/s61`). Patch 0063 (culture victory at 50,000 points) changes only data, so this was an incremental build with 0 compiler warnings. `Freeciv45.app` was rebundled on it from main at 88e9b8b. Its `civ45/game.ruleset` has `victory_min_points = 50000`, and `codesign -v` passes.
+- Checked: a 100-turn civ45 autogame on the app's own server (`Contents/MacOS`, `--data Contents/Resources/share/freeciv`) passes.
+- Release files for the first Freeciv45 release, made but **not published** (that waits for John):
+  - `~/freeciv-builds/apps/Freeciv45-3.2.6-arm64.dmg` (109 MB, `scripts/dmg.sh`, `hdiutil verify` valid) and its `.sha256`;
+  - `~/freeciv-builds/apps/freeciv45-1-src.tar.gz` (`git -C port/freeciv archive --prefix=freeciv45-1/ series-0063`) and its `.sha256`. `SOURCE.txt` in the app names the same tree (eb20321).
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-26, the client and Freeciv45.app at patch 0065
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0065 (0b61032, worktree `port/s61`): patch 0064 (AI builds space structurals) and 0065 (the map scrolls at its edges). Incremental build; its 4 warnings are all the linker's "reducing alignment of section __DATA,__common", none from the compiler.
+- `Freeciv45.app` was rebundled on it from main at 3e44d3b, so it also has the spaceship and treaty art from PR 329. `SOURCE.txt` names tree 0b61032 and lists patches through 0065; `codesign -v` passes. The 0063 app was kept at `~/freeciv-builds/apps-0063-Freeciv45.app`.
+- Checked: the app's client has the "Scroll the map at its edges" option (`strings`), and a 40-turn civ45 autogame on the app's own server (`Contents/MacOS/freeciv-server`, `FREECIV_DATA_PATH=Contents/Resources/share/freeciv`) ran to its end turn.
+- Not checked: the client window (no pop-up game windows). The DMG and source tarball from 10-24 are still at 0063 and were not remade.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-27, the client and Freeciv45.app at patch 0066
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0066 (4c160f7, worktree `port/s61`); patch 0066 changes only `data/civ45/units.ruleset`, 0 compiler warnings. `Freeciv45.app` was rebundled on it from main at 86a8332; its `civ45/units.ruleset` gives Settlers `pop_cost = 1`, `SOURCE.txt` lists patches through 0066, and `codesign -v` passes.
+- The rules change was tested before the patch in ten 40-turn autogames (`notes/freeciv45/settlers-350.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-27, the client and Freeciv45.app at patch 0067
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0067 (69dc1aa, worktree `port/s61`); 0067 adds the `barbsfromfog` server setting, so `common/game.h` changed and much of the tree recompiled. 4 warnings: one `-Wgnu-folding-constant` in `client/mapview_common.c` (upstream code this patch doesn't touch) and three linker `__DATA,__common` alignment notes.
+- `Freeciv45.app` rebundled from main at f4ebf26; its server has the new setting, `civ45/game.ruleset` turns it on, `SOURCE.txt` lists 0067, `codesign -v` passes.
+- The rules were tested before the patch in twelve 80-turn autogames (`notes/freeciv45/barbarians-345.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-27, the client and Freeciv45.app at patch 0068
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0068 (548369c, worktree `port/s61`), 0 compiler warnings. `Freeciv45.app` was rebundled from main at 51f7fa3: its freeciv45iso has `leaders.jpg` and `leaders.spec`, its client has the portrait code, `SOURCE.txt` lists 0068 and `codesign -v` passes.
+- The rebuild ran while the testing session had a game on the app's own server (port 5740); that server kept running from the replaced files. The session was told.
+- Tested before the patch with the offscreen driver (`notes/freeciv45/leaders-347.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-27, the client and Freeciv45.app at patch 0070
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0070 (f106277, worktree `port/s61`), 0 compiler warnings. The intermediate 0069-only build counted 4 linker alignment warnings (issue 367). `Freeciv45.app` was rebundled from main at 7eea689: `SOURCE.txt` lists 0069 and 0070, civ45's `units.ruleset` makes Archers the fallback sea raider, and `codesign -v` passes.
+- Tested with autogames on the built server (`notes/freeciv45/barbarians-357.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.
+
+## 2026-10-29, the client and Freeciv45.app at patch 0073
+
+- `~/freeciv-builds/qt` was rebuilt from fork branch series-0073 (62dd8ef, worktree `port/s61`), 0 compiler warnings. `Freeciv45.app` was rebundled from main at 28f5bc0: `SOURCE.txt` lists 0071, 0072 and 0073, and `codesign -v` passes.
+- A test-only driver build lives in `port/drv-0073` (source `port/drv-0073-src`: the 0073 tree plus `uidrive.diff`, with temporary log lines in its `edgebar.cpp`). It is not John's client.
+- Tested offscreen with the driver (`notes/freeciv45/production-chooser.md`). The client window was not opened.
+- No new formulae. All git-ignored outside the repo, safe to delete and regenerate.

@@ -1,0 +1,117 @@
+From 2370b3947d16736f16b451df3da737dce7b530ea Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Wed, 21 Oct 2026 02:27:59 -0500
+Subject: [PATCH] Qt client: the pregame Rules box shows the ruleset our own
+ server runs
+
+The box always selected "default", because the server does not say
+which ruleset it loaded. For a server this client started, it now
+selects the ruleset the client asked for: the one passed at the start,
+then the last one picked in the box.
+
+Freeciv45 issue 291.
+---
+ client/connectdlg_common.c  | 21 +++++++++++++++++++++
+ client/connectdlg_common.h  |  1 +
+ client/gui-qt/fc_client.cpp | 10 ++++++++--
+ 3 files changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/client/connectdlg_common.c b/client/connectdlg_common.c
+index 0b0306b..3fb901a 100644
+--- a/client/connectdlg_common.c
++++ b/client/connectdlg_common.c
+@@ -91,6 +91,11 @@ bool server_quitting = FALSE;
+ static char challenge_fullname[MAX_LEN_PATH];
+ static bool client_has_hack = FALSE;
+ 
++/* The ruleset this client asked its own server for: the one it started the
++ * server with, then the last one picked in pregame. Empty when it started
++ * none, or the server took its default. */
++static char local_ruleset[MAX_RULESET_NAME_LENGTH] = "";
++
+ int internal_server_port;
+ 
+ /**************************************************************************
+@@ -215,6 +220,7 @@ void client_kill_server(bool force)
+     }
+   }
+   client_has_hack = FALSE;
++  local_ruleset[0] = '\0';
+ }
+ 
+ /**********************************************************************//**
+@@ -302,6 +308,7 @@ bool client_start_server(void)
+       ruleset = NULL;
+     }
+   }
++  sz_strlcpy(local_ruleset, ruleset != NULL ? ruleset : "");
+ 
+ #ifdef HAVE_USABLE_FORK
+   {
+@@ -801,7 +808,21 @@ void set_ruleset(const char *ruleset)
+ {
+   struct packet_ruleset_select packet;
+ 
++  if (is_server_running()) {
++    sz_strlcpy(local_ruleset, ruleset);
++  }
+   fc_snprintf(packet.modpack, sizeof(packet.modpack), "%s", ruleset);
+ 
+   send_packet_ruleset_select(&client.conn, &packet);
+ }
++
++/**********************************************************************//**
++  The ruleset this client asked its own server for, or NULL when it runs
++  none or did not name one. The server does not tell clients which ruleset
++  it loaded, so the pregame ruleset choice can only show this.
++**************************************************************************/
++const char *local_server_ruleset(void)
++{
++  return (is_server_running() && local_ruleset[0] != '\0')
++         ? local_ruleset : NULL;
++}
+diff --git a/client/connectdlg_common.h b/client/connectdlg_common.h
+index dc8081a..ebddf0d 100644
+--- a/client/connectdlg_common.h
++++ b/client/connectdlg_common.h
+@@ -30,6 +30,7 @@ void send_client_wants_hack(const char *filename);
+ void send_save_game(const char *filename);
+ 
+ void set_ruleset(const char *ruleset);
++const char *local_server_ruleset(void);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/client/gui-qt/fc_client.cpp b/client/gui-qt/fc_client.cpp
+index 954872c..8b9fd3a 100644
+--- a/client/gui-qt/fc_client.cpp
++++ b/client/gui-qt/fc_client.cpp
+@@ -1274,6 +1274,8 @@ void pregame_options::set_rulesets(int num_rulesets, char **rulesets)
+ {
+   int i;
+   int def_idx = -1;
++  int own_idx = -1;
++  const char *own = local_server_ruleset();
+ 
+   cruleset->clear();
+   cruleset->blockSignals(true);
+@@ -1282,10 +1284,14 @@ void pregame_options::set_rulesets(int num_rulesets, char **rulesets)
+     if (!strcmp("default", rulesets[i])) {
+       def_idx = i;
+     }
++    if (own != nullptr && !strcmp(own, rulesets[i])) {
++      own_idx = i;
++    }
+   }
+ 
+-  // HACK: server should tell us the current ruleset.
+-  cruleset->setCurrentIndex(def_idx);
++  // HACK: server should tell us the current ruleset. Our own server runs
++  // the one we asked for.
++  cruleset->setCurrentIndex(own_idx >= 0 ? own_idx : def_idx);
+   cruleset->blockSignals(false);
+ }
+ 
+-- 
+2.56.0
+

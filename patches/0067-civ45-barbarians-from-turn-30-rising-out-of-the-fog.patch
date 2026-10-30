@@ -1,0 +1,192 @@
+From 69dc1aa6c794f047e4d62f527103961783f3e896 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Tue, 27 Oct 2026 19:22:08 -0500
+Subject: [PATCH] civ45: barbarians from turn 30, rising out of the fog
+
+Barbarians could not appear before turn 120, and on land they could only
+rise on tiles the victim had explored, so an early game had none. A new
+server setting, barbsfromfog (off by default), lets a land uprising start
+on any tile the victim does not see right now. civ45 turns it on, starts
+barbarians at turn 30 at the HORDES rate, raids with Warriors, Archers and
+Horsemen, and ships them in Triremes until Caravels and Galleons are
+known. Issue 345.
+---
+ common/game.c            |  1 +
+ common/game.h            |  3 +++
+ data/civ45/game.ruleset  |  7 ++++++-
+ data/civ45/units.ruleset | 14 +++++++-------
+ server/barbarian.c       | 10 +++++++---
+ server/settings.c        | 10 ++++++++++
+ 6 files changed, 34 insertions(+), 11 deletions(-)
+
+diff --git a/common/game.c b/common/game.c
+index 86338d7..c277578 100644
+--- a/common/game.c
++++ b/common/game.c
+@@ -386,6 +386,7 @@ static void game_defaults(bool keep_ruleset_value)
+     game.server.netwait           = GAME_DEFAULT_NETWAIT;
+     game.server.occupychance      = GAME_DEFAULT_OCCUPYCHANCE;
+     game.server.onsetbarbarian    = GAME_DEFAULT_ONSETBARBARIAN;
++    game.server.barbsfromfog      = GAME_DEFAULT_BARBSFROMFOG;
+     game.server.additional_phase_seconds = 0;
+     game.server.phase_mode_stored = GAME_DEFAULT_PHASE_MODE;
+     game.server.pingtime          = GAME_DEFAULT_PINGTIME;
+diff --git a/common/game.h b/common/game.h
+index 1250334..56a4b3a 100644
+--- a/common/game.h
++++ b/common/game.h
+@@ -173,6 +173,7 @@ struct civ_game {
+       int num_phases;
+       int occupychance;
+       int onsetbarbarian;
++      bool barbsfromfog;
+       int pingtime;
+       int pingtimeout;
+       bool ip_hide;
+@@ -664,6 +665,8 @@ static inline bool is_ruleset_compat_mode(void)
+ #define GAME_MIN_ONSETBARBARIAN      1
+ #define GAME_MAX_ONSETBARBARIAN      GAME_MAX_END_TURN
+ 
++#define GAME_DEFAULT_BARBSFROMFOG    FALSE
++
+ #define GAME_DEFAULT_OCCUPYCHANCE    0
+ #define GAME_MIN_OCCUPYCHANCE        0
+ #define GAME_MAX_OCCUPYCHANCE        100
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index 40dd6e5..e9399b8 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -928,6 +928,9 @@ colorlist =
+ ; AIs play at Normal, not the server's Easy, at which they allied into one bloc that never fought (issue 159);
+ ; the fork's server also gives this level to the AIs that aifill made before the ruleset loaded.
+ ; Maps have 110 land tiles per player (John, 2026-10-18, issue 211), a little more room than the 100 before.
++; Barbarians from turn 30 at the "Raging hordes" rate, and on land they rise out of the fog ("barbsfromfog",
++; a fork setting), so new cities need guards (John, 2026-10-27, issue 345). Early raiders are Warriors, Archers
++; and Horsemen; their boats are Triremes until Caravels and Galleons are about.
+ ;
+ set =
+     { "name", "value", "lock"
+@@ -950,7 +953,9 @@ set =
+       "foggedborders", "ENABLED", FALSE
+       "restrictinfra", "ENABLED", FALSE
+       "unreachableprotects", "DISABLED", FALSE
+-      "onsetbarbs", 120, FALSE
++      "onsetbarbs", 30, FALSE
++      "barbarians", "HORDES", FALSE
++      "barbsfromfog", TRUE, FALSE
+       "occupychance", 50, FALSE
+       "techlossforgiveness", 0, FALSE
+       "techlossrestore", 50, FALSE
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 975ee4c..8470037 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -722,7 +722,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
+-roles         = "DefendOk", "DefendOkStartUnit", "FirstBuild"
++roles         = "DefendOk", "DefendOkStartUnit", "FirstBuild", "BarbarianTech", "BarbarianSeaTech"
+ helptext      = _("\
+ This unit may be built from the start of the game.  It is the\
+  weakest offensive unit.\
+@@ -840,7 +840,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Archer"
+-roles         = "DefendOk", "Hut"
++roles         = "DefendOk", "Hut", "BarbarianTech", "BarbarianSeaTech"
+ helptext      = _("\
+ Archers fight with bows and arrows and have a good offensive\
+  value.\
+@@ -954,7 +954,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
+-roles         = "DefendOk", "BarbarianBuild", "BarbarianSea"
++roles         = "DefendOk", "BarbarianBuild", "BarbarianSea", "BarbarianSeaTech"
+ helptext      = _("\
+ Legions are heavily armed and well disciplined infantry\
+  units with an excellent offensive value.\
+@@ -1701,7 +1701,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ flags         = "Shield2Gold", "ShieldToGold", "Withdraws", "Capturer", "FleshBased", "Mounted"
+-roles         = "AttackFastStartUnit", "Hut", "Barbarian", "Hunter"
++roles         = "AttackFastStartUnit", "Hut", "Barbarian", "BarbarianTech", "BarbarianSeaTech", "Hunter"
+ bonuses       =
+     { "flag", "type", "value"
+       "Siege", "DefenseMultiplierPct", 50
+@@ -2609,7 +2609,7 @@ tp_defense    = "Alight"
+ cargo         = "Land", "Small Land"
+ flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC",
+                 "Provoking", "IronBased", "NonMil"
+-roles         = "Ferryboat", "FerryStartUnit"
++roles         = "Ferryboat", "FerryStartUnit", "BarbarianBoat"
+ helptext      = _("\
+ The Trireme is your first boat unit. It can act\
+  as a transport ship, and unlike later boats can\
+@@ -2684,7 +2684,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Small Land"
+ flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "Naval"
+-roles         = "Ferryboat", "FerryStartUnit"
++roles         = "Ferryboat", "FerryStartUnit", "BarbarianBoatTech"
+ helptext      = _("\
+ The Caravel is a sailing ship that can enter\
+  any ocean tile, but have to spend at least every third\
+@@ -2722,7 +2722,7 @@ uk_gold       = 0
+ tp_defense    = "Alight"
+ cargo         = "Land", "Small Land", "Big Land", "Merchant"
+ flags         = "Shield2Gold", "ShieldToGold", "BadCityDefender", "HasNoZOC", "Naval"
+-roles         = "Ferryboat", "FerryStartUnit", "BarbarianBoat"
++roles         = "Ferryboat", "FerryStartUnit", "BarbarianBoatTech"
+ helptext      = _("\
+ The Galleon is a big transport ship, the first which can\
+  transport large wheeled units.\
+diff --git a/server/barbarian.c b/server/barbarian.c
+index 6f2f050..b45a0f8 100644
+--- a/server/barbarian.c
++++ b/server/barbarian.c
+@@ -570,10 +570,14 @@ static void try_summon_barbarians(void)
+     return;
+   }
+ 
+-  /* I think Sea Raiders can come out of unknown sea territory */
++  /* I think Sea Raiders can come out of unknown sea territory.
++   * With 'barbsfromfog', land barbarians can too: they rise anywhere
++   * the victim doesn't see right now. */
+   if (!(utile = find_empty_tile_nearby(ptile))
+-      || (!map_is_known(utile, victim)
+-	  && !is_ocean_tile(utile))
++      || (!is_ocean_tile(utile)
++          && (game.server.barbsfromfog
++              ? map_is_known_and_seen(utile, victim, V_MAIN)
++              : !map_is_known(utile, victim)))
+       || !is_near_land(utile)) {
+     return;
+   }
+diff --git a/server/settings.c b/server/settings.c
+index e502b46..a1184c2 100644
+--- a/server/settings.c
++++ b/server/settings.c
+@@ -2568,6 +2568,16 @@ static struct setting settings[] = {
+           GAME_MIN_ONSETBARBARIAN, GAME_MAX_ONSETBARBARIAN, 
+           GAME_DEFAULT_ONSETBARBARIAN)
+ 
++  GEN_BOOL("barbsfromfog", game.server.barbsfromfog,
++           SSET_RULES_FLEXIBLE, SSET_MILITARY, SSET_RARE,
++           ALLOW_NONE, ALLOW_BASIC,
++           N_("Barbarians rise out of the fog"),
++           N_("If this is set, a land uprising can start on any tile the "
++              "victim does not see at the moment, explored or not. If it "
++              "is not set, it can only start on land the victim has "
++              "explored."), NULL, NULL,
++           GAME_DEFAULT_BARBSFROMFOG)
++
+   GEN_ENUM("revolentype", game.info.revolentype,
+            SSET_RULES, SSET_SOCIOLOGY, SSET_RARE, ALLOW_NONE, ALLOW_BASIC,
+            N_("Way to determine revolution length"),
+-- 
+2.56.0
+

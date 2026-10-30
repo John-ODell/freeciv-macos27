@@ -64,7 +64,7 @@ usage: make-freeciv45iso.py --data ~/freeciv-builds/qt/share/freeciv
                             [--extras-art 09_map_extras] [--no-bk-extras]
 Needs Pillow (python3.14 on this Mac has it).
 """
-import argparse, glob, importlib.util, math, os, random, re, tempfile
+import argparse, glob, importlib.util, math, os, random, re, shutil, subprocess, tempfile
 from PIL import Image, ImageChops, ImageCms, ImageDraw, ImageFilter, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -524,7 +524,7 @@ def relief_sections(ours, canopy=False):
     assert all('layer2_match_with = "%s"' % t in out["tile_" + t] for t in trees)
     return out
 
-def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False, units=False, icons=False):
+def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=False, units=False, icons=False, intro=False):
     """amplio2.tilespec with sizes and offsets doubled, pixel_ratio 2, the file list renamed, and freeciv45test's
     layer and terrain sections in place of amplio2's (amplio2's other terrains kept, matched as mountains)."""
     ours = square_sections(data, files)
@@ -556,6 +556,10 @@ def tilespec(data, out_root, files, blend=True, relief=True, canopy=False, bk=Fa
             if icons and key == "options":       # tech_icons.spec and building_icons.spec come after the stock misc/ ones
                 out.append(line.rstrip().rstrip('"') + ' duplicates_ok"'); continue
             if key == "name": out.append('name = "Freeciv45 iso"'); continue
+            if intro and key == "main_intro_file":       # issue 292: our start picture
+                out.append('main_intro_file    = "%s/intro"' % NAME); continue
+            if line.startswith(";for_ruleset"):      # issue 272: "Start new game" passes --ruleset civ45
+                out.append('for_ruleset = "civ45"'); continue
             if key == "priority": out.append("priority = 4"); continue
             if key == "summary":
                 out.append('summary = _("Freeciv45 iso tileset: %dx%d diamonds, painted ground for every terrain, '
@@ -785,10 +789,12 @@ TECH_RUNS = ("run1/panel1", "run2/panel2", "run5/panel3", "run6/panel4")      # 
 TECH_PICK = {"the_wheel": "the_wheel_alt", "the_republic": "the_republic_alt"}  # run 6's row 5 retakes of the two weak cells
 TECH_CELL, TECH_FILL = 48, 44
 BUILD_RUNS = ("run1/panel1", "run2/panel2", "run3/panel3", "run4/panel4")
-BUILD_RUNS += ("run5/panel5",)
+BUILD_RUNS += ("run5/panel5", "run6/panel6")    # run 6: the faith houses, holy city and shrine (issue 295)
 BUILD_PICK = {"colossus": "colossus_alt", "pyramids": "pyramids_alt", "georgia_guidestones": "georgia_guidestones_r1",
               "united_nations": "united_nations_r3", "shakespeares_theatre": "shakespeares_theatre_r1",
               "statue_of_liberty": "statue_of_liberty_r1"}      # run 5's wonder retakes (issue 255); its lighthouse row is spares
+FAITHS = ("hearth", "many_hands", "sun_throne", "quiet_way", "star_path", "one_flame", "deep_well")
+BUILD_EXTRA = {"state_faith_" + f: "faith_%s_alt" % f for f in FAITHS}   # a state faith (in the capital) draws the second take
 BUILD_CELL, BUILD_FILL = (64, 48), (62, 46)
 
 def raw_names(base, runs):
@@ -823,9 +829,10 @@ def icons(tech_art, build_art, out_dir, record):
                   ", ".join("`%s`" % n for n in techs), TECH_FILL, TECH_FILL, *size))
     names = [n for n in raw_names(build_art, BUILD_RUNS) if not n.endswith("_alt") and not re.search(r"_r\d$", n)]
     pick = [(n, BUILD_PICK.get(n, n)) for n in names + [n for n in BUILD_PICK if n not in names and BUILD_PICK[n][-3:-1] == "_r"]]
+    pick += sorted(BUILD_EXTRA.items())
     size = icon_sheet(build_art, BUILD_RUNS, pick, BUILD_CELL, BUILD_FILL, out_dir, "building_icons", "b.",
                       "Building and wonder pictures for the Freeciv45 iso tileset: the Freeciv45 art pack's\n"
-                      "freeciv45/07_building_icons runs 1 to 5, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells."
+                      "freeciv45/07_building_icons runs 1 to 6, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells."
                       % (NAME, *BUILD_CELL))
     record.append("| `%s/building_icons.spec` | the art pack's building pictures (`freeciv45/07_building_icons`, %s, `post/raw`), %d of civ45's: %s "
                   "| cleaned (specks, fringe), fitted into %dx%d | %dx%d |" % (NAME, ", ".join("`%s`" % r for r in BUILD_RUNS), len(pick),
@@ -843,6 +850,212 @@ BORDER_CORE, BORDER_FADE, BORDER_CURVE = 4.0, 10.0, 1.5
 BORDER_EDGES = (("n", (W * 3 // 4, H // 4), (1, -2)), ("s", (W // 4, H * 3 // 4), (-1, 2)),
                 ("w", (W // 4, H // 4), (-1, -2)), ("e", (W * 3 // 4, H * 3 // 4), (1, 2)))   # owner's centre in the cell, inward normal
 BORDER_TAGS = {"grid.borders." + e for e, _, _ in BORDER_EDGES}
+
+# The start picture and the icons (issue 292): the art pack's freeciv45/14_title_art run 1, take B ("the tile") and the
+# keep of its four app icons. The start page draws main_intro_file at its own pixel size with the version text in its
+# bottom corners (gui-qt/pages.cpp create_main_page), so the picture is cropped to the middle 1536 x 900 and scaled to
+# TITLE_SIZE. icon.freeciv is the Qt client's application icon (gui_main.cpp, QApplication::setWindowIcon, which on macOS
+# is also the Dock icon while the game runs), icon.citydlg the city dialog's window icon (citydlg.cpp); freeciv45.icns
+# is Freeciv45.app's own icon (scripts/bundle.sh --game freeciv45).
+TITLE_RUN, TITLE_PICK = "run1", "title_b"
+TITLE_CROP, TITLE_SIZE = (0, 60, 1536, 960), (820, 480)
+ICON_SHEET, ICON_CELL = "app_icon", (0, 1)       # the keep: row 0, column 1 of the 2 x 2 sheet
+ICON_SIZES = {"appicon": (512, 0.86), "cityicon": (32, 0.94)}   # side, share of it the keep fills
+ICNS_SIDES = (16, 32, 128, 256, 512)                            # each also at @2x
+
+def icon_square(keep, side, share):
+    im = keep.copy(); s = share * side / max(im.size)
+    im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
+    out = Image.new("RGBA", (side, side), (0, 0, 0, 0)); out.alpha_composite(im, ((side - im.width) // 2, (side - im.height) // 2))
+    return out
+
+def title(art, out_dir, record):
+    """intro.png, appicon.png, cityicon.png, icons.spec and freeciv45.icns; returns the names used."""
+    run = os.path.join(art, TITLE_RUN)
+    Image.open(os.path.join(run, TITLE_PICK + ".png")).convert("RGB").crop(TITLE_CROP).resize(TITLE_SIZE, Image.LANCZOS) \
+        .save(os.path.join(out_dir, "intro.png"), optimize=True)
+    sheet = Image.open(os.path.join(run, ICON_SHEET + ".png")).convert("RGBA"); side = sheet.width // 2
+    r, c = ICON_CELL
+    keep = defringe(largest(sheet.crop((c * side, r * side, (c + 1) * side, (r + 1) * side))))
+    keep = keep.crop(keep.getchannel("A").point(lambda v: 255 if v >= 16 else 0).getbbox())
+    for name, (px, share) in ICON_SIZES.items():
+        icon_square(keep, px, share).save(os.path.join(out_dir, name + ".png"), optimize=True)
+    with open(os.path.join(out_dir, "icons.spec"), "w") as f:
+        f.write("; The application and city dialog icons for the Freeciv45 iso tileset: the keep of the Freeciv45 art pack's\n"
+                "; freeciv45/14_title_art run 1 app icons, made by tilesets/make-%s.py (see RECORD.md). Listed after\n"
+                "; misc/icons.spec, so these tags override the stock icons.\n\n"
+                '[spec]\n\noptions = "+Freeciv-3.2-spec"\n\n[info]\n\nartists = "\n    John O\'Dell (sheet workflow)\n"\n\n'
+                '[extra]\nsprites =\n\t{\t"tag", "file"\n\t\t"icon.freeciv", "%s/appicon"\n\t\t"icon.citydlg", "%s/cityicon"\n\t}\n'
+                % (NAME, NAME, NAME))
+    with tempfile.TemporaryDirectory() as tmp:
+        iconset = os.path.join(tmp, "freeciv45.iconset"); os.mkdir(iconset)
+        for n in ICNS_SIDES:
+            for k, suffix in ((1, ""), (2, "@2x")):
+                icon_square(keep, n * k, 0.86).save(os.path.join(iconset, "icon_%dx%d%s.png" % (n, n, suffix)))
+        subprocess.run(["iconutil", "-c", "icns", iconset, "-o", os.path.join(out_dir, "freeciv45.icns")], check=True)
+    record.append("| `%s/icons.spec`, `intro.png`, `freeciv45.icns` | the art pack's title art (`freeciv45/14_title_art`, `%s`): "
+                  "`%s` and the keep of `%s` | the picture cropped to %s and scaled to %dx%d; the keep's largest piece, "
+                  "defringed, centred on transparent squares (%s; the .icns at %s px and their @2x) | `intro.png`, %s |"
+                  % (NAME, TITLE_RUN, TITLE_PICK, ICON_SHEET, "x".join(map(str, TITLE_CROP)), *TITLE_SIZE,
+                     ", ".join("%s %d px" % (n, v[0]) for n, v in ICON_SIZES.items()), ", ".join(map(str, ICNS_SIDES)),
+                     ", ".join("`%s.png`" % n for n in ICON_SIZES)))
+    return [TITLE_PICK, ICON_SHEET + " (keep)"]
+
+# Citizens, specialists, rates and governments (issue 298): the art pack's freeciv45/13_ui_icons run 1 (post/raw). The
+# client draws them at their own pixel size, 15 x 20 like the stock misc/small, specialists and governments specs, so
+# each cut is tidied and fitted into UI_CELL. Citizens come per era: civ45's styles.ruleset names ancient, industrial,
+# electricage and modern as citizens_graphic, and the client looks for citizen.<era>.<mood>_<n> before citizen.<mood>_<n>
+# (client/tilespec.c tileset_setup_citizen_types); the plain tags, every style's fallback, are the ancient ones, and
+# postmodern draws the modern ones.
+# The bulb, sun and flake have 8 levels each (s.science_bulb_0 to 7): level 0 grey and dim, level 7 the art as cut.
+UI_RUN, UI_CELL, UI_FILL = "run1", (15, 20), (15, 20)
+UI_ERAS, UI_MOODS = ("ancient", "industrial", "electricage", "modern"), ("content", "happy", "unhappy", "angry")
+UI_ERA_ALIAS = {"postmodern": "modern"}     # civ45's last style (Superconductors) has no people of its own: the modern ones
+UI_SPECIALISTS = ("entertainer", "scientist", "taxman")
+UI_GOVS = ("anarchy", "tribal", "despotism", "monarchy", "communism", "fundamentalism", "federation", "republic", "democracy")
+UI_RATES = ("tax_gold", "tax_luxury", "tax_science")
+UI_LEVELS = ("science_bulb", "warming_sun", "cooling_flake")
+UI_COLS = 16
+
+def ui_level(im, k, top=7):
+    """Level k of top: the cut faded towards a dim grey, all the way at 0 and not at all at top."""
+    t = k / top; grey = ImageChops.multiply(im.convert("LA").convert("RGBA"), Image.new("RGBA", im.size, (110, 110, 110, 255)))
+    out = Image.blend(grey, im, 0.25 + 0.75 * t) if k < top else im.copy()
+    out.putalpha(im.getchannel("A")); return out
+
+def ui_icons(art, out_dir, record):
+    """ui_icons.png and .spec; returns the cut names used."""
+    run = os.path.join(art, UI_RUN); cuts = {}
+    for path in glob.glob(os.path.join(run, "panel*", "post", "raw", "*.png")):
+        cuts[os.path.splitext(os.path.basename(path))[0]] = path
+    def fit(name):
+        im = tidy(cuts[name]); return scaled(im, min(UI_FILL[0] / im.width, UI_FILL[1] / im.height))
+    plan = []        # (tags, image)
+    for era in UI_ERAS:
+        for mood in UI_MOODS:
+            for n in (0, 1):
+                tags = (["citizen.%s.%s_%d" % (e, mood, n) for e in [era] + [k for k, v in UI_ERA_ALIAS.items() if v == era]]
+                        + (["citizen.%s_%d" % (mood, n)] if era == UI_ERAS[0] else []))
+                plan.append((tags, fit("%s_%s_%d" % (era, mood, n))))
+    for sp in UI_SPECIALISTS:
+        for n in (0, 1): plan.append((["specialist.%s_%d" % (sp, n)], fit("%s_%d" % (sp, n))))
+    for gov in UI_GOVS: plan.append((["gov." + gov], fit(gov)))
+    for rate in UI_RATES: plan.append((["s." + rate], fit(rate)))
+    for name in UI_LEVELS:
+        im = fit(name)
+        for k in range(8): plan.append((["s.%s_%d" % (name, k)], ui_level(im, k)))
+    cw, ch = UI_CELL; rows = (len(plan) + UI_COLS - 1) // UI_COLS
+    sheet = Image.new("RGBA", (UI_COLS * cw, rows * ch), (0, 0, 0, 0)); cells = []
+    for i, (tags, im) in enumerate(plan):
+        x, y = (i % UI_COLS) * cw, (i // UI_COLS) * ch
+        sheet.alpha_composite(im, (x + (cw - im.width) // 2, y + ch - im.height if tags[0].startswith(("citizen", "specialist"))
+                                   else y + (ch - im.height) // 2))
+        cells.append((i // UI_COLS, i % UI_COLS, tags))
+    sheet.save(os.path.join(out_dir, "ui_icons.png"), optimize=True)
+    write_spec(out_dir, "ui_icons", "Citizens, specialists, rate and government icons for the Freeciv45 iso tileset: the Freeciv45 art\n"
+               "pack's freeciv45/13_ui_icons run 1, fitted by tilesets/make-%s.py (see RECORD.md) into %dx%d cells.\n"
+               "Listed after misc/specialists.spec, so these tags override the stock icons." % (NAME, cw, ch),
+               [("main", 0, cw, ch, cells)])
+    used = (["%s_%s_%d" % (e, m, n) for e in UI_ERAS for m in UI_MOODS for n in (0, 1)]
+            + ["%s_%d" % (sp, n) for sp in UI_SPECIALISTS for n in (0, 1)] + list(UI_GOVS + UI_RATES + UI_LEVELS))
+    record.append("| `%s/ui_icons.spec` | the art pack's UI icons (`freeciv45/13_ui_icons`, `%s`, panels 1 to 4, `post/raw`), %d cuts | "
+                  "tidied, fitted into %dx%d cells (people standing on the cell's foot); the bulb, sun and flake in 8 levels, "
+                  "grey to full colour | %dx%d |" % (NAME, UI_RUN, len(used), cw, ch, *sheet.size))
+    return used
+
+# Buttons (issue 307): the art pack's freeciv45/13_ui_icons run 2 (post/raw), so the Qt client's right-edge buttons and
+# unit-bar actions each have a colour and shape of their own instead of the theme's look-alike blue icons. Patch 0059
+# makes the client look for ui.edge.<name> and ui.action.<name> and keep the theme icon when a tileset has none. The
+# client draws them at BUTTON_PX and ACTION_PX points, so they are cut at twice that for a Retina screen. Only the ones
+# the client draws ship: run 2's messages and end turn wait in the art repo for buttons of their own. Road, irrigate
+# and mine are the Workers' boxes of patch 0060 (issue 311).
+BUTTON_RUN, BUTTON_SCALE = "run2", 2
+BUTTON_PX, ACTION_PX = 38, 24       # client/gui-qt/edgebar.cpp BUTTON_ICON, unitbar.cpp ACTION_ICON
+BUTTON_EDGE = ("map", "research", "nations", "cities", "units", "economy", "more")
+BUTTON_ACTIONS = ("settle", "road", "irrigate", "mine", "goto", "fortify", "sentry", "wait", "done")
+
+def buttons(art, out_dir, record):
+    """ui_buttons.png and .spec: the edge plates in a row of square cells, the actions in a row under them; returns
+    the cut names used."""
+    run = os.path.join(art, BUTTON_RUN)
+    def fit(panel, name, px):
+        # The plates drop the next row's scraps; an action is kept whole, as Go to's footprints are pieces of their own
+        im = tidy(os.path.join(run, panel, "post", "raw", name + ".png"), whole=panel != "panel1")
+        im = scaled(im, px / max(im.size)); cell = Image.new("RGBA", (px, px), (0, 0, 0, 0))
+        cell.alpha_composite(im, ((px - im.width) // 2, (px - im.height) // 2)); return cell
+    ep, ap = BUTTON_PX * BUTTON_SCALE, ACTION_PX * BUTTON_SCALE
+    sheet = Image.new("RGBA", (max(ep * len(BUTTON_EDGE), ap * len(BUTTON_ACTIONS)), ep + ap), (0, 0, 0, 0))
+    for k, name in enumerate(BUTTON_EDGE): sheet.alpha_composite(fit("panel1", name, ep), (k * ep, 0))
+    for k, name in enumerate(BUTTON_ACTIONS): sheet.alpha_composite(fit("panel2", name, ap), (k * ap, ep))
+    sheet.save(os.path.join(out_dir, "ui_buttons.png"), optimize=True)
+    write_spec(out_dir, "ui_buttons", "The Qt client's right-edge buttons and unit-bar actions for the Freeciv45 iso tileset: the\n"
+               "Freeciv45 art pack's freeciv45/13_ui_icons run 2, fitted by tilesets/make-%s.py (see RECORD.md)\n"
+               "at twice the size the client draws them." % NAME,
+               [("edge", 0, ep, ep, [(0, k, ["ui.edge." + n]) for k, n in enumerate(BUTTON_EDGE)]),
+                ("action", ep, ap, ap, [(0, k, ["ui.action." + n]) for k, n in enumerate(BUTTON_ACTIONS)])])
+    record.append("| `%s/ui_buttons.spec` | the art pack's buttons (`freeciv45/13_ui_icons`, `%s`, panels 1 and 2, `post/raw`), "
+                  "%d cuts | tidied, fitted into %dx%d (edge) and %dx%d (actions) cells, twice the client's size | %dx%d |"
+                  % (NAME, BUTTON_RUN, len(BUTTON_EDGE) + len(BUTTON_ACTIONS), ep, ep, ap, ap, *sheet.size))
+    return list(BUTTON_EDGE + BUTTON_ACTIONS)
+
+# Spaceship parts and treaty marks (issue 328): the art pack's freeciv45/13_ui_icons run 3, one 3 x 3 sheet, in place of the
+# stock misc/space.spec and misc/treaty.spec. The client lays the spaceship plan out by the parts' own size and draws the
+# treaty marks unscaled (client/tilespec.c), so they keep the stock 60 x 60 and 30 x 30. The parts are cut from the whole
+# sheet (panel_props), so a coupling that crosses into the next cell stays with its part. The exhaust's flame runs on into
+# the Agree cell and touches the parchment, so row 3's first two are cut at SPACE_SPLIT instead (the column where the
+# parchment starts, measured on the sheet), and Agree drops the flame's blue pixels left on its edge.
+SPACE_RUN, SPACE_PANEL = "run3", "panel1"
+SPACE_PX, TREATY_PX = 60, 30
+SPACE_PARTS = ("solar_panels", "life_support", "habitation", "structural", "fuel", "propulsion", "exhaust")
+TREATY_MARKS = (("treaty_agree", "treaty.agree_thumb_up"), ("treaty_disagree", "treaty.disagree_thumb_down"))
+SPACE_SPLIT = 499 / 1254
+# The client draws each part centred on its point in common/spaceship.c's tables (client/mapview_common.c put_spaceship):
+# modules every 60 px, structurals every 30 px (so the stock lattice is about 38 px and they overlap), a fuel tank 45 px
+# left of its engine, and the exhaust a whole cell right of the engine. So each part has the stock part's footprint in
+# its cell, (width, height, alignment): the engine reaches the cell's right edge to meet the exhaust, which starts at
+# its cell's left edge, and the tank leans right towards the engine.
+SPACE_FIT = {"solar_panels": (60, 60, "c"), "life_support": (60, 60, "c"), "habitation": (60, 60, "c"),
+             "structural": (40, 40, "c"), "fuel": (48, 28, "r"), "propulsion": (60, 32, "r"), "exhaust": (34, 30, "l")}
+
+def space_treaty(art, out_dir, record):
+    """space_treaty.png and .spec: the seven parts in a row of 60 px cells, the two marks in a row of 30 px cells under
+    them; returns the cut names used."""
+    sheet_path = os.path.join(art, SPACE_RUN, SPACE_PANEL, "space_treaty.png")
+    names = read_names(os.path.join(art, "space_treaty.names"))
+    cut = panel_props(sheet_path, names, grid=3)
+    whole = Image.open(sheet_path).convert("RGBA"); w, h = whole.size; split = round(w * SPACE_SPLIT)
+    def box(x0, x1, drop_blue=False):
+        im = whole.crop((x0, h * 2 // 3, x1, h))
+        if drop_blue:
+            px = im.load()
+            for y in range(im.height):
+                for x in range(im.width):
+                    r, g, b, a = px[x, y]
+                    if a and b > r + 20: px[x, y] = (r, g, b, 0)
+        im = defringe(pieces(im))
+        return im.crop(im.getchannel("A").point(lambda v: 255 if v >= 16 else 0).getbbox())
+    cut["exhaust"], cut["treaty_agree"] = box(0, split), box(split, w * 2 // 3, drop_blue=True)
+    def fit(im, px, fw, fh, align="c"):
+        im = scaled(im, min(fw / im.width, fh / im.height)); cell = Image.new("RGBA", (px, px), (0, 0, 0, 0))
+        x = {"l": 0, "c": (px - im.width) // 2, "r": px - im.width}[align]
+        cell.alpha_composite(im, (x, (px - im.height) // 2)); return cell
+    sheet = Image.new("RGBA", (SPACE_PX * len(SPACE_PARTS), SPACE_PX + TREATY_PX), (0, 0, 0, 0))
+    for k, name in enumerate(SPACE_PARTS): sheet.alpha_composite(fit(cut[name], SPACE_PX, *SPACE_FIT[name]), (k * SPACE_PX, 0))
+    for k, (name, _) in enumerate(TREATY_MARKS):
+        sheet.alpha_composite(fit(cut[name], TREATY_PX, TREATY_PX, TREATY_PX), (k * TREATY_PX, SPACE_PX))
+    sheet.save(os.path.join(out_dir, "space_treaty.png"), optimize=True)
+    write_spec(out_dir, "space_treaty", "Spaceship parts and treaty marks for the Freeciv45 iso tileset: the Freeciv45 art pack's\n"
+               "freeciv45/13_ui_icons run 3, fitted by tilesets/make-%s.py (see RECORD.md) at the stock sizes.\n"
+               "Listed after misc/treaty.spec, so these tags override the stock pictures." % NAME,
+               [("space", 0, SPACE_PX, SPACE_PX, [(0, k, ["spaceship." + n]) for k, n in enumerate(SPACE_PARTS)]),
+                ("treaty", SPACE_PX, TREATY_PX, TREATY_PX, [(0, k, [t]) for k, (_, t) in enumerate(TREATY_MARKS)])])
+    record.append("| `%s/space_treaty.spec` | the art pack's spaceship parts and treaty marks (`freeciv45/13_ui_icons`, `%s/%s`, "
+                  "the whole sheet), %d cuts | cut by piece from the sheet (row 3's exhaust and Agree split at x = %d), "
+                  "defringed, fitted into %dx%d (parts, each at the stock part's footprint, SPACE_FIT) and %dx%d (marks) cells, the "
+                  "stock sizes | %dx%d |"
+                  % (NAME, SPACE_RUN, SPACE_PANEL, len(SPACE_PARTS) + len(TREATY_MARKS), split,
+                     SPACE_PX, SPACE_PX, TREATY_PX, TREATY_PX, *sheet.size))
+    return list(SPACE_PARTS) + [n for n, _ in TREATY_MARKS]
 
 def border_alpha(d):
     """The band's coverage at distance d from the edge into the owner's tile."""
@@ -901,7 +1114,12 @@ EXTRA_PROPS = {"tx.mine": ("mine_1", 0.46, 106, 92), "tx.oil_mine": ("oil_mine_1
                "tx.oil_rig": ("oil_rig_1", 0.50, 108, 100), "tx.village": ("village_1", 0.56, 110, 90),
                "tx.hermit": ("hermit_1", 0.48, 108, 92), "extra.transport_hub": ("transport_hub_1", 0.62, 114, 80),
                "base.buoy": ("buoy_1", 0.18, 104, 56)}
-EXTRA_3LAYER = ("tx.mine", "tx.oil_mine", "tx.oil_rig", "tx.village", "tx.hermit")
+# Cottages (issue 295): run 8's stages, one take each, from its post/raw cuts; each a size up from the one before.
+COTTAGE_RUN = "run8/panel8"
+COTTAGE_PROPS = {"tx.cottage": ("cottage_1", 0.36, 108, 64), "tx.hamlet": ("hamlet_1", 0.50, 110, 76),
+                 "tx.village_stage": ("village_3", 0.60, 112, 88), "tx.town": ("town_1", 0.70, 114, 96)}
+EXTRA_3LAYER = ("tx.mine", "tx.oil_mine", "tx.oil_rig", "tx.village", "tx.hermit") + tuple(COTTAGE_PROPS)
+EXTRA_ADDED = ("tx.hermit",) + tuple(COTTAGE_PROPS)   # not in amplio2's [extras] styles: added after tx.village
 # tag: (cut, footprint width as a share of W, wall height as a share of the footprint width; 0: a pad, all _bg)
 EXTRA_FORTS = {"base.outpost": ("outpost_2", 0.62, 0.16), "base.fortress": ("fortress_1", 0.86, 0.13),
                "base.castle": ("castle_1", 0.88, 0.19), "base.airstrip": ("airstrip_1", 0.90, 0),
@@ -1065,6 +1283,9 @@ def extras(art, out_dir, record):
     full, flat, used = [], [], []
     for tag, (name, share, foot, top) in EXTRA_PROPS.items():
         full.append((tag + "_mg", stand(props[name], share * W, foot, top))); used.append(name)
+    for tag, (name, share, foot, top) in COTTAGE_PROPS.items():
+        cut = tidy(os.path.join(art, COTTAGE_RUN, "post", "raw", name + ".png"))
+        full.append((tag + "_mg", stand(cut, share * W, foot, top))); used.append(name)
     for tag, (name, share, wall) in EXTRA_FORTS.items():
         bg, fg = fort_halves(fort_cut(name), share, wall); used.append(name)
         full.append((tag + "_bg", bg))
@@ -1096,11 +1317,11 @@ def extras(art, out_dir, record):
     for i, (_, c) in enumerate(flat): sheet.paste(c, ((i % cols) * W, frows * FH + (i // cols) * H))
     sheet.save(os.path.join(out_dir, "extras.png"), optimize=True)
     write_spec(out_dir, "extras", "Map extras for the Freeciv45 iso tileset: the Freeciv45 art pack's freeciv45/09_map_extras runs 1 to 4\n"
-               "and 7 (improvements, forts, airfields, overlays, road, rail, river and maglev bands), cut and painted by\n"
+               "and 7 and 8 (improvements, forts, airfields, overlays, road, rail, river and maglev bands, cottages), cut and painted by\n"
                "tilesets/make-%s.py (see RECORD.md)." % NAME,
                [("full", 0, W, FH, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(full)]),
                 ("tile", frows * FH, W, H, [(i // cols, i % cols, [t]) for i, (t, _) in enumerate(flat)])])
-    record.append("| `%s/extras.spec` | the art pack's map extras (`freeciv45/09_map_extras`, runs 1 to 4 and 7): %s | props scaled "
+    record.append("| `%s/extras.spec` | the art pack's map extras (`freeciv45/09_map_extras`, runs 1 to 4, 7 and 8): %s | props scaled "
                   "onto the full tile, forts split into back and front, overlays turned into diamonds, road, rail, river and maglev "
                   "pieces painted from the bands | %dx%d |" % (NAME, ", ".join("`%s`" % u for u in used), *sheet.size))
     tags = {t for t, _ in full + flat}
@@ -1157,13 +1378,15 @@ def badges(art, out_dir, record):
     return {t for _, _, cells in parts for ts, _ in cells for t in ts}, sorted(got)
 
 def extras_styles(path):
-    """The tilespec's [extras] styles: EXTRA_3LAYER's tags drawn 3Layer, and tx.hermit added (amplio2 draws its village)."""
+    """The tilespec's [extras] styles: EXTRA_3LAYER's tags drawn 3Layer, and EXTRA_ADDED's added (amplio2 draws its village
+    for the hermit and has no cottages)."""
     text = open(path).read()
     for tag in EXTRA_3LAYER:
         text, n = re.subn(r'("%s",\s*)"Single1"' % re.escape(tag), r'\1"3Layer"', text)
-        if tag != "tx.hermit": assert n == 1, tag
-    if '"tx.hermit"' not in text:
-        text = re.sub(r'(\n(\s*)"tx.village",[^\n]*)', r'\1\n\2"tx.hermit",     "3Layer"', text, count=1)
+        if tag not in EXTRA_ADDED: assert n == 1, tag
+    for tag in reversed(EXTRA_ADDED):
+        if '"%s"' % tag not in text:
+            text = re.sub(r'(\n(\s*)"tx.village",[^\n]*)', r'\1\n\2%s"3Layer"' % ('"%s",' % tag).ljust(max(17, len(tag) + 4)), text, count=1)
     open(path, "w").write(text)
 
 RECORD_HEAD = """# %(name)s: where every sprite came from
@@ -1226,6 +1449,12 @@ def main():
     ap.add_argument("--no-bk-units", action="store_true", help="keep amplio2's units, cities and marks")
     ap.add_argument("--extras-art", help="the art repo's freeciv45/09_map_extras (default: next to --art)")
     ap.add_argument("--no-bk-extras", action="store_true", help="keep amplio2's improvements, bases, roads, rivers and badges")
+    ap.add_argument("--title-art", help="the art repo's freeciv45/14_title_art (default: next to --art)")
+    ap.add_argument("--no-title", action="store_true", help="keep the stock start picture and icons")
+    ap.add_argument("--ui-art", help="the art repo's freeciv45/13_ui_icons (default: next to --art)")
+    ap.add_argument("--no-ui-icons", action="store_true", help="keep the stock citizens, specialists, rate and government icons")
+    ap.add_argument("--no-buttons", action="store_true", help="no ui.edge and ui.action buttons: the client keeps its theme icons")
+    ap.add_argument("--no-space", action="store_true", help="keep the stock spaceship parts and treaty marks")
     ap.add_argument("--out", default=HERE)
     a = ap.parse_args()
     sq.set_tile(T); sq.NAME = NAME
@@ -1272,6 +1501,22 @@ def main():
         new, extra_props = extras(a.extras_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "09_map_extras"),
                                   out_dir, painted_record)
         own |= new
+    title_props = []
+    if not a.no_title:
+        title_props = title(a.title_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "14_title_art"),
+                            out_dir, painted_record)
+    ui_props = []
+    if not a.no_ui_icons:
+        ui_props = ui_icons(a.ui_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "13_ui_icons"),
+                            out_dir, painted_record)
+    button_props = []
+    if not a.no_buttons:
+        button_props = buttons(a.ui_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "13_ui_icons"),
+                               out_dir, painted_record)
+    space_props = []
+    if not a.no_space:
+        space_props = space_treaty(a.ui_art or os.path.join(os.path.dirname(os.path.abspath(a.art)), "13_ui_icons"),
+                                   out_dir, painted_record)
     sq.coastline(panels, cutter, out_dir, painted_record, level=not a.no_level)
     coast(out_dir, painted_record, relief or bk)
     if not a.no_blend: blend(out_dir, painted_record)
@@ -1317,7 +1562,12 @@ def main():
             files.append(rel)
             if not a.no_bk_icons and rel == "misc/techs.spec": files.append("%s/tech_icons.spec" % NAME)
             if not a.no_bk_icons and rel == "misc/wonders-large.spec": files.append("%s/building_icons.spec" % NAME)
-    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku, icons=not a.no_bk_icons)
+            if not a.no_title and rel == "misc/icons.spec": files.append("%s/icons.spec" % NAME)
+            if not a.no_ui_icons and rel == "misc/specialists.spec": files.append("%s/ui_icons.spec" % NAME)
+            if not a.no_buttons and rel == "misc/specialists.spec": files.append("%s/ui_buttons.spec" % NAME)
+            if not a.no_space and rel == "misc/treaty.spec": files.append("%s/space_treaty.spec" % NAME)
+    tilespec(a.data, a.out, files, blend=not a.no_blend, relief=relief, canopy=canopy, bk=bk, units=bku,
+             icons=not (a.no_bk_icons and a.no_title and a.no_ui_icons), intro=not a.no_title)
     if not a.no_bk_extras: extras_styles(os.path.join(a.out, NAME + ".tilespec"))
     with open(os.path.join(out_dir, "RECORD.md"), "w") as f:
         f.write(RECORD_HEAD % {"name": NAME, "w": W, "h": H, "skipped": ", ".join("`%s`" % s[8:] for s in SKIPPED if not (canopy and s in CANOPY)),
@@ -1364,10 +1614,10 @@ def main():
         if extra_props:
             f.write("\n## Map extras and badges\n\n`extras.spec` and `badges.spec`: the Freeciv45 art pack's map extras (John "
                     "O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder "
-                    "`freeciv45/09_map_extras`, runs 1 to 4, 6 and 7, the picks in its `MAP_EXTRAS.md`; issues 262 and 279), in "
+                    "`freeciv45/09_map_extras`, runs 1 to 4 and 6 to 8, the picks in its `MAP_EXTRAS.md`; issues 262, 279 and 295), in "
                     "place of "
                     "amplio2's. Standing props are drawn `3Layer` as `_mg` on the %dx%d full tile (the tilespec's `[extras]` "
-                    "styles say so for %s, and add `tx.hermit`); Fort (`base.outpost`), Fortress and Castle are split into "
+                    "styles say so for %s, and add those amplio2 lacks: %s); Fort (`base.outpost`), Fortress and Castle are split into "
                     "`_bg` and `_fg` along the top of the front walls so a unit stands inside; the airstrip and airbase are "
                     "`_bg` pads (amplio2's `_mg` runways are left out); irrigation, farmland, pollution and fallout are the straight-down seamless squares turned "
                     "into diamonds; road, rail, river and maglev pieces are painted in square tile space from the seamless bands "
@@ -1375,7 +1625,7 @@ def main():
                     "a symbol and a number) and tile output (a symbol and a number) are drawn by the builder, the numbers "
                     "in Pillow's built-in Aileron Regular (CC0). Used: %s. Nothing else of the art repo ships (no panels, "
                     "other takes or records). GPL-2.0-or-later, like the rest of "
-                    "the folder.\n" % (W, FH, ", ".join("`%s`" % t for t in EXTRA_3LAYER),
+                    "the folder.\n" % (W, FH, ", ".join("`%s`" % t for t in EXTRA_3LAYER), ", ".join("`%s`" % t for t in EXTRA_ADDED),
                                          ", ".join("`%s`" % n for n in extra_props)))
         if not a.no_bk_icons:
             f.write("\n## Tech icons and building pictures\n\n`tech_icons.spec` and `building_icons.spec`: the Freeciv45 art pack's "
@@ -1387,12 +1637,45 @@ def main():
                     "tilespec sets `duplicates_ok` and lists the two specs after `misc/techs.spec` and "
                     "`misc/wonders-large.spec`, so these tags override the stock icons and every other tag keeps its stock "
                     "icon. Techs (%d, runs 1, 2, 5 and 6; `the_wheel` and `the_republic` are run 6's `_alt` takes): %s. "
-                    "Buildings (%d, runs 1 to 5): %s. The picks that are not the first take: %s. Every tech and building the "
+                    "Buildings (%d, runs 1 to 6; each state faith is its faith's second take): %s. The picks that are not the first take: %s. Every tech and building the "
                     "ruleset names has a picture, so no stock icon is left for these tags. GPL-2.0-or-later, like the rest of "
                     "the folder.\n"
                     % (TECH_CELL, TECH_CELL, *BUILD_CELL, len(tech_props), ", ".join("`%s`" % n for n in tech_props),
                        len(building_props), ", ".join("`%s`" % n for n in building_props),
                        ", ".join("`%s` (`%s`)" % kv for kv in sorted({**TECH_PICK, **BUILD_PICK}.items()))))
+        if ui_props:
+            f.write("\n## Citizens, specialists, rates and governments\n\n`ui_icons.spec`: the Freeciv45 art pack's UI icons (John "
+                    "O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/13_ui_icons`, "
+                    "run 1, issue 298), cleaned and fitted into %dx%d cells, the size the client draws them at. Citizens per "
+                    "era (`citizen.<era>.<mood>_<n>` for civ45's `citizens_graphic` eras, postmodern drawing the modern ones; "
+                    "the plain `citizen.<mood>_<n>` are the ancient ones), the three specialists, the nine governments, the tax, luxury and science icons, "
+                    "and the research bulb, warming sun and cooling flake in 8 levels each (grey at 0, the art at 7). Used: "
+                    "%s; the second takes stay in the art repo. GPL-2.0-or-later, like the rest of the folder.\n"
+                    % (*UI_CELL, ", ".join("`%s`" % n for n in ui_props)))
+        if button_props:
+            f.write("\n## Buttons\n\n`ui_buttons.spec`: the Qt client's right-edge buttons (`ui.edge.<name>`) and unit-bar "
+                    "actions (`ui.action.<name>`), which patches 0059 and 0060 draw in place of the theme's icons: the Freeciv45 art pack's "
+                    "buttons (John O'Dell's sheet workflow with OpenAI image generation through Codex, art repo folder "
+                    "`freeciv45/13_ui_icons`, run 2, issue 307), cleaned and fitted at twice the %d and %d points the client "
+                    "draws them at. Each has a colour and shape of its own. Used: %s; run 2's messages and end turn stay in the "
+                    "art repo until the client has buttons for them. GPL-2.0-or-later, like the rest of "
+                    "the folder.\n" % (BUTTON_PX, ACTION_PX, ", ".join("`%s`" % n for n in button_props)))
+        if space_props:
+            f.write("\n## Spaceship parts and treaty marks\n\n`space_treaty.spec`: the spaceship dialog's seven parts "
+                    "(`spaceship.<part>`) and the diplomacy dialog's agree and disagree marks (`treaty.agree_thumb_up`, "
+                    "`treaty.disagree_thumb_down`): the Freeciv45 art pack's sheet (John O'Dell's sheet workflow with OpenAI "
+                    "image generation through Codex, art repo folder `freeciv45/13_ui_icons`, run 3, issue 328), cut by piece "
+                    "from the whole sheet so the exhaust keeps its flame, cleaned and fitted at the stock %d and %d px, each "
+                    "part at the stock part's footprint in its cell (`SPACE_FIT`), since the client centres each one on its "
+                    "point in the ship plan. Used: %s. GPL-2.0-or-later, like the rest of the folder.\n"
+                    % (SPACE_PX, TREATY_PX, ", ".join("`%s`" % n for n in space_props)))
+        if title_props:
+            f.write("\n## Start picture and icons\n\n`intro.png` (the tilespec's `main_intro_file`), `icons.spec` (`icon.freeciv`, "
+                    "the application icon, and `icon.citydlg`, the city dialog's) and `freeciv45.icns` (Freeciv45.app's icon, "
+                    "copied in by `scripts/bundle.sh --game freeciv45`): the Freeciv45 art pack's title art (John O'Dell's "
+                    "sheet workflow with OpenAI image generation through Codex, art repo folder `freeciv45/14_title_art`, "
+                    "run 1, issue 292). Used: %s; take A and the other three app icons stay in the art repo. "
+                    "GPL-2.0-or-later, like the rest of the folder.\n" % ", ".join("`%s`" % n for n in title_props))
     print("\n".join(amplio_record + painted_record))
 
 if __name__ == "__main__":

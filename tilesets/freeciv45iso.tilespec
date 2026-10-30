@@ -21,7 +21,7 @@ summary = _("Freeciv45 iso tileset: 192x96 diamonds, painted ground for every te
 ; eg, authors, colors, etc.
 
 ; What is the primary ruleset this tileset is meant for.
-;for_ruleset = ""
+for_ruleset = "civ45"
 
 ; Basic tile sizes:
 normal_tile_width = 192
@@ -143,7 +143,7 @@ tilelabel_offset_y = 30
 ;  "InfraWork"   ; Icons for the extras being placed.
 
 ; This is special because it gets freed and reloaded as required:
-main_intro_file    = "misc/intro"
+main_intro_file    = "freeciv45iso/intro"
 
 ; Below, the graphics spec files; must be somewhere (anywhere) in
 ; the data path. Order may be important for color allocation on
@@ -166,6 +166,9 @@ files =
   "misc/events.spec",
   "misc/governments.spec",
   "misc/specialists.spec",
+  "freeciv45iso/ui_icons.spec",
+  "freeciv45iso/ui_buttons.spec",
+  "freeciv45iso/leaders.spec",
   "freeciv45iso/units.spec",
   "freeciv45iso/animals.spec",
   "misc/buildings-large.spec",
@@ -175,6 +178,7 @@ files =
   "misc/techs.spec",
   "freeciv45iso/tech_icons.spec",
   "misc/treaty.spec",
+  "freeciv45iso/space_treaty.spec",
   "freeciv45iso/nuke.spec",
   "freeciv45iso/explosions.spec",
   "freeciv45iso/cities.spec",
@@ -187,7 +191,8 @@ files =
   "freeciv45iso/citybar.spec",
   "misc/shields-large.spec",
   "misc/editor.spec",
-  "misc/icons.spec"
+  "misc/icons.spec",
+  "freeciv45iso/icons.spec"
 
 files_svg =
   "misc/flags.spec"
@@ -408,6 +413,10 @@ styles =
       "tx.fallout",    "Single2"
       "tx.village",    "3Layer"
       "tx.hermit",     "3Layer"
+      "tx.cottage",    "3Layer"
+      "tx.hamlet",     "3Layer"
+      "tx.village_stage", "3Layer"
+      "tx.town",       "3Layer"
       "base.outpost",  "3Layer"
       "base.fortress", "3Layer"
       "base.airstrip", "3Layer"

@@ -1,0 +1,15 @@
+Citizens, specialists and the top bar's indicators in freeciv45iso (issue 298)
+Driver build at patch 0057, civ45, seed 42, size 2, tileset freeciv45iso from this branch. One run of citizens.txt.
+
+- ancient.jpg (turn 1): Manyhands at size 7 after three Settlers joined. "1 happy, 6 Entertainers": the happy ancient
+  woman and the two entertainer takes (lute, juggler).
+- industrial.jpg (turn 2, Railroad given): "2 happy, 2 unhappy, 2 Entertainers" in the industrial clothes (vest,
+  apron, cap).
+- electricage.jpg (turn 3, Automobile): "1 happy, 3 content, 1 Entertainer" in suits and coats with hats.
+- modern.jpg (turn 4, Rocketry): "4 content" in T-shirts and hoodies. The city starved from 7 to 4 on the way.
+- rows.jpg: the four citizen rows and the top bar's indicators (bulb, sun, flake, government) at 3x.
+Each era's style takes effect after the turn change, as city_refresh() reruns city_style_refresh()
+(server/cityturn.c:169).
+
+Not seen on screen: scientists and taxmen (the city took only entertainers), the tax, luxury and science icons
+(the Qt top bar shows the rates as text), and the postmodern style (Superconductors), which draws the modern people.

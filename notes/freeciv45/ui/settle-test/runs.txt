@@ -1,0 +1,13 @@
+The unit bar's Settle box (issue 303, patch 0058), 2026-10-21
+Driver build at patch 0058 (the 0057 driver build with patches/0058 applied), civ45, seed 42, freeciv45iso.
+One run of settle.txt. The state lines are from drive.log.
+
+Warriors in focus (turn 1, the start stack): no Settle box.
+   actions [Go to Tile (G) | Fortify Unit (F) | Sentry (S) | Wait (W) | Done (Space)]  (the probe run's line)
+Settlers in focus (chip 4): the Settle box first, with the menu's tooltip and the B hint (settlers.jpg, hovered).
+   actions [Build City (B) | Go to Tile (G) | Sentry (S) | Wait (W) | Done (Space)]
+Clicking it asks for the city's name, as the B key does (other windows [hud_input_box]).
+With ask_city_name off, clicking it founded Nesa at once: size 1, its city dialog open (founded.jpg).
+
+The name box is a window of its own, which the driver's clicks and keys do not reach, so the first box stays
+open in founded.jpg; it is the one from the first click, not a second one.

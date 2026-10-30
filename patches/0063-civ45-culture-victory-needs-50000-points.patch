@@ -1,0 +1,58 @@
+From eb20321fbfbdde46a2c6d2d8d51cd1f82616e2ac Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Sat, 24 Oct 2026 14:32:33 -0500
+Subject: [PATCH] civ45: culture victory needs 50000 points
+
+With religion, resources, cottages and civics the top civ reached the
+30000-point bar between turns 300 and 400, and a dominant one won by
+culture at turn 306 (seed 7). At 50000 the same game's leader wins at
+turn 402, after the first civ reaches era VII (turn 384). The 25 percent
+lead stays.
+---
+ data/civ45/README.civ45 | 2 +-
+ data/civ45/game.ruleset | 9 +++++----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/data/civ45/README.civ45 b/data/civ45/README.civ45
+index d4e95f3..cc979f7 100644
+--- a/data/civ45/README.civ45
++++ b/data/civ45/README.civ45
+@@ -48,7 +48,7 @@ Differences from sandbox
+ - Six ways to win. Conquest: every rival is dead or has surrendered.
+   Domination: hold 60 percent of the land tiles and 50 percent of the
+   world's citizens for three turns running, checked from turn 100 by the
+-  ruleset's script. Culture: 30000 culture points and a quarter more
++  ruleset's script. Culture: 50000 culture points and a quarter more
+   than the runner-up (sandbox asks 20000 and double). Space: a spaceship
+   that arrives (endspaceship enabled); its parts need the Apollo Program,
+   their tech and a Factory, and cost 50, 100 and 200 shields, and the AI
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index e54d659..40dd6e5 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -47,7 +47,7 @@ can bombard a stack of two or more units, wounding every unit in it \
+ and killing none. The map is a square grid seen from above that wraps \
+ east to west, and each city works 21 tiles. \
+ Six ways to win: conquest; domination (hold 60 percent of the land \
+-and half the world's people for three turns); culture (30000 points \
++and half the world's people for three turns); culture (50000 points \
+ and a quarter more than the runner-up); a spaceship that arrives; \
+ the last alliance standing; or the highest score when the game ends \
+ after turn 475. \
+@@ -390,9 +390,10 @@ tech_upkeep_divider = 6000
+ free_tech_method = "Cheapest"
+ 
+ [culture]
+-; Minimum culture points for cultural domination victory. Freeciv45: 30000 (sandbox 20000),
+-; which the top civ reaches near turn 375 in AI autogames (8000 came at turn 225; issue 165).
+-victory_min_points = 30000
++; Minimum culture points for cultural domination victory. Freeciv45: 50000 (sandbox 20000);
++; with religion, resources and cottages the top civ reaches 30000 at turns 300-400 and
++; 50000 near turn 400 in AI autogames (issue 284; 8000 came at turn 225, issue 165).
++victory_min_points = 50000
+ 
+ ; How big lead relative to second best player is needed for victory. Freeciv45: a quarter
+ ; more than the runner-up (sandbox: double; 50 was met in one game of six, issue 165).
+-- 
+2.56.0
+

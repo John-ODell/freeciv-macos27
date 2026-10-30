@@ -1,0 +1,37 @@
+From 97e461e3be52dd312a6c70959f65950349e8ccf8 Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Wed, 21 Oct 2026 02:17:48 -0500
+Subject: [PATCH] Qt client: no move range before a game has a focus list
+
+The map view's timer checks the move range from the start page on, and
+the focus list only exists once the client reaches pregame. Reading it
+there crashed the client two seconds after it opened.
+
+Freeciv45 issue 287.
+---
+ client/gui-qt/moverange.cpp | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/client/gui-qt/moverange.cpp b/client/gui-qt/moverange.cpp
+index 1ce7f73..8b64cf8 100644
+--- a/client/gui-qt/moverange.cpp
++++ b/client/gui-qt/moverange.cpp
+@@ -67,8 +67,14 @@ static struct {
+ ****************************************************************************/
+ static struct unit *range_unit(void)
+ {
+-  struct unit *punit = head_of_units_in_focus();
++  struct unit *punit;
+ 
++  // The map's timer runs from the start page on, before a game makes
++  // the focus list
++  if (get_num_units_in_focus() == 0) {
++    return nullptr;
++  }
++  punit = head_of_units_in_focus();
+   if (punit == nullptr || !gui_options.gui_qt_freeciv45_panels
+       || !can_client_issue_orders()
+       || unit_owner(punit) != client_player()
+-- 
+2.56.0
+

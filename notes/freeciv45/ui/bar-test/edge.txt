@@ -1,0 +1,29 @@
+dismiss
+wait 1000
+pointer 434 373
+shot before
+pointer 2 373
+wait 1500
+pointer 434 373
+pointer 866 373
+wait 1500
+pointer 434 373
+pointer 434 2
+wait 1500
+pointer 434 373
+pointer 434 743
+wait 1500
+pointer 434 373
+pointer 2 2
+wait 1500
+pointer 434 373
+shot after-corner
+pointer 2000 373
+wait 1500
+pointer 434 373
+option gui_qt_edge_scroll off
+pointer 2 373
+wait 1500
+pointer 434 373
+option gui_qt_edge_scroll on
+quit

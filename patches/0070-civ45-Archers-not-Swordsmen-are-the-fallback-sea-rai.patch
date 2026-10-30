@@ -1,0 +1,59 @@
+From f106277c70c1adf0b6997fe871b3113570a20c3f Mon Sep 17 00:00:00 2001
+From: John O'Dell <johncodell14@gmail.com>
+Date: Tue, 27 Oct 2026 22:10:54 -0500
+Subject: [PATCH 70/70] civ45: Archers, not Swordsmen, are the fallback sea
+ raiders
+
+A barbarian boat carries a sea raider that more than two players can
+build. When none qualifies, as in a game with one or two other players,
+it falls back to the base sea raider, and in civ45 that was Swordsmen
+(attack 6) from turn 30. A player with one Spearmen in each of three
+cities on a small island map then lost cities in 4 of 5 games. With
+Archers as the fallback the same player lost one city in 5 games, the
+raids came as often as before, and with no defenders cities still fell
+in 4 of 5. Swordsmen still raid by sea once three players know Iron
+Working. Issue 357.
+---
+ data/civ45/game.ruleset  | 3 ++-
+ data/civ45/units.ruleset | 4 ++--
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/data/civ45/game.ruleset b/data/civ45/game.ruleset
+index e9399b8..3520939 100644
+--- a/data/civ45/game.ruleset
++++ b/data/civ45/game.ruleset
+@@ -930,7 +930,8 @@ colorlist =
+ ; Maps have 110 land tiles per player (John, 2026-10-18, issue 211), a little more room than the 100 before.
+ ; Barbarians from turn 30 at the "Raging hordes" rate, and on land they rise out of the fog ("barbsfromfog",
+ ; a fork setting), so new cities need guards (John, 2026-10-27, issue 345). Early raiders are Warriors, Archers
+-; and Horsemen; their boats are Triremes until Caravels and Galleons are about.
++; and Horsemen; their boats are Triremes until Caravels and Galleons are about. When fewer than three
++; players can build any sea raider, boats bring Archers, not Swordsmen (issue 357).
+ ;
+ set =
+     { "name", "value", "lock"
+diff --git a/data/civ45/units.ruleset b/data/civ45/units.ruleset
+index 8470037..fe326fa 100644
+--- a/data/civ45/units.ruleset
++++ b/data/civ45/units.ruleset
+@@ -840,7 +840,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Archer"
+-roles         = "DefendOk", "Hut", "BarbarianTech", "BarbarianSeaTech"
++roles         = "DefendOk", "Hut", "BarbarianTech", "BarbarianSea", "BarbarianSeaTech"
+ helptext      = _("\
+ Archers fight with bows and arrows and have a good offensive\
+  value.\
+@@ -954,7 +954,7 @@ uk_food       = 1
+ uk_gold       = 0
+ tp_defense    = "Alight"
+ flags         = "Shield2Gold", "ShieldToGold", "Capturer", "Fortress", "FleshBased", "Melee"
+-roles         = "DefendOk", "BarbarianBuild", "BarbarianSea", "BarbarianSeaTech"
++roles         = "DefendOk", "BarbarianBuild", "BarbarianSeaTech"
+ helptext      = _("\
+ Legions are heavily armed and well disciplined infantry\
+  units with an excellent offensive value.\
+-- 
+2.56.0
+

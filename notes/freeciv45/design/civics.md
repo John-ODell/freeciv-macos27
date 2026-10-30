@@ -76,3 +76,20 @@ Option A (sliders) or option B (named policies as buildings)? Either can come af
 cottages (#273, #276, #275) are in. With A, the first step is a test ruleset with one slider to confirm the effect
 types behave with scaled and negative values; with B, it is the Lua for exclusivity and the cooldown, and a rules
 test for both.
+
+## 5. Built: option A (patch 0062)
+
+John chose to go ahead with option A ("do what you need to do", 2026-10-24). Patch 0062 builds the four sliders
+from section 2, with these changes from the table:
+
+- Labour's cost is one fewer content citizen in every city per two steps (`City_Unhappy_Size`), because a
+  negative `Make_Content` does nothing (`common/city.c:2615-2630` only loops while it is above 0) and there is no
+  city-size condition on the base content level.
+- Trade cuts waste of shields and trade (corruption), not gold.
+- Service frees upkeep in shields and gold, because Despotism and Monarchy charge gold. Its cost is +1 unhappy
+  citizen per aggressive unit per two steps (`Unhappy_Factor`); civ45 has no other war weariness.
+- No `minimum_turns`: in this engine it resets a human's slider (civics-test/README.md).
+- civ45's inherited Personal Freedom and Polluting Productivity sliders are gone, since Faith and Labour now make
+  those trades. The three training sliders stay.
+
+Every effect was checked in play, and the results are in [civics-test/README.md](civics-test/README.md).
