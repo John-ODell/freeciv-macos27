@@ -53,6 +53,8 @@ Seven scenarios, each its own game (`scripts/gen3.sh`, split into `sc1.txt` … 
 | City removed, then Cancel | No crash |
 | Game ended (`endturn` on the last turn) with the chooser open | No crash; the chooser stays on screen after the game over (not picked afterwards: my edit to try that did not apply) |
 
+Screenshot: `playtest-0073/chooser-open-before-removal.jpg` (the chooser open for the new city, before the removal).
+
 Not tested: incite (no way to trigger it by script; transfer is the closest), a city sold (the Lua API has no sell), the worklist filled from the city screen while the chain runs (the driver has no worklist command; `opencity` with a chooser open worked). The code reading is in 384: `qtg_popdown_city_dialog` and `client_remove_city` close the city dialog but nothing closes a `production_widget`.
 
 ## 3. Barbarians against a light defence
